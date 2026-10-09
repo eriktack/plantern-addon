@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Plantern · Doors, windows &amp; lights</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="src/styles.css">
+<style>
+  body{display:block;min-height:100%;padding:0 0 env(safe-area-inset-bottom,0)}
+  #app{max-width:560px;margin:0 auto;padding:10px 14px 24px}
+  #mapBox{position:sticky;top:0;z-index:5;background:var(--bg);margin:0 -14px;padding:6px 14px 4px}
+  #map{display:block;width:100%;height:34vh;min-height:220px;background:var(--bg);border:1px solid var(--line);border-radius:10px}
+  #mapBox .mapzoom{right:22px;bottom:12px}
+  .cornerBtn::before{content:"";display:inline-block;width:.7em;height:.7em;border-radius:50%;border:2px solid var(--acc);margin-right:8px;vertical-align:-1px}
+  .key{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .cornerBtn.on::before{background:#14161a;border-color:#14161a}
+  /* the map stays at the top while the form scrolls; focused fields are kept clear of it */
+  html{scroll-padding-top:calc(max(34vh, 220px) + 18px)}
+  h1{margin:8px 0 4px}
+  .big{width:100%;font-size:20px;padding:12px;border-radius:10px}
+  input.big{background:#14161a;color:var(--fg);border:1px solid #3a404b;font:20px ui-monospace,Consolas,monospace;margin:4px 0}
+  select.big{font-size:17px;padding:10px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:6px 0}
+  .three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:6px 0}
+  .two button,.three button{padding:14px 6px;font-size:17px;border-radius:10px}
+  button.go{background:var(--acc);color:#14161a;border-color:var(--acc);font-weight:600}
+  button.quiet{background:transparent;border-color:var(--line);color:var(--mut)}
+  label.f{display:block;font-size:13px;color:var(--mut);margin:10px 0 2px}
+  .err{color:var(--bad);font-size:14px;min-height:20px}
+  .list button{display:block;width:100%;text-align:left;padding:12px;margin:6px 0;border-radius:10px;font-size:16px}
+  [hidden]{display:none!important}
+</style>
+<script type="module" src="src/capture/openings-wizard.js"></script>
+</head>
+<body>
+<div id="app">
+  <nav class="nav" aria-label="Pages"><a href="index.html" title="The plan with lights (2D / 3D)">Plan</a><a href="room-editor.html" title="Edit rooms, walls, openings and lamps (desktop)">Editor</a><a href="wizard.html" title="Measure a room, wall by wall (phone)">Rooms</a><a href="openings.html" class="on" aria-current="page" title="Doors, windows, switches and lamps (phone)">Doors &amp; lights</a><a href="storage.html" title="Where your houses are kept: folders, network shares, git">Storage</a></nav>
+  <div id="mapBox"><svg id="map"></svg></div>
+  <div id="hint" class="help" style="margin:4px 2px"></div>
+  <h1>Doors, windows &amp; lights</h1>
+  <div class="sel"><select id="loc" aria-label="Location"></select><select id="level" aria-label="Level"></select></div>
+  <div id="msg" class="help" style="margin-top:6px"></div>
+
+  <section id="s-pick">
+    <label class="f">Room <small>(or tap it on the map)</small><select id="room" class="big"></select></label>
+    <div id="walls" class="list"></div>
+  </section>
+
+  <section id="s-form" hidden>
+    <div id="formTitle" class="help" style="font-size:15px;margin-top:8px"></div>
+    <label class="f">Name <small>optional, e.g. “Bathroom window”</small><input id="oName" class="big" autocomplete="off" style="font-family:inherit"></label>
+    <div class="three" id="types"><button data-t="door">Door</button><button data-t="window">Window</button><button data-t="passage">Passage</button></div>
+    <label class="f">Measured from <small>(the corner you measure from: marked “from here” on the map)</small></label>
+    <div class="two" id="corners"><button data-c="start" class="cornerBtn"></button><button data-c="end" class="cornerBtn"></button></div>
+    <div class="two">
+      <label class="f" style="margin:0">To its edge <small>mm, corner to the near edge of the opening</small><input id="dist" class="big" inputmode="numeric" autocomplete="off"></label>
+      <label class="f" style="margin:0">Width <small>mm</small><input id="width" class="big" inputmode="numeric" autocomplete="off"></label>
+    </div>
+    <div class="three">
+      <label class="f" style="margin:0">Bottom <small>mm above floor</small><input id="sill" class="big" inputmode="numeric" autocomplete="off"></label>
+      <label class="f" style="margin:0">Top <small>mm above floor</small><input id="head" class="big" inputmode="numeric" autocomplete="off"></label>
+      <label class="f" style="margin:0">or height <small>mm</small><input id="height" class="big" inputmode="numeric" autocomplete="off"></label>
+    </div>
+    <div class="help">Leave a size empty if you have not measured it: a default is used and listed as still to measure.</div>
+    <div id="windowRow">
+      <label class="f">The window opens</label>
+      <select id="opens" class="big"><option value="fixed">does not open (fixed)</option><option value="side-hung">side-hung (like a door)</option><option value="top-hung">top-hung</option><option value="bottom-hung">bottom-hung</option><option value="tilt-turn">tilt-turn</option><option value="sliding">sliding</option></select>
+    </div>
+    <div id="doorRow">
+      <label class="f">The door opens</label>
+      <select id="doorOpens" class="big"><option value="swing">on hinges (swings)</option><option value="sliding">sliding along the wall</option><option value="pocket">sliding into the wall (pocket)</option></select>
+    </div>
+    <div id="leafRow">
+      <label class="f" id="hingeLbl">Hinges on</label>
+      <div class="three" id="hinges"><button data-h="corner"></button><button data-h="other">the other side</button><button data-h="both">both sides (double)</button></div>
+      <label class="f" id="intoLbl">Opens</label>
+      <div class="two" id="intos"><button data-i="room"></button><button data-i="other"></button></div>
+    </div>
+    <label class="f" id="thickRow">Thickness of the <span id="thickWhat">window</span> itself <small>mm, its frame or leaf, not the hole in the wall (optional)</small><input id="unitThick" class="big" inputmode="numeric" autocomplete="off"></label>
+    <div id="err" class="err"></div>
+    <div class="two"><button id="saveBtn" class="go">Save</button><button id="cancel" class="quiet">Back</button></div>
+    <button id="del" class="big quiet" hidden>Delete this opening</button>
+  </section>
+
+  <section id="s-fix" hidden>
+    <div id="fixTitle" class="help" style="font-size:15px;margin-top:8px"></div>
+    <label class="f">Name <small>optional, e.g. “Hall ceiling lamp”</small><input id="fixName" class="big" autocomplete="off" style="font-family:inherit"></label>
+    <div id="fixWall">
+      <label class="f">Measured from</label>
+      <div class="two" id="fixCorners"><button data-c="start" class="cornerBtn"></button><button data-c="end" class="cornerBtn"></button></div>
+      <label class="f">To its middle <small>mm, from that corner along the wall</small><input id="fixDist" class="big" inputmode="numeric" autocomplete="off"></label>
+    </div>
+    <div id="fixCeiling">
+      <div class="two">
+        <label class="f" style="margin:0"><span class="key" style="background:#6cb6ff"></span>From wall <select id="fixEdgeA" class="big"></select></label>
+        <label class="f" style="margin:0">mm <small>straight out from it</small><input id="fixDistA" class="big" inputmode="numeric" autocomplete="off"></label>
+        <label class="f" style="margin:0"><span class="key" style="background:#4cc38a"></span>and wall <select id="fixEdgeB" class="big"></select></label>
+        <label class="f" style="margin:0">mm <small>straight out from it</small><input id="fixDistB" class="big" inputmode="numeric" autocomplete="off"></label>
+      </div>
+    </div>
+    <label class="f">Height <small id="fixZNote">mm above the floor</small><input id="fixZ" class="big" inputmode="numeric" autocomplete="off"></label>
+    <div id="fixErr" class="err"></div>
+    <div class="two"><button id="fixSave" class="go">Save</button><button id="fixCancel" class="quiet">Back</button></div>
+    <button id="fixDel" class="big quiet" hidden>Delete</button>
+  </section>
+</div>
+</body>
+</html>

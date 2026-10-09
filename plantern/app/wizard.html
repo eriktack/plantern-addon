@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Plantern · Measure</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="src/styles.css">
+<style>
+  body{display:block;min-height:100%;padding:0 0 env(safe-area-inset-bottom,0)}
+  #app{max-width:560px;margin:0 auto;padding:10px 14px 24px}
+  #mapBox{position:sticky;top:0;z-index:5;background:var(--bg);margin:0 -14px;padding:6px 14px 4px}
+  #map{display:block;width:100%;height:34vh;min-height:220px;background:var(--bg);border:1px solid var(--line);border-radius:10px}
+  #mapBox .mapzoom{right:22px;bottom:12px}
+  #zoomBtn{position:absolute;top:12px;right:20px;font-size:13px;padding:5px 9px;border-radius:8px;background:#14161acc}
+  /* the map stays at the top while the form scrolls; focused fields are kept clear of it */
+  html{scroll-padding-top:calc(max(34vh, 220px) + 18px)}
+  h1{margin:8px 0 4px} .step{font-size:20px;margin:12px 0 4px}
+  .big{width:100%;font-size:22px;padding:14px;border-radius:10px}
+  input.big{background:#14161a;color:var(--fg);border:1px solid #3a404b;font:22px ui-monospace,Consolas,monospace;margin:6px 0}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}
+  .two button{padding:16px 6px;font-size:18px;border-radius:10px}
+  button.go{background:var(--acc);color:#14161a;border-color:var(--acc);font-weight:600}
+  a.big{display:block;text-align:center;text-decoration:none;border:1px solid var(--acc);margin:8px 0}
+  a.big.go{background:var(--acc);color:#14161a;font-weight:600}
+  .share{border:1px solid var(--acc);border-radius:10px;padding:10px;margin:8px 0;background:var(--panel)}
+  .share button{width:100%;padding:12px;font-size:17px;border-radius:10px;margin-top:6px}
+  button.quiet{background:transparent;border-color:var(--line);color:var(--mut)}
+  .dirs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:6px 0}
+  .dirs button{padding:12px 0;font-size:18px}
+  label.f{display:block;font-size:13px;color:var(--mut);margin:10px 0 2px}
+  .err{color:var(--bad);font-size:14px;min-height:20px}
+  .walk{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:8px 0;font-size:14px;color:var(--mut)}
+  [hidden]{display:none!important}
+  pre{white-space:pre-wrap;word-break:break-all;background:#14161a;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:12px;max-height:160px;overflow:auto}
+</style>
+<script type="module" src="src/capture/wizard.js"></script>
+</head>
+<body>
+<div id="app">
+  <nav class="nav" aria-label="Pages"><a href="index.html" title="The plan with lights (2D / 3D)">Plan</a><a href="room-editor.html" title="Edit rooms, walls, openings and lamps (desktop)">Editor</a><a href="wizard.html" class="on" aria-current="page" title="Measure a room, wall by wall (phone)">Rooms</a><a href="openings.html" title="Doors, windows, switches and lamps (phone)">Doors &amp; lights</a><a href="storage.html" title="Where your houses are kept: folders, network shares, git">Storage</a></nav>
+  <div id="mapBox"><svg id="map"></svg><button id="zoomBtn" hidden></button></div>
+  <div id="hint" class="help" style="margin:4px 2px"></div>
+
+  <section id="s-level" hidden></section>
+
+  <section id="s-setup">
+    <h1>Measure a room</h1>
+    <div class="sel"><select id="loc" aria-label="Location"></select><select id="level" aria-label="Level"></select></div>
+    <div id="levelMsg" class="help"></div>
+    <label class="f">Room name<input id="name" class="big" autocomplete="off" placeholder="e.g. Kitchen"></label>
+    <label class="f" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="exterior"> Outdoors (balcony, terrace)</label>
+    <label class="f" id="sameAsRow">Same shape as <small>a room already measured: no walls to measure, just where it starts (on the level below or above it goes exactly on top)</small>
+      <select id="sameAs" class="big" style="font-size:16px;padding:10px"></select></label>
+    <label class="f">Where is corner 0, the corner you start in?</label>
+    <div class="dirs" id="placeMode" style="grid-template-columns:1fr 1fr">
+      <button data-m="point" class="on">At a point</button><button data-m="wall">Next to another room</button>
+    </div>
+    <div id="placePoint">
+      <label class="f">Start from <small>(tap a corner on the map, or pick a point)</small>
+        <select id="originRef" class="big" style="font-size:16px;padding:10px"></select></label>
+      <div class="two" style="margin:2px 0">
+        <label class="f" style="margin:0">Offset x <small>mm, east</small><input id="ox" class="big" inputmode="numeric" placeholder="0" autocomplete="off" style="font-size:18px;padding:10px"></label>
+        <label class="f" style="margin:0">Offset y <small>mm, north</small><input id="oy" class="big" inputmode="numeric" placeholder="0" autocomplete="off" style="font-size:18px;padding:10px"></label>
+      </div>
+      <div class="help" id="startTxt"></div>
+    </div>
+    <div id="placeWall" hidden>
+      <div class="help"><b>Tap the wall on the map</b> that you share with the room next door (or pick it here). Corner 0 goes on the <b>far side</b> of that wall, and your first wall runs back along it, so the two rooms end up sharing one wall.</div>
+      <select id="edgeSel" class="big" style="font-size:16px;padding:10px;margin-top:6px"></select>
+      <div class="two" style="margin:6px 0 2px">
+        <label class="f" style="margin:0">Wall thickness <small>mm, face to face</small><input id="edgeT" class="big" inputmode="numeric" autocomplete="off" style="font-size:18px;padding:10px"></label>
+        <label class="f" style="margin:0">Start <small>mm from the green end</small><input id="edgeSlide" class="big" inputmode="numeric" placeholder="0" autocomplete="off" style="font-size:18px;padding:10px"></label>
+      </div>
+      <div class="help" id="wallTxt"></div>
+    </div>
+    <div id="dirBlock">
+      <label class="f">Which way will you walk along the first wall? <small>(plan directions; the room stays on your right)</small></label>
+      <div class="dirs" id="dirs"><button data-d="N">N ↑</button><button data-d="E">E →</button><button data-d="S">S ↓</button><button data-d="W">W ←</button></div>
+      <label class="f">…or the compass bearing of that wall <small>° from true north</small>
+        <input id="bearing" class="big" inputmode="decimal" placeholder="e.g. 112" autocomplete="off" style="font-size:18px;padding:10px"></label>
+      <div class="help" id="headTxt"></div>
+    </div>
+    <button id="begin" class="big go">Start measuring</button>
+    <div id="resume" class="help"></div>
+  </section>
+
+  <section id="s-measure" hidden>
+    <div class="step" id="stepTitle"></div>
+    <div class="walk" id="walkTip"></div>
+    <div class="walk" id="shareNext" hidden></div>
+    <input id="len" class="big" inputmode="decimal" autocomplete="off" placeholder="length, e.g. 4025 or 4.025 m">
+    <button id="reachBtn" class="quiet" style="width:100%;padding:8px;margin:2px 0">Don't know the length? Run the wall until a coordinate…</button>
+    <div id="reachRow" hidden>
+      <div class="help" id="reachHelp"></div>
+      <div class="two"><button data-axis="x" id="axX">until x =</button><button data-axis="y" id="axY">until y =</button></div>
+      <div class="two"><input id="reachVal" class="big" inputmode="numeric" placeholder="mm, e.g. 3000" autocomplete="off"><select id="reachPt" class="big" style="font-size:15px;padding:8px"></select></div>
+      <div class="help" id="reachOut"></div>
+    </div>
+    <div class="err" id="err"></div>
+    <div id="collideWarn" class="err"></div>
+    <div id="shareCard" hidden></div>
+    <div class="help" id="turnQ">At the next corner, does the wall continue…</div>
+    <div class="two"><button id="tR" class="go">↱ right 90°</button><button id="tL">↰ left <small>(inside corner, 270°)</small></button></div>
+    <button id="custom" class="big quiet" style="font-size:16px;padding:10px">∠ Other angle…</button>
+    <div id="customRow" hidden>
+      <div class="help">Angle <b>inside the room</b> at the corner: 90 = square, 135 = bevel, 60 = sharp, over 180 = inside corner.</div>
+      <div class="two"><input id="angle" class="big" inputmode="decimal" placeholder="e.g. 135" autocomplete="off"><button id="customAdd" class="go" disabled>Add corner</button></div>
+      <svg id="angleMini" viewBox="0 0 220 120" style="width:100%;height:110px;background:var(--bg);border:1px solid var(--line);border-radius:10px" hidden></svg>
+      <div class="help" id="angleInfo"></div>
+    </div>
+    <button id="close" class="big" style="font-size:18px">⟲ Close the room: last wall runs back to corner 0</button>
+    <div class="help" id="closeHint">The length of that last wall is worked out for you. If you measured it anyway, type it above and it is used as a check.</div>
+    <div class="two"><button id="undo" class="quiet">Undo last wall</button><button id="restart" class="quiet">Start over</button></div>
+  </section>
+
+  <section id="s-review" hidden>
+    <h1>Result</h1>
+    <button id="back" class="quiet big" style="font-size:16px;margin-bottom:8px">← Back to measuring (fix a wall)</button>
+    <div id="result"></div>
+    <div id="resid"></div>
+    <div id="exactWalls"></div>
+    <div id="lockOffers"></div>
+    <button id="done" class="big go">Done</button>
+    <button id="doneAnyway" class="quiet big" style="font-size:15px" hidden>Add anyway (it overlaps)</button>
+    <a id="toEditor" class="big go" href="room-editor.html" hidden>Back to the editor →</a>
+    <div class="help" id="doneHelp"></div>
+    <div id="doneOut"></div>
+    <div class="two"><button id="copy" class="quiet">Copy</button><button id="dl" class="quiet">Download</button></div>
+    <pre id="json" hidden></pre>
+    <button id="again" class="quiet big" style="font-size:16px">Measure another room</button>
+  </section>
+</div>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "demo",
+  "name": "Demo (prototype data)",
+  "_comment": "Made-up geometry and entity ids from prototype A. Used for development and tests; not a real place.",
+  "model": "model.json",
+  "integrations": { "ha": { "connection": "demo_mock" } },
+  "bindings": {
+    "f_k_lamp": { "entity": "light.kitchen" },
+    "f_l_lamp": { "entity": "light.living" },
+    "f_k_switch": { "controls": ["f_l_lamp"] },
+    "f_t_lamp": { "entity": "light.terrace" },
+    "f_studio_lamp": { "entity": "light.studio" },
+    "f_cellar_lamp": { "entity": "light.cellar" },
+    "f_bed_lamp": { "entity": "light.bedroom" },
+    "f_land_lamp": { "entity": "light.landing" }
+  },
+  "settings": { "cutPlane": 1200, "checkTolerance": { "ok": 5, "warn": 15 } }
+}

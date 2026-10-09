@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Plantern · Editor</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="src/styles.css">
+<script type="module" src="src/capture/ui.js"></script>
+</head>
+<body>
+<main>
+  <svg id="preview"></svg>
+  <div id="mtools" class="mtools">
+    <button id="mOn" title="Measure on the plan (M): distances between points and planes">📏 Measure</button>
+    <span id="lvStrip" class="lvstrip" hidden title="Look at another level without leaving what you edit"></span>
+    <span id="mModes" hidden><button data-mm="pp" class="on" title="Two points; shows the right triangle's legs">Point – point</button><button data-mm="pl" title="A point, then a wall face, room edge or chimney side: the square distance">Point – plane</button><button data-mm="ll" title="Two wall faces, room edges or chimney sides: the gap between them">Plane – plane</button></span>
+  </div>
+  <div id="mRead" class="mread" hidden></div>
+  <div id="peekBar" class="peekbar" hidden></div>
+  <div id="peekCard" class="peekcard" hidden></div>
+  <div id="ztools" class="ztools" title="Zoom: scroll wheel over the plan; drag to move it">
+    <button id="zIn" title="Zoom in">+</button><button id="zOut" title="Zoom out">−</button><button id="zFit" hidden title="Show the whole level again">⤢ Fit</button><button id="uMode" title="The level below (blue) and above (amber), faintly under the plan: while placing something, always, or never">Levels: auto</button>
+  </div>
+  <div id="status"></div>
+  <div id="compass"></div>
+</main>
+<div id="resizer" title="Drag to resize the panel"></div>
+<aside id="cap">
+  <div id="top">
+  <nav class="nav" aria-label="Pages"><a href="index.html" title="The plan with lights (2D / 3D)">Plan</a><a href="room-editor.html" class="on" aria-current="page" title="Edit rooms, walls, openings and lamps (desktop)">Editor</a><a href="wizard.html" title="Measure a room, wall by wall (phone)">Rooms</a><a href="openings.html" title="Doors, windows, switches and lamps (phone)">Doors &amp; lights</a><a href="storage.html" title="Where your houses are kept: folders, network shares, git">Storage</a></nav>
+  <div class="row sel">
+    <select id="loc" aria-label="Location"></select>
+    <select id="level" aria-label="Level"></select>
+    <button id="editLevel" title="Edit this level: name, elevation, ceiling height, floor build-up, measured heights" aria-label="Edit level">✎</button>
+  </div>
+  <section id="levelBox" hidden></section>
+  <section id="savebar" class="savebar">
+    <div class="sb-row">
+      <span id="saveState" class="sb-state"><span class="dot"></span><span id="saveStateTxt">All saved</span></span>
+      <span class="btns">
+        <button id="undo" disabled title="Undo (Ctrl+Z)">↶</button>
+        <button id="redo" disabled title="Redo (Ctrl+Y)">↷</button>
+        <button id="dl" title="Download model.json instead of saving">Download</button>
+        <button id="save" disabled>Save</button>
+      </span>
+    </div>
+    <div id="saveOut" class="help"></div>
+    <div id="elsewhere" class="iss" hidden></div>
+    <div id="valBox" hidden>
+      <div id="valSum" class="sb-val"></div>
+      <div id="issues" class="sb-issues"></div>
+    </div>
+  </section>
+  </div>
+  <div id="browse">
+  <p class="help">Click something in the plan or the list to select it; double-click it, press Enter or use ✎ to edit it. Esc lets go.</p>
+
+  <h2>House <span><button id="importBtn" title="Paste a room measured with the phone wizard">Import</button> <button id="newSolid" title="A solid: chimney, pillar, boxed-in pipe (a lintel or a wall inside a room: + Wall). Measured like a room; its sides bound the rooms around it, walls can give way to it">+ Solid</button> <button id="newObject" title="A box: furniture, a cabinet. Drag it on the plan to place it (a wall object slides along its wall)">+ Object</button> <button id="newStairs" title="Stairs from this level up to the next: where they start, how wide, how many risers; the opening in the floor above follows">+ Stairs</button> <button id="newWall" title="Draw a wall by hand: a room divider, a half wall, a wall beside stairs, a lintel. Click its start and its end on the plan">+ Wall</button> <button id="newRoom" title="Measure a new room">+ Room</button></span></h2>
+  <div id="tree" class="tree"></div>
+  <div id="importBox" hidden>
+    <textarea id="importText" rows="4" spellcheck="false" placeholder="Paste the JSON from the wizard"></textarea>
+    <div class="row btns"><button id="importUse">Use</button></div>
+    <div id="importErr" class="err" style="color:var(--bad);font-size:12px"></div>
+  </div>
+
+  <details class="sect" open><summary>Still to measure <span id="todoCount"></span></summary>
+  <div id="todo"></div>
+  </details>
+  <details class="sect"><summary>Materials &amp; colours</summary>
+  <div class="row btns"><button id="newMat" title="A colour or texture that wall sides can use">+ New material</button></div>
+  <div id="matList"></div>
+  <div id="colorList" class="help"></div>
+  </details>
+  <details class="sect"><summary>Walls</summary>
+  <p class="help">Walls follow their rooms: applying a room moves its walls and fills the edges nothing covers (one-room walls get the default outer thickness, marked as assumed and drawn hatched).</p>
+  <div class="row btns">
+    <button id="linkWalls" title="Link hand-drawn walls that sit exactly on a room edge to that edge, so they follow the room from now on. Walls that would move are left alone.">Link walls to rooms</button>
+    <button id="fillWalls" title="Add walls where a room edge has none">Fill missing walls</button>
+  </div>
+  </details>
+  <details class="sect"><summary>Floor areas <span id="areaTotal"></span></summary>
+    <p class="help">Net floor area per room: the outline less what stands on the floor (chimney, pillar) and the stairwell. A room without a floor has none; balconies and terraces are counted apart.</p>
+    <div id="areas"></div>
+  </details>
+  <details class="sect"><summary>Anchors <span id="anchorCount"></span></summary>
+    <p class="help">The same physical point on two levels (a stairwell corner, an outer corner): the Editor shows whether the levels line up and can move a level to make them.</p>
+    <div id="anchorList"></div>
+    <div class="grid2">
+      <label>A point <select id="anA"></select></label>
+      <label>The same point on another level <select id="anB"></select></label>
+    </div>
+    <div class="row btns"><button id="anAdd">+ Anchor</button></div>
+    <div id="anErr" class="help" style="color:var(--bad)"></div>
+  </details>
+  <details class="sect"><summary>Checks <span id="checkCount"></span></summary>
+    <p class="help">Control measurements: two points and what the tape or laser says, the furthest off first. Measure two points (📏, point – point) and <b>Keep as check</b>. A check between two corners of a room measured by lengths and diagonals can join its solve (<i>in the solve</i>).</p>
+    <div id="checkList"></div>
+    <div id="ckErr" class="help" style="color:var(--bad)"></div>
+  </details>
+  <details class="sect"><summary>House orientation</summary>
+  <label>Plan north is rotated <input id="north" inputmode="decimal" placeholder="0" style="width:90px;display:inline-block" autocomplete="off"> ° clockwise from true north
+    <small>Pick any direction as "plan north" (e.g. along the front wall) and enter how far it is from real north; the plan stays in the house's own axes.</small></label>
+  </details>
+  </div>
+  <div id="edit" hidden>
+    <div class="edhead"><button id="edBack" title="Back to the house (Esc)">‹ House</button><span id="edState"></span></div>
+  <section id="editor" hidden>
+    <h2 id="edTitle">Room</h2>
+    <div class="grid2">
+      <label>Name<input id="name" autocomplete="off"></label>
+      <label>Id<input id="rid" readonly></label>
+    </div>
+    <label id="copyRow">Copy from <small>the shape and options of one already measured; on the level just below or above it lands exactly on it and follows it</small><select id="copyFrom"></select></label>
+    <label class="inl" id="exteriorRow"><input type="checkbox" id="exterior"> Exterior (balcony, terrace)</label>
+    <div class="grid2" id="roomOptions">
+      <label>Floor <select id="rFloor"><option value="slab">a floor (slab)</option><option value="none">none: open to the level below</option></select></label>
+      <label>Floor level <small>mm above (− below) the level's floor: a step</small><input id="rFloorOff" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+      <label>Ceiling height <small>mm; empty = the level's <span id="rCeilNote"></span></small><input id="rCeil" inputmode="numeric" autocomplete="off"></label>
+    </div>
+    <div class="grid2" id="solidFields" hidden>
+      <label>Kind<select id="sKind"><option value="chimney">chimney</option><option value="pillar">pillar</option><option value="box">boxed-in pipe or duct</option></select></label>
+      <label>Shape<select id="sShape"><option value="outline">measured walking round it</option><option value="round">round: a diameter</option></select></label>
+      <label>Colour<input type="color" id="sColor"></label>
+      <label>Base <small>mm above the floor (boxing under the ceiling: its underside; negative: down through the slab) <a href="#" id="sBaseDown" title="Start at the ceiling of the level below, so the chimney has no gap through the floor">↧ to the ceiling below</a></small><input id="sBase" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+      <label>Height <small>mm, empty = up to the ceiling</small><input id="sHeight" inputmode="numeric" autocomplete="off"></label>
+    </div>
+    <label class="inl" id="sCutsRow" title="A chimney or post standing in a wall: the wall is cut where it stands, so the rooms can be measured as plain rectangles"><input type="checkbox" id="sCuts"> Walls give way to it (cut where it stands)</label>
+    <div id="sSidesBox" hidden>
+      <label style="margin-bottom:2px">Sides <small>painted per room: each room sees its own colour or material on the faces along it (applied with the button below)</small></label>
+      <div id="sSides"></div>
+    </div>
+
+    <h2>Measurements</h2>
+    <div id="roundBox" hidden>
+      <p class="help">A round pillar: its diameter, and where it stands measured like a ceiling lamp, from two walls of the room it is in: at right angles from each wall's face to the pillar's surface. Without a room, type its middle. It moves with those walls when the room is measured again.</p>
+      <div class="grid2">
+        <label>Diameter <small>mm</small><input id="rDia" inputmode="numeric" autocomplete="off"></label>
+        <label>Stands in <select id="rRoom"></select></label>
+        <label class="rWalls">From wall <select id="rWA"></select></label>
+        <label class="rWalls">to its surface <small>mm</small><input id="rDA" inputmode="numeric" autocomplete="off"></label>
+        <label class="rWalls">and wall <select id="rWB"></select></label>
+        <label class="rWalls">to its surface <small>mm</small><input id="rDB" inputmode="numeric" autocomplete="off"></label>
+        <label class="rXY">Middle x <small>mm</small><input id="rX" inputmode="numeric" autocomplete="off"></label>
+        <label class="rXY">Middle y <small>mm</small><input id="rY" inputmode="numeric" autocomplete="off"></label>
+      </div>
+    </div>
+    <div id="polyBox">
+    <p class="help" id="walkHelp">Walk <b>clockwise</b>, room on your <b>right</b>. Corner 0 is where you start; wall A runs from corner 0 to 1, B from 1 to 2, and so on (the letters are on the plan). Lengths are listed in that order. All lengths in mm.</p>
+    <label>Method
+      <select id="mode">
+        <option value="rectilinear">C · Rectilinear (all corners square)</option>
+        <option value="lengths">B · Lengths + diagonals (most accurate)</option>
+        <option value="traverse">A · Traverse (lengths + angles)</option>
+      </select>
+    </label>
+    <label>Edge lengths <small>(one per edge, e.g. 4000 5000 4000 5000)</small>
+      <textarea id="lengths" rows="2" spellcheck="false"></textarea></label>
+    <label id="closureRow">When the walls do not quite close
+      <select id="closure">
+        <option value="spread">Spread the gap over all walls</option>
+        <option value="line">Keep walls as measured; last wall runs straight to corner 0</option>
+        <option value="square">Keep every corner square; each gap goes into the walls running its way (rectilinear)</option>
+      </select></label>
+    <label id="locksRow">Locked walls <small>walls that lie exactly along x or y, e.g. <code>A x, D y</code> (wall letter, axis)</small>
+      <input id="locks" spellcheck="false" autocomplete="off"></label>
+    <div id="lockOffers" class="help"></div>
+    <label>Walls not measured <small>wall letters whose length was worked out (e.g. the way back, or a wall run to a coordinate); empty = all measured</small>
+      <input id="derived" spellcheck="false" autocomplete="off"></label>
+    <label>Exact lengths <small>walls whose length you are sure of, e.g. <code>A</code>: they take none of the closing gap, the other walls adjust</small>
+      <input id="exact" spellcheck="false" autocomplete="off"></label>
+    <label>Measured, replaced <small>lengths measured but replaced by worked-out ones (a corner moved on the plan, the way back on the phone), one per line: <code>D 3125</code>; kept as checks</small>
+      <textarea id="checks" rows="1" spellcheck="false"></textarea></label>
+    <label id="turnsRow">Turns <small>R = normal corner, L = inside corner; one letter per corner (empty = all R)</small>
+      <input id="turns" spellcheck="false" autocomplete="off"></label>
+    <label id="cornersRow">Interior angles <small>degrees, one per corner (empty = all 90)</small>
+      <input id="corners" spellcheck="false" autocomplete="off"></label>
+    <label id="diagRow">Diagonals <small>one per line: <code>0-2: 6403</code> (corner a - corner b: length)</small>
+      <textarea id="diagonals" rows="2" spellcheck="false"></textarea></label>
+    <div class="grid2">
+      <label>First edge heading <small>° counter-clockwise from plan east (90 = plan north)</small><input id="heading" placeholder="0" autocomplete="off"></label>
+      <div class="help" id="headingTrue" style="align-self:center"></div>
+    </div>
+    <label>Corner 0 is placed at <small>a point of the house, plus an offset</small>
+      <select id="originRef"></select></label>
+    <div class="grid2">
+      <label>Offset x <small>mm, east</small><input id="ox" placeholder="0" inputmode="numeric" autocomplete="off"></label>
+      <label>Offset y <small>mm, north</small><input id="oy" placeholder="0" inputmode="numeric" autocomplete="off"></label>
+    </div>
+    <div class="help" id="startAt"></div>
+    <details id="nextTo" class="nt">
+      <summary>Place next to another room…</summary>
+      <p class="help"><b>Click the neighbour's wall on the plan</b> (or pick it here), then the wall of this room that goes against it. This room is moved (and turned if needed, never mirrored) so the two share one wall with the thickness you enter.</p>
+      <label>Neighbour's wall <small>(an edge of another room)</small><select id="ntEdge"></select></label>
+      <label>This room's wall <small>(goes against it; preselected: the one already facing it, so the room only moves)</small><select id="ntOwn"></select></label>
+      <div class="grid2">
+        <label>Wall thickness <small>mm, face to face</small><input id="ntT" inputmode="numeric" autocomplete="off"></label>
+        <label>Start <small>mm from the green end</small><input id="ntSlide" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+      </div>
+      <div class="help" id="ntOut"></div>
+      <div class="row btns"><button id="ntUse" disabled>Use this position</button></div>
+    </details>
+    </div>
+
+    <h2>Result</h2>
+    <div id="result"></div>
+    <div id="resid"></div>
+    <div class="row btns">
+      <button class="moved" id="apply" disabled>Apply to room</button>
+      <button id="fromPoly" title="Fill in lengths and corners from the current polygon (not measurements!)">From polygon</button>
+      <button class="moved" id="delRoom" title="Remove this room, its measurements and the walls only it uses" hidden>Delete room</button>
+      <button id="addCeilingLamp" hidden title="A lamp on the ceiling, in the middle of the room to start with">+ Ceiling lamp</button>
+      <span id="copyTo"></span>
+    </div>
+  </section>
+
+  <section id="wallPanel" hidden>
+    <h2>Wall <span id="wTitle"></span></h2>
+    <div id="wInfo" class="help"></div>
+    <label>Name <small>optional, e.g. “Hall north wall”; shown instead of the id</small><input id="wName" autocomplete="off"></label>
+    <div class="grid2">
+      <label>Kind
+        <select id="wKind"><option value="wall">wall</option><option value="railing">railing</option><option value="virtual">virtual (boundary only)</option></select></label>
+      <label>Light
+        <select id="wLight"><option value="">default for the kind</option><option value="opaque">blocks light</option><option value="transparent">lets light through</option></select></label>
+      <label>Thickness <small id="wThickNote">mm</small><input id="wThick" inputmode="numeric" autocomplete="off"></label>
+      <label class="inl" id="wMeasuredRow"><input type="checkbox" id="wMeasured"> measured</label>
+      <label class="flat">Height <small>mm from its base; empty = up to the ceiling</small><input id="wHeight" inputmode="numeric" autocomplete="off"></label>
+      <label class="flat">Base <small>mm above floor</small><input id="wBase" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+    </div>
+    <div id="wPosBox" hidden>
+      <label style="margin-bottom:2px">Where it stands <small>a hand-drawn wall, in mm as you measure it: its start from a corner, then how far it runs</small></label>
+      <div class="grid2">
+        <label>Start follows <select id="wAnchA" title="A room corner the start hangs on: it moves (and turns) with that room"></select></label>
+        <label>End follows <select id="wAnchB" title="A room corner the end hangs on: it moves (and turns) with that room"></select></label>
+        <label>Start x <small id="wSxNote">east of that corner</small><input id="wSx" inputmode="decimal" autocomplete="off"></label>
+        <label>Start y <small id="wSyNote">north of that corner</small><input id="wSy" inputmode="decimal" autocomplete="off"></label>
+        <label>Length x <small>east (− west)</small><input id="wLx" inputmode="decimal" autocomplete="off"></label>
+        <label>Length y <small>north (− south)</small><input id="wLy" inputmode="decimal" autocomplete="off"></label>
+      </div>
+      <div class="help" id="wPosOut"></div>
+      <label>Thickness goes <select id="wJustify"><option value="left">to the left of start → end (the line is a face)</option><option value="right">to the right of start → end</option><option value="center">both ways from the line (centred)</option></select></label>
+      <label class="inl" title="Dragging an end on the plan never tilts it; the start and lengths keep one of the lengths 0"><input type="checkbox" id="wLock"> Keep it along x or y</label>
+      <div class="help">On the plan: drag the wall to move it, or one of its ends (snaps to corners; Shift keeps it straight, Alt: no snapping).</div>
+    </div>
+    <label class="inl" title="Different heights at each end, e.g. a wall along the stairs or a knee wall"><input type="checkbox" id="wSloped"> Sloped: its own height at each end</label>
+    <div class="grid2" id="wSlope" hidden>
+      <label>Top at <span id="wEndA">start</span> <small>mm above floor</small><input id="wTopA" inputmode="numeric" autocomplete="off"></label>
+      <label>Top at <span id="wEndB">end</span> <small>mm</small><input id="wTopB" inputmode="numeric" autocomplete="off"></label>
+      <label>Top level for <small>mm from the start, then it slopes</small><input id="wTopFlatA" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+      <label>Top level for <small>mm before the end</small><input id="wTopFlatB" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+      <label>Bottom at <span class="endA">start</span> <small>mm</small><input id="wBottomA" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+      <label>Bottom at <span class="endB">end</span> <small>mm</small><input id="wBottomB" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+      <label>Bottom level for <small>mm from the start</small><input id="wBotFlatA" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+      <label>Bottom level for <small>mm before the end</small><input id="wBotFlatB" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+    </div>
+    <div class="sideLook">
+      <label>Left side <small id="wLeftRoom"></small>
+        <select id="wLeftMode"><option value="">default</option><option value="color">colour</option><option value="material">material</option></select></label>
+      <input type="color" id="wLeftColor" title="Colour of the left side">
+      <select id="wLeftMat" title="Material of the left side"></select>
+    </div>
+    <div class="swatches" id="wLeftSwatches"></div>
+    <div class="sideLook">
+      <label>Right side <small id="wRightRoom"></small>
+        <select id="wRightMode"><option value="">default</option><option value="color">colour</option><option value="material">material</option></select></label>
+      <input type="color" id="wRightColor" title="Colour of the right side">
+      <select id="wRightMat" title="Material of the right side"></select>
+    </div>
+    <div class="swatches" id="wRightSwatches"></div>
+    <div id="wRoomLooksBox" hidden>
+      <label style="margin-bottom:2px">Per room <small>a side running along several rooms can look different in each; default = that side's look above</small></label>
+      <div id="wRoomLooks"></div>
+    </div>
+    <div id="wOpenings" class="help"></div>
+    <div class="row btns">
+      <button id="wAddDoor" title="Add a door to this wall (defaults until measured)">+ Door</button>
+      <button id="wAddWindow">+ Window</button>
+      <button id="wAddPassage" title="An opening without a door">+ Passage</button>
+      <button id="wAddSwitch">+ Switch</button>
+      <button id="wAddWallLamp">+ Wall lamp</button>
+      <button id="wAddObject" title="A box on this wall: a wall cabinet, a shelf">+ Wall object</button>
+    </div>
+    <div class="grid2">
+      <label>Split at <small id="wSplitNote">mm from the start</small><input id="wSplitAt" inputmode="numeric" autocomplete="off"></label>
+      <div><button id="wSplit" title="Two walls, each with its own thickness, kind and colours (e.g. a closet front next to a chimney)">Split wall here</button></div>
+    </div>
+    <div class="row btns" id="wJoinRow" hidden></div>
+    <div id="wErr" class="help" style="color:var(--bad)"></div>
+    <div class="row btns">
+      <button class="moved" id="wApply">Apply wall changes</button>
+      <button id="wUnbind" hidden title="Stop following the rooms; the wall stays exactly where it is">Keep as hand-drawn</button>
+      <button class="moved" id="wDelete" hidden>Delete wall</button>
+    </div>
+  </section>
+
+  <section id="openingPanel" hidden>
+    <h2>Opening <span id="oTitle"></span></h2>
+    <div id="oInfo" class="help"></div>
+    <label>Name <small>optional, e.g. “Bathroom window”; shown instead of the id</small><input id="oName" autocomplete="off"></label>
+    <label>Copy from <small>type and sizes of another opening (stays where it is)</small><select id="oCopy" class="copyFrom"></select></label>
+    <label>Measured from <small>the corner the position counts from (marked “from here” on the plan)</small><select id="oFrom"></select></label>
+    <div class="grid2">
+      <label>Type
+        <select id="oType"><option value="door">door</option><option value="window">window</option><option value="passage">passage (no door)</option></select></label>
+      <label class="inl" id="oMeasuredRow"><input type="checkbox" id="oMeasured"> all values measured</label>
+      <label>Position <small id="oOffsetNote">mm to the near edge</small><input id="oOffset" inputmode="numeric" autocomplete="off"></label>
+      <label>Width <small>mm</small><input id="oWidth" inputmode="numeric" autocomplete="off"></label>
+      <label>Bottom <small>mm above the floor (sill)</small><input id="oSill" inputmode="numeric" autocomplete="off"></label>
+      <label>Top <small>mm above the floor</small><input id="oHead" inputmode="numeric" autocomplete="off"></label>
+      <label>Height <small>mm, bottom to top</small><input id="oHeight" inputmode="numeric" autocomplete="off"></label>
+      <label>Below ceiling <small id="oBelowNote">mm, top to ceiling</small><input id="oBelow" inputmode="numeric" autocomplete="off"></label>
+    </div>
+    <label id="oDoorOpensRow">Door opens
+      <select id="oDoorOpens"><option value="swing">on hinges (swings)</option><option value="sliding">sliding along the wall</option><option value="pocket">sliding into the wall (pocket)</option></select></label>
+    <label id="oOpensRow">Window opens
+      <select id="oOpens"><option value="fixed">fixed (does not open)</option><option value="side-hung">side-hung (like a door)</option><option value="top-hung">top-hung</option><option value="bottom-hung">bottom-hung</option><option value="tilt-turn">tilt-turn</option><option value="sliding">sliding</option></select></label>
+    <div class="grid2" id="oLeafRow">
+      <label><span id="oHingeLbl">Hinge</span> <select id="oHinge"><option value="near">near edge</option><option value="far">far edge</option><option value="both">both sides (double)</option></select></label>
+      <label id="oSwingRow"><span id="oSwingLbl">Opens into</span> <select id="oSwing"><option value="right">right</option><option value="left">left</option></select></label>
+    </div>
+    <label id="oThickRow">Thickness of the <span id="oThickWhat">window</span> itself <small>mm, its frame or leaf (not the hole in the wall); empty = not measured</small><input id="oThick" inputmode="numeric" autocomplete="off"></label>
+    <div id="oErr" class="help" style="color:var(--bad)"></div>
+    <div class="row btns">
+      <button class="moved" id="oApply">Apply opening changes</button>
+      <button class="moved" id="oDelete">Delete opening</button>
+      <button id="oBack">← its wall</button>
+    </div>
+  </section>
+
+  <section id="fixturePanel" hidden>
+    <h2>Fixture <span id="xTitle"></span></h2>
+    <div id="xInfo" class="help"></div>
+    <label>Name <small>optional, e.g. “Kitchen ceiling lamp”; shown instead of the id</small><input id="xName" autocomplete="off"></label>
+    <label>Copy from <small>height and reach of another one (stays where it is)</small><select id="xCopy" class="copyFrom"></select></label>
+    <label id="xFromRow">Measured from <small>the corner the position counts from (marked “from here” on the plan)</small><select id="xFrom"></select></label>
+    <div class="grid2">
+      <label>Height <small id="xZNote">mm above the floor</small><input id="xZ" inputmode="numeric" autocomplete="off"></label>
+      <label id="xRadiusRow">Light reaches <small>mm (plan glow)</small><input id="xRadius" inputmode="numeric" autocomplete="off"></label>
+      <label id="xOffsetRow">Position <small id="xOffsetNote">mm along the wall</small><input id="xOffset" inputmode="numeric" autocomplete="off"></label>
+      <label id="xSideRow">On the side of <select id="xSide"><option value="right">right</option><option value="left">left</option></select></label>
+      <label id="xXRow">x <small>mm, east</small><input id="xX" inputmode="numeric" autocomplete="off"></label>
+      <label id="xYRow">y <small>mm, north</small><input id="xY" inputmode="numeric" autocomplete="off"></label>
+    </div>
+    <div id="xBindBox">
+      <label>Home Assistant entity <small id="xEntityNote">the light or switch it is in Home Assistant; picking one links it at once</small><input id="xEntity" autocomplete="off" spellcheck="false" placeholder="type to search: name or entity id"></label>
+      <div id="xEntityPick" class="entpick" hidden></div>
+      <div id="xEntityNow" class="help"></div>
+      <div id="xLookRow">
+        <label style="margin-bottom:2px">When on, it looks like <small>for what Home Assistant does not tell: a smart outlet or relay driving an ordinary lamp, a light without dimming or colour; empty = full and warm white</small></label>
+        <div class="grid2">
+          <label>Brightness <small>%</small><input id="xLookBri" inputmode="numeric" placeholder="100" autocomplete="off"></label>
+          <label>Colour temperature <small>K, e.g. 2700 warm</small><input id="xLookK" inputmode="numeric" placeholder="2700" autocomplete="off"></label>
+          <label class="inl"><input type="checkbox" id="xLookUseColor"> A colour instead</label>
+          <label><input type="color" id="xLookColor" value="#ffd6aa"></label>
+        </div>
+      </div>
+      <div id="xControlsRow"><label style="margin-bottom:2px">Controls <small>lamps this switch turns on and off (a click on it toggles them)</small></label><div id="xControls" class="help"></div></div>
+      <div class="row btns"><button id="xBind">Save link</button> <span id="xBindOut" class="help"></span></div>
+    </div>
+    <div id="xErr" class="help" style="color:var(--bad)"></div>
+    <div class="row btns">
+      <button class="moved" id="xApply">Apply fixture changes</button>
+      <button class="moved" id="xDelete">Delete fixture</button>
+    </div>
+  </section>
+  <section id="objectPanel" hidden>
+    <h2>Object <span id="obTitle"></span></h2>
+    <div id="obInfo" class="help"></div>
+    <label>Copy from <small>size, height and colour of another object (stays where it is)</small><select id="obCopy" class="copyFrom"></select></label>
+    <div class="grid2">
+      <label>Name<input id="obName" autocomplete="off"></label>
+      <label>Colour<input type="color" id="obColor"></label>
+      <label>Width <small>mm, along the wall</small><input id="obW" inputmode="numeric" autocomplete="off"></label>
+      <label>Depth <small>mm, out from the wall</small><input id="obD" inputmode="numeric" autocomplete="off"></label>
+      <label>Height <small>mm</small><input id="obH" inputmode="numeric" autocomplete="off"></label>
+      <label>Bottom <small>mm above the floor</small><input id="obZ" inputmode="numeric" autocomplete="off"></label>
+      <label id="obOffsetRow">Position <small id="obOffsetNote">mm along the wall</small><input id="obOffset" inputmode="numeric" autocomplete="off"></label>
+      <label id="obSideRow">On the side of <select id="obSide"><option value="right">right</option><option value="left">left</option></select></label>
+      <label id="obGapRow">Gap from the wall <small>mm</small><input id="obGap" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+      <label id="obXRow">x <small>mm, east (a corner)</small><input id="obX" inputmode="numeric" autocomplete="off"></label>
+      <label id="obYRow">y <small>mm, north</small><input id="obY" inputmode="numeric" autocomplete="off"></label>
+      <label id="obRotRow">Turned <small>degrees, 0 = width along east</small><input id="obRot" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+    </div>
+    <div id="obErr" class="help" style="color:var(--bad)"></div>
+    <div class="row btns">
+      <button class="moved" id="obApply">Apply object changes</button>
+      <button class="moved" id="obDelete">Delete object</button>
+    </div>
+  </section>
+  <section id="stairsPanel" hidden>
+    <h2>Stairs <span id="stTitle"></span></h2>
+    <div id="stInfo" class="help"></div>
+    <label>Name <small>optional, e.g. “Main stairs”; shown instead of the id</small><input id="stName" autocomplete="off"></label>
+    <label>Copy from <small>width, flights, landing and underside of other stairs (they keep where they start)</small><select id="stCopy" class="copyFrom"></select></label>
+    <div class="grid2">
+      <label>Up to <select id="stTo"></select></label>
+      <label>Width <small>mm, clear</small><input id="stWidth" inputmode="numeric" autocomplete="off"></label>
+      <label>Starts at <small>the left corner of the first step, looking up</small><select id="stRef"></select></label>
+      <label>Walking direction <small>degrees: 0 east, 90 north</small><input id="stHead" inputmode="numeric" autocomplete="off"></label>
+      <label><span id="stOxLbl">x offset</span> <small>mm</small><input id="stOx" inputmode="numeric" autocomplete="off"></label>
+      <label><span id="stOyLbl">y offset</span> <small>mm</small><input id="stOy" inputmode="numeric" autocomplete="off"></label>
+      <label>Risers <small>flight 1</small><input id="stR1" inputmode="numeric" autocomplete="off"></label>
+      <label>Run <small>mm, first riser to the end of the flight</small><input id="stL1" inputmode="numeric" autocomplete="off"></label>
+    </div>
+    <label>Treads one by one <small>flight 1, optional: each tread's depth in mm, in walking order (<code>250, 262, 248</code>); then the run is their sum and a measured run is a check</small><input id="stT1" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
+    <label>Shape <select id="stShape"><option value="1">straight</option><option value="2">L: two flights, one turn</option><option value="3">U: three flights, two turns the same way</option></select></label>
+    <div class="grid2" id="stTwoRows">
+      <label>Risers <small>flight 2</small><input id="stR2" inputmode="numeric" autocomplete="off"></label>
+      <label>Run <small>mm</small><input id="stL2" inputmode="numeric" autocomplete="off"></label>
+    </div>
+    <label id="stT2Row">Treads one by one <small>flight 2, optional</small><input id="stT2" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
+    <div class="grid2" id="stThreeRows">
+      <label>Risers <small>flight 3</small><input id="stR3" inputmode="numeric" autocomplete="off"></label>
+      <label>Run <small>mm</small><input id="stL3" inputmode="numeric" autocomplete="off"></label>
+    </div>
+    <label id="stT3Row">Treads one by one <small>flight 3, optional</small><input id="stT3" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
+    <div class="grid2" id="stTurnRows">
+      <label>Turns <select id="stTurn"><option value="L">left</option><option value="R">right</option></select></label>
+      <label>At each turn <select id="stLanding"><option value="square">a square landing</option><option value="winders">winders</option></select></label>
+      <label id="stWindersRow">Winders <small>wedge steps</small><input id="stWinders" inputmode="numeric" autocomplete="off"></label>
+    </div>
+    <div class="grid2">
+      <label>Underneath <select id="stUnder"><option value="closed">closed (solid blocks)</option><option value="sloped">solid, sloped underside</option><option value="open">open (treads only)</option></select></label>
+      <label>Sides <select id="stSides"><option value="stepped">stepped</option><option value="sloped">sloped panels</option></select></label>
+      <label id="stWaistRow">Thickness under the steps <small>mm, sloped underside</small><input id="stWaist" inputmode="numeric" placeholder="150" autocomplete="off"></label>
+    </div>
+    <div id="stErr" class="help" style="color:var(--bad)"></div>
+    <div class="row btns">
+      <button class="moved" id="stApply">Apply stairs changes</button>
+      <button class="moved" id="stDelete">Delete stairs</button>
+    </div>
+  </section>
+  <section id="matForm" hidden>
+    <div class="grid2">
+      <label>Name<input id="mName" autocomplete="off"></label>
+      <label>Id<input id="mId" readonly></label>
+      <label>Colour<input type="color" id="mColor"></label>
+      <label>One repeat <small>mm (texture)</small><input id="mUv" inputmode="numeric" placeholder="1000" autocomplete="off"></label>
+    </div>
+    <div class="swatches" id="mSwatches"></div>
+    <label>Texture <small>an image in the house's folder, e.g. <code>assets/panel.jpg</code> (optional; copy the file there yourself)</small><input id="mTex" autocomplete="off" spellcheck="false"></label>
+    <div id="mUse" class="help"></div>
+    <div id="mErr" class="help" style="color:var(--bad)"></div>
+    <div class="row btns"><button class="moved" id="mApply">Apply</button><button class="moved" id="mDelete">Delete</button><button class="moved" id="mClose">Close</button></div>
+  </section>
+  </div>
+  <div id="wallsOut" class="help report"></div>
+  <div id="edBar" class="edbar" hidden>
+    <button id="edDelete" class="danger" title="Delete it (confirmed first)">Delete</button>
+    <button id="edDup" hidden title="A copy beside it, with the same sizes (then opened)">Duplicate</button><span class="sp"></span>
+    <button id="edRevert" title="Back to what is stored">Revert</button>
+    <button id="edClose" title="Leave the editor (Esc)">Close</button>
+    <button id="edApply" class="primary" title="Write the changes into the model (Save stores the file)">Apply</button>
+  </div>
+</aside>
+</body>
+</html>

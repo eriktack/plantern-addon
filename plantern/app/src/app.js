@@ -1,0 +1,300 @@
+import { loadLocalConfig } from './model/load.js';
+import { listHouses, openHouse, houseOptions } from './model/house.js';
+import { resolveSettings } from './model/settings.js';
+import { validateModel, validateBindings, validateEntities } from './model/validate.js';
+import { buildModelGeometry } from './geometry/level.js';
+import { levelStack, STACK_MODES } from './geometry/stack.js';
+import { collectSnapPoints } from './tools/snap.js';
+import { createMeasureTool } from './tools/measure.js';
+import { addCheck, deleteCheck } from './edit/ops.js';
+import { createPlanView } from './render2d/plan.js';
+import { createHaClient, resolveConnection, boundEntities } from './ha/client.js';
+import { appearance } from './ha/appearance.js';
+import { fixtureAppearance as fixtureAppearanceOf, toggleCalls } from './ha/fixture.js';
+import { exportSvg } from './export/svg.js';
+
+const $ = id => document.getElementById(id);
+import { chooseLocation, chooseLevel, remember, linkPages } from './model/current.js';
+import { compassSvg } from './render2d/compass.js';
+import { readPrefs, writePrefs, cameraKey } from './model/prefs.js';
+import { shadowLevel, SHADOW_LEVELS, SHADOW_LABEL, SHADOW_COUNT } from './model/shadows.js';
+import { northAngleOf } from './model/orientation.js';
+
+const params = new URLSearchParams(location.search);
+const status = t => ($('status').textContent = t);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+async function main() {
+  // ---- location ----
+  const index = await listHouses();
+  const locId = chooseLocation(index, params.get('loc'));
+  const house = await openHouse(index, locId);
+  remember(locId); linkPages(locId);
+  const locSel = $('loc');
+  locSel.innerHTML = houseOptions(index, locId);
+  locSel.onchange = () => { remember(locSel.value); params.set('loc', locSel.value); params.delete('level'); location.search = params; };
+
+  const { location: loc, model, baseUrl } = house, localConfig = await loadLocalConfig();
+  // saved elsewhere (the Editor, a phone, a git pull): show the new version (the camera and choices are remembered)
+  house.watch(() => location.reload());
+  const looks = { materials: model.materials || {}, baseUrl };     // wall sides: colours, materials, textures
+  document.title = `Plantern · ${loc.name}`;
+  $('compass').innerHTML = compassSvg(northAngleOf(model));
+  const bindings = loc.bindings || {};
+
+  // ---- derived geometry for all levels (checks and snap refs may span levels) ----
+  const geos = buildModelGeometry(model, { headroom: l => resolveSettings(loc, l).stairHeadroom });
+  const allSnaps = model.levels.flatMap(l => collectSnapPoints(model, l, geos.get(l.id)));
+  const snapIndex = new Map(allSnaps.map(s => [s.ref, s]));
+
+  // ---- validation ----
+  const issues = [...validateModel(model, geos), ...validateBindings(loc, model)];
+  const showIssues = () => {
+    $('issues').innerHTML = issues.length
+      ? issues.map(i => `<div class="iss ${i.severity}"><b>${esc(i.id)}</b>${i.level ? ` <small>${esc(i.level)}</small>` : ''}<br>${esc(i.msg)}</div>`).join('')
+      : '<small>No problems found.</small>';
+    $('issueCount').textContent = issues.length ? `(${issues.length})` : '';
+  };
+  issues.forEach(i => console[i.severity === 'error' ? 'error' : 'warn'](`[validate] ${i.id}: ${i.msg}`));
+  showIssues();
+
+  // ---- level ----
+  let level = model.levels.find(l => l.id === chooseLevel(model, locId, params.get('level'))) || null;
+  linkPages(locId, level?.id);
+  const levelSel = $('level');
+  levelSel.innerHTML = model.levels.map(l => `<option value="${esc(l.id)}">${esc(l.name || l.id)}</option>`).join('');
+  levelSel.hidden = model.levels.length < 2;
+  if (level) levelSel.value = level.id;
+  const state = () => ({
+    geo: level && geos.get(level.id),
+    snaps: level ? allSnaps.filter(s => s.level === level.id) : [],
+    index: snapIndex,
+    settings: resolveSettings(loc, level),
+  });
+
+  // ---- HA ----
+  // connections kept by Plantern's server (the token stays there), else config.local.json
+  const serverConns = house.server ? await fetch('api/ha/connections').then(r => (r.ok ? r.json() : { connections: [] })).then(b => b.connections.map(c => c.name)).catch(() => []) : [];
+  const { name: connName, conn, note } = resolveConnection(loc, localConfig, serverConns);
+  let ha;
+  try { ha = createHaClient(conn, { entities: boundEntities(loc) }); }
+  catch (e) { issues.push({ severity: 'error', id: connName || 'ha', msg: e.message }); showIssues(); ha = createHaClient({ type: 'mock' }, { entities: boundEntities(loc) }); }
+  ha.onStatus((s, detail) => { $('haStatus').textContent = `${connName || 'no connection'} · ${s}${detail ? ` (${detail})` : ''}${note && s === 'mock' ? ` — ${note}` : ''}`; });
+
+  const fixtureAppearance = fx => fixtureAppearanceOf(bindings, id => ha.getState(id), fx);
+  // Both views show the same fixture state; the 3D view exists only after it was first opened.
+  let view3d = null;
+  function applyFixture(fx) {
+    const a = fixtureAppearance(fx);
+    view.setFixture(fx.id, a);
+    view3d?.setFixture(fx.id, a);
+  }
+  // the 3D view can show several levels: their lamps and switches are all live
+  let stackMode = STACK_MODES.includes(readPrefs().stack) ? readPrefs().stack : 'this', exploded = !!readPrefs().exploded;
+  const shownLevels = () => levelStack(model, level, stackMode, exploded).map(s => ({ ...s, geo: geos.get(s.level.id) }));
+  const refreshFixtures = () => shownLevels().forEach(s => s.level.fixtures?.forEach(applyFixture));
+  const build3d = () => view3d.build({ level, geo: state().geo, levels: shownLevels(), settings: state().settings, fixtureLabel, ...looks });
+
+  async function toggleFixture(fx) {
+    const r = toggleCalls(bindings, id => ha.getState(id), fx);
+    if (r.error) return status(r.error);
+    try { await Promise.all(r.calls.map(c => ha.callService(c.domain, c.service, {}, c.target))); }
+    catch (e) { status(`HA: ${e.message}`); }
+  }
+
+  // ---- view + tools ----
+  let measure = null;
+  const view = createPlanView($('plan'), {
+    onFixtureClick: fx => { if (!measure?.isActive()) toggleFixture(fx); },
+    onTap: e => measure?.tap(e),
+    onHover: e => measure?.hoverAt(e),
+    onView: () => measure?.draw(),
+  });
+  measure = createMeasureTool({
+    view, model, getState: state,
+    dom: { read: $('read'), pin: $('pin'), checks: $('checks'), status: $('status'), toggle: $('mbtn'), note: $('ckNote') },
+    onPin: (a, b, measured) => keepChecks(addCheck(model, { a, b, measured, note: 'pinned in the viewer' }), 'pinned'),
+    onRemove: id => keepChecks(deleteCheck(model, id), 'removed', model.checks.find(c => c.id === id)?.solve),
+  });
+  /**
+   * A check pinned or removed here is saved like the Editor saves (only the checks change on this page;
+   * the model object is shared by the plan, the snap points and the tools, so its checks are replaced in
+   * place). A page that cannot save (read-only storage, a plain static server) keeps it until reload.
+   * Removing a check that was in a room's solve re-solves that room: then the page reloads.
+   */
+  async function keepChecks(r, what, resolves = false) {
+    if (r.report.errors.length) { measure.note(r.report.errors.join('; ')); return; }
+    const use = checks => { model.checks.splice(0, model.checks.length, ...(checks || [])); measure.refreshChecks(); };
+    if (!house.canSave) { use(r.model.checks); measure.note(`Check ${what}, but this house cannot be saved from here (read-only, or no Plantern server): it is kept until the page is reloaded.`); return; }
+    measure.note('Saving…');
+    try {
+      const s = await house.save(r.model);
+      if (resolves) { location.reload(); return; }
+      use(s.value.checks);
+      measure.note(`Check ${what} and saved.`);
+    } catch (e) {
+      measure.note(e.conflict ? 'Not saved: this house was changed elsewhere meanwhile. Reload the page and try again.' : `Not saved: ${e.message}`);
+    }
+  }
+  const fixtureLabel = fx => {
+    const b = bindings[fx.id];
+    return `${fx.name ? `${fx.name} (${fx.id})` : fx.id} → ${b?.entity || (b?.controls ? 'controls ' + b.controls.join(', ') : 'unbound')}`;
+  };
+  function showLevel() {
+    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks });
+    if (view3d) build3d();
+    restoreCamera();
+    refreshFixtures();
+    measure.reset();
+  }
+
+  // ---- 2D / 3D ----
+  // three.js loads lazily (CDN via the import map), so the 2D plan works even when offline.
+  let loading3d = null;
+  function ensure3d() {
+    loading3d ??= import('./render3d/view.js').then(m => {
+      $('view3d').replaceChildren();
+      view3d = m.createView3d($('view3d'), { onFixtureClick: toggleFixture, onView: keepCamera });
+      build3d();
+      // the 3D choices last made in this browser: daylight, projection, and the camera for this house and level
+      const p = readPrefs();
+      if (p.daylight) $('daylight').classList.toggle('on', view3d.setDaylight(true));
+      applyShadows();
+      $('proj').classList.toggle('on', p.projection === 'persp');
+      restoreCamera();
+      refreshFixtures();
+      return view3d;
+    }).catch(e => {
+      loading3d = null;
+      console.error(e);
+      $('view3d').innerHTML = `<div class="msg">3D view could not load three.js (${esc(e.message)}).<br>It is served from vendor/three/ next to the page; check that folder is there.</div>`;
+      throw e;
+    });
+    return loading3d;
+  }
+  function setView(v) {
+    const is3d = v === '3d';
+    $('plan').toggleAttribute('hidden', is3d);        // SVG elements have no .hidden property
+    $('view3d').hidden = !is3d;
+    $('panel3d').hidden = !is3d;
+    $('panel2d').hidden = is3d;
+    $('compass').hidden = is3d;
+    if (!is3d) view.fit();
+    document.querySelectorAll('#viewbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+    params.set('view', v);
+    history.replaceState(null, '', '?' + params);
+    writePrefs({ view: v });
+    if (is3d) ensure3d().catch(() => {});
+  }
+  /** The camera for this house and level, as last left (else the framed default), in the last projection. */
+  function restoreCamera() {
+    if (!view3d || !level) return;
+    const p = readPrefs(), cam = p.cameras?.[cameraKey(locId, level.id)];
+    if (cam) view3d.setCamera(cam);
+    else if (p.projection === 'persp') view3d.setProjection('persp');
+  }
+  const keepCamera = cam => { if (level) writePrefs({ projection: cam.projection, cameras: { [cameraKey(locId, level.id)]: cam } }); };
+  document.querySelectorAll('#viewbar button').forEach(b => (b.onclick = () => setView(b.dataset.view)));
+  $('stackRow').hidden = model.levels.length < 2;
+  $('stackMode').value = stackMode; $('exploded').checked = exploded;
+  const restack = () => { stackMode = $('stackMode').value; exploded = $('exploded').checked; writePrefs({ stack: stackMode, exploded }); if (!view3d) return; build3d(); view3d.resetView(); refreshFixtures(); };
+  $('stackMode').onchange = restack; $('exploded').onchange = restack;
+  // shadows: a level per kind of device (the house's settings), changed with the slider and remembered in this browser
+  const device = globalThis.matchMedia?.('(pointer: coarse)').matches ? 'mobile' : 'desktop';
+  $('shadowDev').textContent = device === 'mobile' ? 'on this phone or tablet' : 'on this computer';
+  function applyShadows() {
+    const lvl = shadowLevel(state().settings?.render3d, device, readPrefs().shadows?.[device]);
+    $('shadowLvl').value = SHADOW_LEVELS.indexOf(lvl); $('shadowTxt').textContent = SHADOW_LABEL[lvl];
+    view3d?.setShadows(SHADOW_COUNT[lvl]);
+  }
+  $('shadowLvl').oninput = () => {
+    const lvl = SHADOW_LEVELS[Number($('shadowLvl').value)];
+    writePrefs({ shadows: { ...(readPrefs().shadows || {}), [device]: lvl } });
+    applyShadows();
+  };
+  applyShadows();
+  $('daylight').onclick = () => { if (!view3d) return; const on = view3d.setDaylight(!view3d.isDaylight()); $('daylight').classList.toggle('on', on); writePrefs({ daylight: on }); };
+  $('proj').onclick = () => { if (!view3d) return; const p = $('proj').classList.toggle('on') ? 'persp' : 'ortho'; view3d.setProjection(p); keepCamera(view3d.getCamera()); };
+  $('resetView').onclick = () => { if (!view3d) return; view3d.setProjection('ortho'); view3d.resetView(); $('proj').classList.remove('on'); keepCamera(view3d.getCamera()); };
+  levelSel.onchange = () => {
+    level = model.levels.find(l => l.id === levelSel.value);
+    params.set('level', level.id);
+    history.replaceState(null, '', '?' + params);
+    remember(locId, level.id); linkPages(locId, level.id);
+    showLevel();
+  };
+  showLevel();
+  setView((params.get('view') || readPrefs().view) === '3d' ? '3d' : '2d');      // the URL, else what was used last
+  if (!level) status(`${loc.name}: model has no levels yet`);
+
+  // ---- entity panel ----
+  const rows = {};
+  for (const id of boundEntities(loc)) {
+    const d = document.createElement('div');
+    d.className = 'row';
+    // the lamps' friendly names when they have them, the entity id beside
+    const named = model.levels.flatMap(l => l.fixtures || []).filter(fx => bindings[fx.id]?.entity === id && fx.name).map(fx => fx.name);
+    d.innerHTML = `<label><input type="checkbox"> ${named.length ? `${esc(named.join(', '))} <small>${esc(id)}</small>` : esc(id)}</label>${id.startsWith('light.') ? '<input type="range" min="1" max="255">' : ''}`;
+    $('ents').appendChild(d);
+    const [cb, rg] = d.querySelectorAll('input');
+    rows[id] = { d, cb, rg };
+    const domain = id.split('.')[0], call = (svc, data) => ha.callService(domain, svc, data, { entity_id: id }).catch(e => status(`HA: ${e.message}`));
+    cb.onchange = () => call(cb.checked ? 'turn_on' : 'turn_off', {});
+    if (rg) rg.onchange = () => call('turn_on', { brightness: +rg.value });
+  }
+  if (!Object.keys(rows).length) $('ents').innerHTML = '<small>No bindings in location.json.</small>';
+  const refreshRow = id => {
+    const r = rows[id];
+    if (!r) return;
+    const s = ha.getState(id), a = appearance(s);
+    r.d.classList.toggle('missing', !a.available);
+    r.d.title = s ? s.state : 'not found in HA';
+    r.cb.disabled = !a.available;
+    r.cb.checked = a.on;
+    if (r.rg) { r.rg.disabled = !a.on; r.rg.value = s?.attributes?.brightness ?? 255; }
+  };
+  Object.keys(rows).forEach(refreshRow);
+
+  // Only fixtures touched by the changed entity are updated.
+  const affected = new Map();
+  for (const [fxId, b] of Object.entries(bindings)) {
+    const ents = b.entity ? [b.entity] : (b.controls || []).map(c => bindings[c]?.entity).filter(Boolean);
+    for (const e of ents) affected.set(e, [...(affected.get(e) || []), fxId]);
+  }
+  ha.subscribe(id => {
+    refreshRow(id);
+    const fxs = level?.fixtures || [];
+    for (const fxId of affected.get(id) || []) { const fx = fxs.find(f => f.id === fxId); if (fx) applyFixture(fx); }
+  });
+
+  ha.connect().then(() => {
+    issues.push(...validateEntities(loc, ha));
+    showIssues();
+    refreshFixtures();
+    Object.keys(rows).forEach(refreshRow);
+  }).catch(e => status(`HA: ${e.message}`));
+
+  // ---- export ----
+  const fileBase = () => `${loc.id}${level ? '-' + level.id : ''}`;
+  $('expSvg').onclick = () => { if (!level) return status('nothing to export'); exportSvg($('plan'), fileBase() + '.svg'); };
+  $('expGlb').onclick = async () => {
+    if (!level) return status('nothing to export');
+    try {
+      const v = await ensure3d();
+      const { exportGlb } = await import('./export/glb.js');
+      await exportGlb(v.root, fileBase() + '.glb');
+      status(`${fileBase()}.glb exported`);
+    } catch (e) { status(`GLB export failed: ${e.message}`); }
+  };
+  $('copy').onclick = async () => {
+    try { await navigator.clipboard.writeText(JSON.stringify(model, null, 2)); status(`${loc.model || 'model.json'} copied`); }
+    catch { status('clipboard blocked'); }
+  };
+}
+
+main().catch(e => {
+  console.error(e);
+  if (e.noHouses) { status(e.message); $('issues').innerHTML = `<div class="iss">${e.html}</div>`; return; }
+  status(`Failed to start: ${e.message}`);
+  $('issues').innerHTML = `<div class="iss error">${esc(e.message)}</div>`;
+});

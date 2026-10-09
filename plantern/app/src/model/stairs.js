@@ -1,0 +1,48 @@
+// Stairs (PLANTERN.md §6.4), the rules for what may be stored. What a stair looks like and where its
+// opening is comes from geometry/stairs.js; whether it fits the house is reported by validate.js.
+//   { id: "st_main", to: "upper", start: { ref, offset: [dx, dy] } | { pos: [x, y] }, heading, width,
+//     flights: [{ risers, length?, treads?: [mm, …] }, …] (1 straight, 2 an L, 3 a U), turn?: "L" | "R", landing?: "square" | "winders",
+//     winders?: n, underside?: "closed" | "open" | "sloped", waist?: mm, sides?: "stepped" | "sloped", opening?: [[x, y], …], assumed?: [...] }
+// Pure.
+
+export const STAIR_UNDERSIDES = ['closed', 'open', 'sloped'];
+export const STAIR_SIDES = ['stepped', 'sloped'];
+export const STAIR_DEFAULTS = Object.freeze({ width: 900, riser: 180, tread: 250, underside: 'closed' });
+
+/** Problems with the fields of a stair: { errors: [msg] }. */
+export function checkStairs(st, model, level) {
+  const errors = [];
+  if (!/^st_[a-z0-9_]+$/.test(st?.id || '')) errors.push('a stair needs an id like st_main');
+  const to = (model.levels || []).find(l => l.id === st?.to);
+  if (!to) errors.push(`it goes to level "${st?.to}", which does not exist`);
+  else if (to.id === level.id) errors.push('it cannot go to the level it starts on');
+  else if (to.elevation <= level.elevation) errors.push(`${to.id} is not above ${level.id}: stairs are stored on the lower level and go up`);
+  else if ((to.building ?? null) !== (level.building ?? null)) errors.push(`${to.id} is in another building`);
+  const s = st?.start;
+  if (!s || (!s.ref && !(Array.isArray(s.pos) && s.pos.length === 2 && s.pos.every(Number.isFinite)))) errors.push('start needs a point (ref + offset, or pos)');
+  else if (s.ref && s.offset !== undefined && !(Array.isArray(s.offset) && s.offset.length === 2 && s.offset.every(Number.isFinite))) errors.push('start offset must be [dx, dy]');
+  if (!Number.isFinite(st?.heading)) errors.push('heading must be a number of degrees');
+  if (!(st?.width > 0)) errors.push('width must be more than 0');
+  const fl = st?.flights;
+  if (!Array.isArray(fl) || fl.length < 1 || fl.length > 3) errors.push('one, two (an L) or three flights (a U)');
+  else {
+    fl.forEach((f, i) => {
+      if (!Number.isInteger(f?.risers) || f.risers < 1) errors.push(`flight ${i + 1}: risers must be a whole number, 1 or more`);
+      if (f?.treads !== undefined) {
+        // measured one by one: a depth per tread (risers − 1), in walking order
+        if (!Array.isArray(f.treads) || f.treads.length !== f.risers - 1 || f.treads.some(d => !(d > 0))) errors.push(`flight ${i + 1}: treads must be ${Math.max((f?.risers ?? 1) - 1, 0)} depths in mm (one per tread)`);
+        if (f.length !== undefined && !(f.length >= 0)) errors.push(`flight ${i + 1}: length must be a number of mm`);
+      } else if (!(f?.length >= 0) || (f?.risers > 1 && !(f.length > 0))) errors.push(`flight ${i + 1}: length (the plan run) must be more than 0`);
+    });
+    if (fl.length > 1) {
+      if (st.turn !== 'L' && st.turn !== 'R') errors.push(`${fl.length} flights need turn "L" or "R"`);
+      if (st.landing !== undefined && st.landing !== 'square' && st.landing !== 'winders') errors.push('landing must be "square" or "winders"');
+      if (st.landing === 'winders' && !(Number.isInteger(st.winders) && st.winders >= 2)) errors.push('winders: a whole number, 2 or more');
+    }
+  }
+  if (st?.underside !== undefined && !STAIR_UNDERSIDES.includes(st.underside)) errors.push(`underside must be ${STAIR_UNDERSIDES.join(' or ')}`);
+  if (st?.sides !== undefined && !STAIR_SIDES.includes(st.sides)) errors.push(`sides must be ${STAIR_SIDES.join(' or ')}`);
+  if (st?.waist !== undefined && !(st.waist > 0)) errors.push('waist (thickness under a sloped underside) must be more than 0');
+  if (st?.opening !== undefined && !(Array.isArray(st.opening) && st.opening.length >= 3 && st.opening.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)))) errors.push('opening must be a polygon of 3 or more points');
+  return { errors };
+}
