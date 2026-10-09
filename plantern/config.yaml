@@ -1,0 +1,23 @@
+name: Plantern
+version: "0.1.0"
+slug: plantern
+description: A floor plan of your house that glows with your Home Assistant lights
+url: https://github.com/eriktack/plantern-addon
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: auto
+homeassistant_api: true
+map:
+  - type: homeassistant_config
+    read_only: false
+ingress: true
+ingress_port: 3000
+panel_icon: mdi:floor-plan
+panel_title: Plantern
+ports:
+  3000/tcp: null
+ports_description:
+  3000/tcp: Direct access, for example from a phone while measuring (optional)

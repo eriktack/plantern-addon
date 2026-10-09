@@ -1,0 +1,924 @@
+// Edit operations: the one way the model changes (PLANTERN.md §7 Editing). Pure. Each returns
+// { model, report }: the new model (the input is never mutated) and what happened, including
+// reconcile()'s moves and `report.issues` from validateModel(). A refused operation returns the
+// model unchanged with `report.errors`.
+
+import { checkCheck, checkCorners, solveExtra } from '../model/checks.js';
+import { solveCapture } from '../capture/solve.js';
+import { reconcile } from './reconcile.js';
+import { nameFirst } from '../model/names.js';
+import { bindWalls } from './bind.js';
+import { upsertRoom, removeRoom as dropRoom, newRoomId } from '../capture/edit.js';
+import { validateModel } from '../model/validate.js';
+import { buildLevelGeometry, buildModelGeometry } from '../geometry/level.js';
+import { collectSnapPoints } from '../tools/snap.js';
+import { followLevels, levelOfRef } from './levels.js';
+import { DEFAULT_CEILING, DEFAULT_FLOOR_THICKNESS, resolveElevations, checkElevationFrom, RELATIONS } from '../model/elevation.js';
+import { shiftLevelGeometry } from './align.js';
+import { anchorStatus, newAnchorId } from '../model/anchors.js';
+import { isShared, edgeOfRef } from '../geometry/bound.js';
+import { wallProfile } from '../geometry/walls.js';
+import { OPENING_TYPES, OPENING_DEFAULTS, checkOpening, openingAssumed, DOOR_OPENS, WINDOW_OPENS } from '../model/openings.js';
+import { FIXTURE_KINDS, FIXTURE_DEFAULTS, checkFixture } from '../model/fixtures.js';
+import { checkMaterials, materialUse } from '../model/materials.js';
+import { checkSolid } from '../model/solids.js';
+import { checkStairs } from '../model/stairs.js';
+import { checkObject, OBJECT_DEFAULTS } from '../model/objects.js';
+import { roomCeiling, roomAt } from '../model/rooms.js';
+import { pointInPolygon } from '../geometry/polygon.js';
+export { SOLID_KINDS } from '../model/solids.js';
+export { FIXTURE_KINDS, FIXTURE_DEFAULTS, checkFixture } from '../model/fixtures.js';
+
+const validate = model => validateModel(model, buildModelGeometry(model));
+const levelOf = (model, levelId) => model.levels.find(l => l.id === levelId);
+const refuse = (model, ...errors) => ({ model, report: { errors, issues: [] } });
+
+function finish(model, levelId, change, options, extra = {}) {
+  const r = reconcile(model, levelId, change, options);
+  // rooms on other levels that hang on this level's points follow it (levels.js)
+  const f = followLevels(r.model, levelId, options);
+  const warnings = [...(r.report.warnings || []), ...f.report.warnings];
+  return { model: f.model, report: { ...extra, ...r.report, warnings, ...(f.report.followed.length ? { followed: f.report.followed } : {}), errors: [], issues: validate(f.model) } };
+}
+
+/** Add a room, or replace a room's outline, measurements and other fields (same id). */
+export function applyRoom(model, levelId, room, options = {}) {
+  const lv = levelOf(model, levelId);
+  if (!lv) return refuse(model, `no level "${levelId}"`);
+  if (!room?.id || !(room.polygon?.length >= 3)) return refuse(model, 'a room needs an id and a polygon of 3 or more corners');
+  const old = (lv.rooms || []).find(r => r.id === room.id);
+  return finish(upsertRoom(model, levelId, room), levelId, { rooms: { [room.id]: old?.polygon ?? null } }, options);
+}
+
+/** Unique solid id from a name: "Chimney" → s_chimney (s_chimney_2 if taken). */
+export function newSolidId(model, name) {
+  const used = allIds(model);
+  const slug = String(name || 'solid').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'solid';
+  let id = `s_${slug}`, k = 2;
+  while (used.has(id)) id = `s_${slug}_${k++}`;
+  return id;
+}
+const allIds = model => new Set(model.levels.flatMap(l => [l.id, ...['rooms', 'walls', 'openings', 'solids', 'slabs', 'objects', 'fixtures', 'stairs'].flatMap(c => (l[c] || []).map(x => x.id))]));
+
+/**
+ * Add a solid (chimney, pillar, boxed-in pipe), or replace one (same id): footprint, measurements,
+ * kind, name, base, height, colour. Then reconcile: room edges along its faces lose their walls there
+ * (a wall it fully replaces is removed, unless something is on it), rooms placed at its corners follow.
+ */
+export function applySolid(model, levelId, solid, options = {}) {
+  const lv = levelOf(model, levelId);
+  if (!lv) return refuse(model, `no level "${levelId}"`);
+  if (!/^s_[a-z0-9_]+$/.test(solid?.id || '')) return refuse(model, 'a solid needs an id like s_chimney');
+  const old = (lv.solids || []).find(s => s.id === solid.id);
+  if (!old && allIds(model).has(solid.id)) return refuse(model, `the id ${solid.id} is already used`);
+  const s = { kind: 'chimney', ...solid };
+  for (const k of Object.keys(s)) if (s[k] === null || s[k] === undefined) delete s[k];
+  const { errors } = checkSolid(s, lv);
+  if (errors.length) return refuse(model, ...errors.map(e => `${s.id}: ${e}`));
+  const solids = old ? lv.solids.map(x => x.id === s.id ? s : x) : [...(lv.solids || []), s];
+  const levels = model.levels.map(l => l.id === levelId ? { ...l, solids } : l);
+  return finish({ ...model, levels }, levelId, { solids: [s.id] }, options);
+}
+
+// ---- anchors and aligning levels (PLANTERN.md §5) ----
+
+/**
+ * Add an anchor: the same physical point on two or more levels. spec = { name?, id?, refs: [ref, ref, …] } where each
+ * ref is a snap point of a different level (the level is found from the ref), or points: { level: ref | [x, y] }.
+ */
+export function addAnchor(model, spec = {}) {
+  let points = spec.points;
+  if (!points) {
+    points = {};
+    for (const ref of spec.refs || []) {
+      const lv = levelOfRef(model, ref);
+      if (!lv) return refuse(model, `${ref}: no such point on any level`);
+      if (points[lv]) return refuse(model, `two points of level ${lv}: an anchor has one point per level`);
+      points[lv] = ref;
+    }
+  }
+  if (Object.keys(points).length < 2) return refuse(model, 'an anchor needs points on two different levels');
+  const used = new Set([...allIds(model), ...(model.anchors || []).map(a => a.id)]);
+  const id = spec.id ?? newAnchorId(model, spec.name, used);
+  if (!/^an_[a-z0-9_]+$/.test(id)) return refuse(model, 'an anchor id looks like an_stairwell');
+  if (used.has(id)) return refuse(model, `the id ${id} is already used`);
+  const an = { id, ...(spec.name ? { name: spec.name } : {}), points };
+  const next = { ...model, anchors: [...(model.anchors || []), an] };
+  return { model: next, report: { errors: [], issues: validate(next) }, anchor: an };
+}
+
+// ---- checks: control measurements between two snap points (PLANTERN.md §8) ----
+/**
+ * A room whose solve a check takes part in (it lies between two of its corners and is marked solve):
+ * re-solved with it, then applied, so its walls (and what hangs on it) follow.
+ */
+function resolveForCheck(model, before, c, options) {
+  const k = checkCorners(c) || checkCorners(before);
+  if (!k) return { model, report: { errors: [], issues: validate(model) } };
+  const lv = model.levels.find(l => (l.rooms || []).some(r => r.id === k.room)), room = lv?.rooms.find(r => r.id === k.room);
+  if (!room?.capture || room.capture.mode !== 'lengths') return { model, report: { errors: [], issues: validate(model) } };
+  const sol = solveCapture(room.capture, solveExtra(model, room));
+  if (!sol.ok) return refuse(model, `${room.id} cannot be solved with this check: ${sol.errors.join('; ')}`);
+  return applyRoom(model, lv.id, { ...room, polygon: sol.polygon }, options);
+}
+
+/** A new check: { a, b, measured, note?, solve? } (a and b snap refs). Returns { model, report, check }. */
+export function addCheck(model, spec = {}, options = {}) {
+  const used = new Set([...allIds(model), ...(model.checks || []).map(c => c.id), ...(model.anchors || []).map(a => a.id)]);
+  let id = spec.id;
+  if (!id) { const base = `c_${String(spec.a || '').split('#')[0].replace(/^[a-z]+_/, '')}`.replace(/[^a-z0-9_]/g, '_'); id = base; for (let k = 2; used.has(id); k++) id = `${base}_${k}`; }
+  if (used.has(id)) return refuse(model, `the id ${id} is already used`);
+  const c = { id, a: spec.a, b: spec.b, measured: spec.measured, ...(spec.note ? { note: spec.note } : {}), ...(spec.solve ? { solve: true } : {}) };
+  const bad = checkCheck(c).errors;
+  if (bad.length) return refuse(model, ...bad);
+  const next = { ...model, checks: [...(model.checks || []), c] };
+  return { ...(c.solve ? resolveForCheck(next, c, c, options) : { model: next, report: { errors: [], issues: validate(next) } }), check: c };
+}
+
+/** Change a check (measured, note, solve); null removes a field. A check that joins a room's solve re-solves it. */
+export function setCheck(model, id, props, options = {}) {
+  const old = (model.checks || []).find(c => c.id === id);
+  if (!old) return refuse(model, `no check "${id}"`);
+  const c = { ...old };
+  for (const [k, v] of Object.entries(props || {})) { if (k === 'id') continue; if (v === null || v === false && k === 'solve') delete c[k]; else c[k] = v; }
+  const bad = checkCheck(c).errors;
+  if (bad.length) return refuse(model, ...bad);
+  const next = { ...model, checks: model.checks.map(x => (x.id === id ? c : x)) };
+  return c.solve || old.solve ? resolveForCheck(next, old, c, options) : { model: next, report: { errors: [], issues: validate(next) } };
+}
+
+export function deleteCheck(model, id, options = {}) {
+  const old = (model.checks || []).find(c => c.id === id);
+  if (!old) return refuse(model, `no check "${id}"`);
+  const next = { ...model, checks: model.checks.filter(c => c.id !== id) };
+  return old.solve ? resolveForCheck(next, old, old, options) : { model: next, report: { errors: [], issues: validate(next) } };
+}
+
+export function deleteAnchor(model, id) {
+  if (!(model.anchors || []).some(a => a.id === id)) return refuse(model, `no anchor "${id}"`);
+  const next = { ...model, anchors: model.anchors.filter(a => a.id !== id) };
+  return { model: next, report: { errors: [], issues: validate(next) } };
+}
+
+/** Move every level-wide thing of `levelId` by [dx, dy] (see align.js); rooms of other levels hung on it follow. */
+export function shiftLevel(model, levelId, delta, options = {}) {
+  if (!levelOf(model, levelId)) return refuse(model, `no level "${levelId}"`);
+  if (!Array.isArray(delta) || delta.length !== 2 || !delta.every(Number.isFinite)) return refuse(model, 'the shift must be [dx, dy] in mm');
+  const moved = shiftLevelGeometry(model, levelId, delta), f = followLevels(moved, levelId, options);
+  return { model: f.model, report: { errors: [], warnings: f.report.warnings, ...(f.report.followed.length ? { followed: f.report.followed } : {}), issues: validate(f.model) } };
+}
+
+/**
+ * Line a level up with an anchor: shift `levelId` (default: the highest level of the anchor) so that its point of the
+ * anchor is where the lowest level of it has it. Returns { model, report, delta }.
+ */
+export function alignLevel(model, anchorId, levelId, options = {}) {
+  const st = anchorStatus(model, buildModelGeometry(model)).find(a => a.id === anchorId);
+  if (!st) return refuse(model, `no anchor "${anchorId}" with points on several levels`);
+  const lv = levelId ?? Object.keys(st.deltas).at(-1);
+  const d = st.deltas[lv];
+  if (!d) return refuse(model, `${lv} is the reference of ${anchorId} (or has no point in it): align a level above it`);
+  const r = shiftLevel(model, lv, [-d[0], -d[1]], options);
+  return { ...r, delta: [-d[0], -d[1]] };
+}
+
+/** Unique stairs id from a name: "Main stairs" → st_main_stairs (st_main_stairs_2 if taken). */
+export function newStairsId(model, name) {
+  const slug = String(name || 'stairs').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'stairs';
+  let id = `st_${slug}`, k = 2;
+  while (allIds(model).has(id)) id = `st_${slug}_${k++}`;
+  return id;
+}
+
+/**
+ * Add stairs to level `levelId` (where they start) or replace the ones with the same id (PLANTERN.md §6.4).
+ * The stair's position follows its start point (a corner of a room, wall or solid, also one of the level
+ * below or above) at every build, so nothing needs re-solving when rooms move. Returns { model, report }.
+ */
+export function applyStairs(model, levelId, stairs, options = {}) {
+  const lv = levelOf(model, levelId);
+  if (!lv) return refuse(model, `no level "${levelId}"`);
+  const old = (lv.stairs || []).find(s => s.id === stairs?.id);
+  if (!old && allIds(model).has(stairs?.id)) return refuse(model, `the id ${stairs.id} is already used`);
+  let st = { ...stairs };
+  for (const k of Object.keys(st)) if (st[k] === null || st[k] === undefined) delete st[k];
+  st = nameFirst(st);
+  const { errors } = checkStairs(st, model, lv);
+  if (errors.length) return refuse(model, ...errors.map(e => `${st.id}: ${e}`));
+  const list = old ? lv.stairs.map(s => s.id === st.id ? st : s) : [...(lv.stairs || []), st];
+  const levels = model.levels.map(l => l.id === levelId ? { ...l, stairs: list } : l);
+  return { ...finish({ ...model, levels }, levelId, {}, options), stairs: st };
+}
+
+/** Remove stairs; the opening in the floor above goes with them. */
+export function removeStairs(model, levelId, id, options = {}) {
+  const lv = levelOf(model, levelId);
+  if (!lv?.stairs?.some(s => s.id === id)) return refuse(model, `no stairs "${id}" on level "${levelId}"`);
+  const levels = model.levels.map(l => l.id === levelId ? { ...l, stairs: l.stairs.filter(s => s.id !== id) } : l);
+  return finish({ ...model, levels }, levelId, {}, options);
+}
+
+/** Remove a solid; the room edges along it get walls again (thickness assumed). Rooms placed at its corners are listed (`dependents`). */
+export function removeSolid(model, levelId, solidId, options = {}) {
+  const lv = levelOf(model, levelId);
+  if (!lv?.solids?.some(s => s.id === solidId)) return refuse(model, `no solid "${solidId}" on level "${levelId}"`);
+  const dependents = (lv.rooms || []).filter(r => String(r.capture?.raw?.origin?.ref || '').split('#')[0] === solidId).map(r => r.id);
+  const levels = model.levels.map(l => l.id === levelId ? { ...l, solids: l.solids.filter(s => s.id !== solidId) } : l);
+  return finish({ ...model, levels }, levelId, { solids: [solidId] }, options, { dependents });
+}
+
+/**
+ * Remove a room (see capture/edit.js removeRoom for what goes with it), then reconcile: a wall it
+ * shared is re-bound to the neighbour's edge.
+ */
+export function removeRoom(model, levelId, roomId, options = {}) {
+  if (!levelOf(model, levelId)?.rooms?.some(r => r.id === roomId)) return refuse(model, `no room "${roomId}" on level "${levelId}"`);
+  const { model: next, ...dropped } = dropRoom(model, levelId, roomId);
+  return finish(next, levelId, {}, options, dropped);
+}
+
+const POSITION = ['id', 'a', 'b', 'from', 'rooms', 'cut'];
+
+/**
+ * Change a wall's own properties (kind, thickness, height, base, sides, lightBlocking, style, …).
+ * A value set here counts as measured: its name leaves `assumed`. Position belongs to the rooms for
+ * a bound wall and is refused; so is the thickness of a shared wall (it is the face distance
+ * between the two rooms: move a room instead). `null` removes a property.
+ */
+export function setWallProps(model, levelId, wallId, props, options = {}) {
+  const lv = levelOf(model, levelId), w = lv?.walls?.find(x => x.id === wallId);
+  if (!w) return refuse(model, `no wall "${wallId}" on level "${levelId}"`);
+  const keys = Object.keys(props || {});
+  const bad = keys.filter(k => k === 'id' || (w.from?.length && POSITION.includes(k)));
+  if (bad.length) return refuse(model, `${wallId}: ${bad.join(', ')} cannot be set here (${w.from?.length ? 'its position follows its rooms' : 'ids never change'})`);
+  if ('thickness' in props && w.kind !== 'virtual' && isShared(w, new Map((lv.rooms || []).map(r => [r.id, r])))) return refuse(model, `${wallId} is shared by two rooms: its thickness is the distance between their faces; move a room to change it`);
+  if ('thickness' in props && !(props.thickness >= 0)) return refuse(model, 'thickness must be 0 or more');
+  const nw = { ...w };
+  for (const k of keys) { if (props[k] === null) delete nw[k]; else nw[k] = props[k]; }
+  // a hand-drawn wall moved by hand keeps hanging on its points: the offsets change, not the points
+  if (nw.anchor && ('a' in props || 'b' in props) && !('anchor' in props)) {
+    const g = buildLevelGeometry(lv), pts = new Map(collectSnapPoints(model, lv, g).map(s => [s.ref, s.pos])), r1 = v => Math.round(v * 10) / 10;
+    nw.anchor = Object.fromEntries(Object.entries(nw.anchor).map(([end, an]) => { const at = pts.get(an.ref); return [end, at ? { ...an, offset: [r1(nw[end][0] - at[0]), r1(nw[end][1] - at[1])] } : an]; }));
+  }
+  const assumed = keys.includes('assumed') ? props.assumed || [] : (w.assumed || []).filter(k => !keys.includes(k));
+  if (assumed.length) nw.assumed = assumed; else delete nw.assumed;
+  const levels = model.levels.map(l => l.id === levelId ? { ...l, walls: l.walls.map(x => x.id === wallId ? nameFirst(nw) : x) } : l);
+  return finish({ ...model, levels }, levelId, { walls: [wallId] }, options);
+}
+
+/** Link hand-drawn walls to the room edges they sit on, only where that moves nothing (see bind.js). */
+export function linkWalls(model, levelId, options = {}) {
+  if (!levelOf(model, levelId)) return refuse(model, `no level "${levelId}"`);
+  const r = bindWalls(model, levelId, options);
+  return { model: r.model, report: { ...r.report, errors: [], issues: validate(r.model) } };
+}
+
+/** A newly measured room (wizard Done, editor Import): new unique id from its name, then applyRoom(). Returns { model, report, room }. */
+export function addRoom(model, levelId, { name, exterior }, polygon, capture, options = {}) {
+  const id = newRoomId(model, name);
+  const room = { id, name: String(name || '').trim() || id, exterior: !!exterior, polygon, capture };
+  return { ...applyRoom(model, levelId, room, options), room };
+}
+
+/** Validation errors block saving (Download still works, so work is never trapped). */
+export const blockingErrors = report => (report.issues || []).filter(i => i.severity === 'error');
+
+/**
+ * Delete a wall and the openings in it. Refused while an object or fixture is attached to it (move
+ * or delete those first), so nothing is left pointing at a missing wall. A bound wall's edges are
+ * then covered again by reconcile() (a new wall), unless that is what you want to avoid: use it for
+ * orphans and hand-drawn walls.
+ */
+export function deleteWall(model, levelId, wallId, options = {}) {
+  const lv = levelOf(model, levelId), w = lv?.walls?.find(x => x.id === wallId);
+  if (!w) return refuse(model, `no wall "${wallId}" on level "${levelId}"`);
+  const held = [...(lv.objects || []), ...(lv.fixtures || [])].filter(x => x.attach?.wall === wallId).map(x => x.id);
+  if (held.length) return refuse(model, `${wallId}: ${held.join(', ')} ${held.length > 1 ? 'are' : 'is'} attached to it; move or delete ${held.length > 1 ? 'them' : 'it'} first`);
+  const removedOpenings = (lv.openings || []).filter(o => o.wall === wallId).map(o => o.id);
+  const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, walls: l.walls.filter(x => x.id !== wallId), ...(l.openings ? { openings: l.openings.filter(o => o.wall !== wallId) } : {}) });
+  return finish({ ...model, levels }, levelId, {}, options, { removedOpenings });
+}
+
+/**
+ * Split a wall in two at `at` mm from its `a` end (PLANTERN.md §6.2 `cut`). Both parts keep every
+ * property (thickness, kind, sides, assumed, …) and can then be changed on their own; openings and
+ * attached things go to the part they are on, and a split through one is refused. A wall that
+ * follows its rooms stays bound: each part records where it is cut, in mm from the start corner of
+ * its first room edge, so the split stays put when the room is re-measured. Returns { model, report }
+ * with report.parts = [id of the a-side part (the old id), id of the new part].
+ */
+export function splitWall(model, levelId, wallId, at, options = {}) {
+  const lv = levelOf(model, levelId), w = lv?.walls?.find(x => x.id === wallId);
+  if (!w) return refuse(model, `no wall "${wallId}" on level "${levelId}"`);
+  const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), s = Number(at);
+  if (!(s >= 1 && s <= L - 1)) return refuse(model, `split point must be between 1 and ${Math.floor(L - 1)} mm from the wall's start`);
+  const u = [(w.b[0] - w.a[0]) / L, (w.b[1] - w.a[1]) / L], P = [Math.round((w.a[0] + u[0] * s) * 10) / 10, Math.round((w.a[1] + u[1] * s) * 10) / 10];
+  const ops = (lv.openings || []).filter(o => o.wall === wallId);
+  const across = ops.find(o => o.offset < s - 0.5 && o.offset + o.width > s + 0.5);
+  if (across) return refuse(model, `${wallId}: the split would cut through ${across.id}; split beside it`);
+  const used = new Set(model.levels.flatMap(l => (l.walls || []).map(x => x.id)));
+  let id2 = `${wallId}_2`, k = 3;
+  while (used.has(id2)) id2 = `${wallId}_${k++}`;
+  const part1 = { ...w, b: P }, part2 = { ...w, id: id2, a: P };
+  if (w.from?.length) {
+    const e = edgeOfRef(w.from[0], new Map((lv.rooms || []).map(r => [r.id, r])));
+    if (!e) return refuse(model, `${wallId} follows a room edge that no longer exists; delete it or keep it as a hand-drawn wall first`);
+    const tS = Math.round(((P[0] - e.p[0]) * e.u[0] + (P[1] - e.p[1]) * e.u[1]) * 10) / 10;
+    const [c0, c1] = w.cut || [null, null];
+    part1.cut = [c0 ?? null, tS];
+    part2.cut = [tS, c1 ?? null];
+  }
+  const openings = (lv.openings || []).map(o => (o.wall === wallId && o.offset >= s - 0.5 ? { ...o, wall: id2, offset: Math.round((o.offset - s) * 10) / 10 } : o));
+  const move = key => (lv[key] || []).map(x => {
+    if (x.attach?.wall !== wallId) return x;
+    const size = key === 'objects' ? x.size?.[0] ?? 0 : 0;
+    if (x.attach.offset < s - 0.5 && x.attach.offset + size > s + 0.5) return x;     // straddles: stays on the a side
+    return x.attach.offset >= s - 0.5 ? { ...x, attach: { ...x.attach, wall: id2, offset: Math.round((x.attach.offset - s) * 10) / 10 } } : x;
+  });
+  const walls = lv.walls.flatMap(x => (x.id === wallId ? [part1, part2] : [x]));
+  const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, walls, ...(l.openings ? { openings } : {}), ...(l.objects ? { objects: move('objects') } : {}), ...(l.fixtures ? { fixtures: move('fixtures') } : {}) });
+  const r = finish({ ...model, levels }, levelId, { walls: [wallId, id2] }, options);
+  return { model: r.model, report: { ...r.report, parts: [wallId, id2] } };
+}
+
+/**
+ * Walls `wallId` can be joined with: the other part of a wall split by hand (same room edges, the
+ * cuts meeting), or a hand-drawn wall continuing it on the same line. [{ id, side: 'a' | 'b' }]:
+ * which end of `wallId` it continues from.
+ */
+export function joinableWalls(level, wallId) {
+  const w = level?.walls?.find(x => x.id === wallId);
+  if (!w) return [];
+  const near = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= 1;
+  const u = v => { const L = Math.hypot(v.b[0] - v.a[0], v.b[1] - v.a[1]) || 1; return [(v.b[0] - v.a[0]) / L, (v.b[1] - v.a[1]) / L]; };
+  const same = (x, y) => x.length === y.length && x.every(r => y.includes(r));
+  const out = [];
+  for (const v of level.walls) {
+    if (v.id === w.id || v.kind !== w.kind) continue;
+    const [uw, uv] = [u(w), u(v)];
+    if (Math.abs(uw[0] * uv[1] - uw[1] * uv[0]) > 1e-3 || uw[0] * uv[0] + uw[1] * uv[1] < 0) continue;     // not the same way on one line
+    const side = near(w.b, v.a) ? 'b' : near(w.a, v.b) ? 'a' : null;
+    if (!side) continue;
+    if (w.from?.length || v.from?.length) {
+      // two parts of one split wall: the same edges, and the cut where they meet
+      if (!w.from?.length || !v.from?.length || !same(w.from, v.from) || !w.cut || !v.cut) continue;
+      const [first, second] = side === 'b' ? [w, v] : [v, w];
+      if (first.cut[1] === null || second.cut[0] === null || Math.abs(first.cut[1] - second.cut[0]) > 1) continue;
+    }
+    out.push({ id: v.id, side });
+  }
+  return out;
+}
+
+/**
+ * Join `otherId` into `wallId` (the reverse of splitWall): one wall from the start of the first to the
+ * end of the second, with `wallId`'s own properties (thickness, kind, colours, …; the other's are
+ * dropped and listed in `report.dropped`). Openings and attached things on the other wall move onto
+ * it at the same place. Refused unless joinableWalls() offers the pair.
+ */
+export function joinWalls(model, levelId, wallId, otherId, options = {}) {
+  const lv = levelOf(model, levelId), w = lv?.walls?.find(x => x.id === wallId), v = lv?.walls?.find(x => x.id === otherId);
+  if (!w || !v) return refuse(model, `no wall "${!w ? wallId : otherId}" on level "${levelId}"`);
+  const pair = joinableWalls(lv, wallId).find(x => x.id === otherId);
+  if (!pair) return refuse(model, `${wallId} and ${otherId} do not continue each other (only two parts of a split wall, or walls on one line meeting end to end, can be joined)`);
+  const len = x => Math.hypot(x.b[0] - x.a[0], x.b[1] - x.a[1]);
+  const [first, second] = pair.side === 'b' ? [w, v] : [v, w];
+  const merged = { ...w, a: first.a, b: second.b };
+  if (w.from?.length) {
+    const cut = [first.cut[0] ?? null, second.cut[1] ?? null];
+    if (cut[0] === null && cut[1] === null) delete merged.cut; else merged.cut = cut;
+  }
+  // where things on each part land on the joined wall
+  const shift = id => (id === first.id ? 0 : len(first));
+  const r1 = x => Math.round(x * 10) / 10;
+  const openings = (lv.openings || []).map(o => (o.wall === w.id || o.wall === v.id ? { ...o, wall: w.id, offset: r1(o.offset + shift(o.wall)) } : o));
+  const move = key => (lv[key] || []).map(x => (x.attach && (x.attach.wall === w.id || x.attach.wall === v.id) ? { ...x, attach: { ...x.attach, wall: w.id, offset: r1(x.attach.offset + shift(x.attach.wall)) } } : x));
+  const IGNORE = new Set(['id', 'a', 'b', 'cut', 'from', 'rooms', 'assumed']);
+  const dropped = [...new Set([...Object.keys(w), ...Object.keys(v)])].filter(k => !IGNORE.has(k) && JSON.stringify(w[k]) !== JSON.stringify(v[k]));
+  const walls = lv.walls.filter(x => x.id !== v.id).map(x => (x.id === w.id ? merged : x));
+  const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, walls, ...(l.openings ? { openings } : {}), ...(l.objects ? { objects: move('objects') } : {}), ...(l.fixtures ? { fixtures: move('fixtures') } : {}) });
+  const r = finish({ ...model, levels }, levelId, { walls: [w.id] }, options);
+  return { model: r.model, report: { ...r.report, joined: [w.id, v.id], dropped } };
+}
+
+/**
+ * Draw a wall by hand (PLANTERN.md §4, §6.2): a wall not made from a room edge (no `from`), so room
+ * changes never move it. A room divider, a half wall, a sloped wall beside stairs, a lintel (a wall
+ * with its `base` up near the ceiling). spec = { a, b, thickness?, justify?, kind?, base?, height?, name? };
+ * the reference line runs a → b and is a face: `justify` "left" by default (thickness to the left of a → b). Returns
+ * { model, report, wall }.
+ */
+export function addWall(model, levelId, spec = {}, options = {}) {
+  const lv = levelOf(model, levelId);
+  if (!lv) return refuse(model, `no level "${levelId}"`);
+  const ok = p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite);
+  if (!ok(spec.a) || !ok(spec.b)) return refuse(model, 'a wall needs a start and an end point (a, b)');
+  if (Math.hypot(spec.b[0] - spec.a[0], spec.b[1] - spec.a[1]) < 10) return refuse(model, 'the wall is shorter than 10 mm');
+  const kind = spec.kind ?? 'wall', thickness = spec.thickness ?? (kind === 'railing' ? 40 : 100);
+  if (!['wall', 'railing', 'virtual'].includes(kind)) return refuse(model, `unknown wall kind "${kind}"`);
+  if (!(thickness >= 0)) return refuse(model, 'thickness must be 0 or more');
+  // named after the point its start hangs on (w_kitchen_p0), unless given a name; ids never change afterwards
+  const fromAnchor = !spec.name && spec.anchor?.a?.ref ? spec.anchor.a.ref.replace(/^[a-z]+_/, '').replace('#', '_') : null;
+  const used = allIds(model), slug = String(spec.name || fromAnchor || 'wall').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'wall';
+  let id = `w_${slug}`, k = 2;
+  while (used.has(id)) id = `w_${slug}_${k++}`;
+  const r1 = v => Math.round(v * 10) / 10;
+  // the drawn line is a face (thickness to its left), as walls are measured; centred only when asked
+  const wall = { id, kind, a: spec.a.map(r1), b: spec.b.map(r1), thickness: kind === 'virtual' ? 0 : thickness, justify: spec.justify ?? 'left',
+    ...(spec.base ? { base: spec.base } : {}), ...(spec.height !== undefined ? { height: spec.height } : {}), ...(spec.sides ? { sides: spec.sides } : {}),
+    ...(spec.anchor && Object.keys(spec.anchor).length ? { anchor: spec.anchor } : {}),
+    ...(spec.thickness === undefined && kind !== 'virtual' ? { assumed: ['thickness'] } : {}) };
+  const levels = model.levels.map(l => l.id === levelId ? { ...l, walls: [...(l.walls || []), wall] } : l);
+  const r = finish({ ...model, levels }, levelId, { walls: [id] }, options);
+  return { ...r, wall: levelOf(r.model, levelId).walls.find(w => w.id === id) };
+}
+
+/** Keep a bound wall as a hand-drawn wall: it stops following its rooms and is never moved again. */
+export function unbindWall(model, levelId, wallId, options = {}) {
+  const lv = levelOf(model, levelId), w = lv?.walls?.find(x => x.id === wallId);
+  if (!w) return refuse(model, `no wall "${wallId}" on level "${levelId}"`);
+  if (!w.from) return refuse(model, `${wallId} is already hand-drawn`);
+  const { from, ...rest } = w;
+  const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, walls: l.walls.map(x => x.id === wallId ? rest : x) });
+  return finish({ ...model, levels }, levelId, {}, options);
+}
+
+/** Fill room edges that no wall covers (and bring bound walls up to date), without any room change. */
+export function fillWalls(model, levelId, options = {}) {
+  if (!levelOf(model, levelId)) return refuse(model, `no level "${levelId}"`);
+  return finish(model, levelId, {}, options);
+}
+
+/** House orientation: how far plan north is from true north, clockwise (PLANTERN.md §3). */
+export function setNorthAngle(model, deg) {
+  if (!Number.isFinite(deg)) return refuse(model, 'the angle must be a number');
+  const next = { ...model, site: { ...(model.site || { origin: [0, 0] }), northAngleDeg: deg } };
+  return { model: next, report: { errors: [], issues: validate(next) } };
+}
+
+export { DEFAULT_CEILING, DEFAULT_FLOOR_THICKNESS } from '../model/elevation.js';
+
+/** Level id from a name: "Ground floor" → ground_floor; unique across every id in the model file. */
+export function newLevelId(model, name) {
+  const used = new Set(model.levels.flatMap(l => [l.id, ...['rooms', 'walls', 'openings', 'solids', 'slabs', 'objects', 'fixtures', 'stairs'].flatMap(c => (l[c] || []).map(x => x.id))]));
+  const slug = String(name || 'level').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'level';
+  const base = /^[a-z]/.test(slug) ? slug : `level_${slug}`;
+  let id = base, k = 2;
+  while (used.has(id)) id = `${base}_${k++}`;
+  return id;
+}
+
+/**
+ * Add a level (PLANTERN.md §5). spec = { name, id?, ceilingHeight?, elevation?, floorThickness?,
+ * elevationFrom? } in mm. The first level is the datum (elevation 0). Values not given get defaults and
+ * are listed in `assumed`: ceiling height 2400, floor build-up 250, and for a later level the elevation
+ * just above the highest level. With `elevationFrom` ({ level, relation: 'above' | 'below' | 'same',
+ * offset? }, decision 110) the elevation follows that level and is worked out, never assumed. Two
+ * levels may share an elevation (a part of a floor kept as its own level). Levels stay ordered by
+ * elevation. Returns { model, report, level }.
+ */
+export function addLevel(model, spec = {}) {
+  const name = String(spec.name ?? '').trim();
+  if (!name) return refuse(model, 'a level needs a name');
+  const id = spec.id ? String(spec.id).trim() : newLevelId(model, name);
+  if (!/^[a-z][a-z0-9_]*$/.test(id)) return refuse(model, `level id "${id}": use lowercase letters, digits and _ (starting with a letter)`);
+  if (model.levels.some(l => l.id === id) || newLevelId(model, id) !== id) return refuse(model, `id "${id}" is already used in this model`);
+  const given = k => spec[k] !== undefined && spec[k] !== null && spec[k] !== '';
+  for (const k of ['ceilingHeight', 'elevation', 'floorThickness']) if (given(k) && !Number.isFinite(Number(spec[k]))) return refuse(model, `${k} must be a number of mm`);
+  if (given('ceilingHeight') && !(Number(spec.ceilingHeight) > 0)) return refuse(model, 'ceiling height must be more than 0');
+  if (given('floorThickness') && !(Number(spec.floorThickness) >= 0)) return refuse(model, 'floor build-up must be 0 or more');
+  const assumed = [];
+  const value = (k, fallback) => { if (given(k)) return Number(spec[k]); assumed.push(k); return fallback; };
+  const top = [...model.levels].sort((a, b) => b.elevation - a.elevation)[0];
+  const ceilingHeight = value('ceilingHeight', DEFAULT_CEILING);
+  const floorThickness = value('floorThickness', DEFAULT_FLOOR_THICKNESS);
+  const from = spec.elevationFrom ? cleanElevationFrom(spec.elevationFrom) : null;
+  let elevation;
+  if (!top) {
+    if (given('elevation') && Number(spec.elevation) !== 0) return refuse(model, 'the first level is the datum: its elevation is 0');
+    if (from) return refuse(model, 'the first level is the datum: it follows no other level');
+    elevation = 0;                                   // the datum is a definition, not an assumption
+  } else if (from) elevation = 0;                    // worked out below, from the level it follows
+  else elevation = value('elevation', top.elevation + (top.ceilingHeight ?? DEFAULT_CEILING) + floorThickness);
+  const level = { id, name, elevation, floorThickness, ceilingHeight, ...(from ? { elevationFrom: from } : {}), ...(assumed.length ? { assumed } : {}), rooms: [], walls: [], openings: [], solids: [], objects: [], fixtures: [] };
+  if (from) { const errs = checkElevationFrom({ ...model, levels: [...model.levels, level] }, level); if (errs.length) return refuse(model, ...errs); }
+  const r = resolveElevations({ ...model, levels: [...model.levels, level].sort((a, b) => a.elevation - b.elevation) });
+  if (r.errors.length) return refuse(model, ...r.errors);
+  const next = { ...r.model, levels: [...r.model.levels].sort((a, b) => a.elevation - b.elevation) };
+  return { model: next, report: { errors: [], issues: validate(next) }, level: next.levels.find(l => l.id === id) };
+}
+
+/** An elevationFrom as stored: { level, relation, offset? } (offset left out when 0). */
+function cleanElevationFrom(f) {
+  const out = { level: String(f.level ?? ''), relation: f.relation ?? 'above' };
+  const off = f.offset === undefined || f.offset === null || f.offset === '' ? 0 : Number(f.offset);
+  if (off !== 0 || !Number.isFinite(off)) out.offset = off;
+  return out;
+}
+
+/**
+ * Change a level (PLANTERN.md §5): props = { name?, elevation?, ceilingHeight?, floorThickness?, capture?: { ceilingHeight?,
+ * floorToFloor? }, elevationFrom? } in mm (null removes a field; capture fields null remove that measurement). A value set
+ * here counts as measured (it leaves the level's `assumed`). The level with elevation 0 is the datum: its elevation stays 0
+ * and it follows no other level. `elevationFrom` ({ level, relation: 'above' | 'below' | 'same', offset? }, decision 110)
+ * makes the elevation follow another level; a typed elevation ends that. Afterwards every following level is worked out
+ * again (resolveElevations), so the floors on top of this one move with it; a cycle is refused. Two levels may share an
+ * elevation (a part of a floor). Levels stay ordered by elevation; stairs and anchors follow by id, so nothing else needs
+ * fixing (the validator reports what no longer fits, e.g. a stair whose rise changed).
+ * Returns { model, report: { errors, moved: [{ level, from, to }], issues } }.
+ */
+export function setLevel(model, levelId, props = {}) {
+  const lv = levelOf(model, levelId);
+  if (!lv) return refuse(model, `no level "${levelId}"`);
+  const keys = Object.keys(props);
+  if (keys.includes('id')) return refuse(model, 'ids never change');
+  const next = { ...lv }, num = (k, v) => { if (v !== null && !Number.isFinite(Number(v))) throw new Error(`${k} must be a number of mm`); return v === null ? null : Number(v); };
+  try {
+    for (const k of keys) {
+      if (k === 'name') { const n = String(props.name ?? '').trim(); if (!n) throw new Error('a level needs a name'); next.name = n; }
+      else if (k === 'elevationFrom') {
+        if (!props.elevationFrom) delete next.elevationFrom;
+        else if (lv.elevation === 0 && !lv.elevationFrom) throw new Error('this is the datum level (elevation 0): the other levels follow it, not the other way round');
+        else next.elevationFrom = cleanElevationFrom(props.elevationFrom);
+      } else if (k === 'capture') {
+        const cap = { ...(lv.capture || {}) };
+        for (const [ck, cv] of Object.entries(props.capture || {})) {
+          if (!['ceilingHeight', 'floorToFloor'].includes(ck)) throw new Error(`capture.${ck} is not a measurement of a level`);
+          const v = num(`capture.${ck}`, cv);
+          if (v === null) delete cap[ck]; else if (!(v > 0)) throw new Error(`capture.${ck} must be more than 0`); else cap[ck] = v;
+        }
+        if (Object.keys(cap).length) next.capture = cap; else delete next.capture;
+      } else if (['elevation', 'ceilingHeight', 'floorThickness'].includes(k)) {
+        const v = num(k, props[k]);
+        if (v === null) throw new Error(`${k} cannot be removed`);
+        if (k === 'ceilingHeight' && !(v > 0)) throw new Error('ceiling height must be more than 0');
+        if (k === 'floorThickness' && !(v >= 0)) throw new Error('floor build-up must be 0 or more');
+        if (k === 'elevation' && lv.elevation === 0 && !lv.elevationFrom && v !== 0) throw new Error('this is the datum level (elevation 0): the other levels are measured from it');
+        next[k] = v;
+      } else throw new Error(`${k} cannot be set here`);
+    }
+  } catch (e) { return refuse(model, e.message); }
+  if ('elevation' in props && !('elevationFrom' in props)) delete next.elevationFrom;   // typed: it stays where it is put
+  if (next.elevationFrom) { const errs = checkElevationFrom(model, next); if (errs.length) return refuse(model, ...errs.map(e => `${levelId}: ${e}`)); }
+  const assumed = (lv.assumed || []).filter(k => !keys.includes(k) && !(k === 'elevation' && next.elevationFrom));
+  if (assumed.length) next.assumed = assumed; else delete next.assumed;
+  const r = resolveElevations({ ...model, levels: model.levels.map(l => (l.id === levelId ? next : l)) });
+  if (r.errors.length) return refuse(model, ...r.errors);
+  // what moved: the levels worked out again, and this one when its elevation was typed
+  const moved = [...r.changed];
+  if (!next.elevationFrom && next.elevation !== lv.elevation) moved.unshift({ level: levelId, from: lv.elevation, to: next.elevation });
+  else { const c = moved.find(x => x.level === levelId); if (c) c.from = lv.elevation; }
+  const out = { ...r.model, levels: r.model.levels.map((l, i) => [l, i]).sort((x, y) => x[0].elevation - y[0].elevation || x[1] - y[1]).map(x => x[0]) };
+  return { model: out, report: { errors: [], moved, issues: validate(out) } };
+}
+
+const INVERSE = { above: 'below', below: 'above', same: 'same' };
+/**
+ * Make `levelId` the datum: its floor becomes elevation 0 and every level moves by the same amount, so
+ * nothing changes height relative to the others (rooms, walls and stairs are measured from their own
+ * floor, so they need nothing). The chain it followed is turned round (decision 111): a ground floor that
+ * was "on top of" a basement created first makes that basement "under" the ground floor, with the same
+ * floor-to-floor (the formulas for above and below use the same measurement), so the basement then
+ * follows the ground floor like any other level. Returns { model, report: { errors, shift, flipped, issues } }.
+ */
+export function setDatum(model, levelId) {
+  const r0 = resolveElevations(model);
+  if (r0.errors.length) return refuse(model, ...r0.errors);
+  const lv = levelOf(r0.model, levelId);
+  if (!lv) return refuse(model, `no level "${levelId}"`);
+  if (lv.elevation === 0 && !lv.elevationFrom) return refuse(model, `${lv.name || levelId} already is the datum (elevation 0)`);
+  const shift = -lv.elevation, byId = new Map(r0.model.levels.map(l => [l.id, { ...l, elevation: Math.round((l.elevation + shift) * 10) / 10 }]));
+  // walk the chain this level followed up to the level that follows nothing, and turn every link round
+  const flipped = [];
+  let cur = byId.get(levelId), from = cur.elevationFrom;
+  delete cur.elevationFrom;
+  while (from) {
+    const ref = byId.get(from.level), next = ref.elevationFrom;
+    ref.elevationFrom = { level: cur.id, relation: INVERSE[from.relation], ...(from.offset ? { offset: -from.offset } : {}) };
+    flipped.push({ level: ref.id, follows: cur.id, relation: ref.elevationFrom.relation });
+    cur = ref; from = next;
+  }
+  const self = byId.get(levelId);
+  if (self.assumed) { self.assumed = self.assumed.filter(k => k !== 'elevation'); if (!self.assumed.length) delete self.assumed; }
+  const r = resolveElevations({ ...r0.model, levels: r0.model.levels.map(l => byId.get(l.id)) });
+  if (r.errors.length) return refuse(model, ...r.errors);
+  const out = { ...r.model, levels: [...r.model.levels].sort((a, b) => a.elevation - b.elevation) };
+  return { model: out, report: { errors: [], shift, flipped, issues: validate(out) } };
+}
+
+/** Delete a level that is empty (no rooms, walls, solids, objects, fixtures or stairs); one with measurements is never deleted silently. */
+export function deleteLevel(model, levelId) {
+  const lv = levelOf(model, levelId);
+  if (!lv) return refuse(model, `no level "${levelId}"`);
+  const held = ['rooms', 'walls', 'openings', 'solids', 'objects', 'fixtures', 'stairs'].filter(c => (lv[c] || []).length);
+  if (held.length) return refuse(model, `${lv.name || levelId} still has ${held.join(', ')}: delete those first (measurements are never removed with a level)`);
+  const used = model.levels.filter(l => l.id !== levelId && (l.stairs || []).some(s => s.to === levelId)).map(l => l.id);
+  if (used.length) return refuse(model, `stairs on ${used.join(', ')} go up to it`);
+  const out = { ...model, levels: model.levels.filter(l => l.id !== levelId), ...(model.anchors ? { anchors: model.anchors.filter(a => !(a.points && levelId in a.points) && a.level !== levelId) } : {}) };
+  return { model: out, report: { errors: [], issues: validate(out) } };
+}
+
+// ---- openings (PLANTERN.md §6.1) -------------------------------------------------------------
+
+export { OPENING_TYPES, WINDOW_OPENS, OPENING_DEFAULTS, checkOpening } from '../model/openings.js';
+const MEASURES = ['offset', 'width', 'sill', 'head'];
+
+/** The first stretch of the wall where an opening of `width` fits, centred in it (null if none). */
+/** The longest stretch of `wall` no opening is on, in mm. */
+function widestFree(wall, others) {
+  const L = Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]);
+  const taken = others.map(o => [o.offset, o.offset + o.width]).sort((x, y) => x[0] - y[0]);
+  let at = 0, best = 0;
+  for (const [lo, hi] of taken) { best = Math.max(best, lo - at); at = Math.max(at, hi); }
+  return Math.max(best, L - at);
+}
+
+function freeSpot(wall, others, width) {
+  const L = Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]);
+  const taken = others.map(o => [o.offset, o.offset + o.width]).sort((x, y) => x[0] - y[0]);
+  const gaps = []; let at = 0;
+  for (const [lo, hi] of taken) { if (lo > at) gaps.push([at, lo]); at = Math.max(at, hi); }
+  if (L > at) gaps.push([at, L]);
+  const g = gaps.filter(([lo, hi]) => hi - lo >= width).sort((x, y) => (y[1] - y[0]) - (x[1] - x[0]))[0];
+  return g ? Math.round((g[0] + g[1] - width) / 2) : null;
+}
+
+/**
+ * Add a door, window or passage to a wall. spec may give offset, width, sill, head, hinge, swing,
+ * opens; what it does not give gets a default (centred in the widest free stretch, OPENING_DEFAULTS)
+ * and is listed in `assumed`. A door defaults to hinge "near" and opening into the room on the
+ * wall's right (the room a wall made from a room edge bounds). Returns { model, report, opening }.
+ */
+export function addOpening(model, levelId, wallId, type, spec = {}, options = {}) {
+  const lv = levelOf(model, levelId), w = lv?.walls?.find(x => x.id === wallId);
+  if (!w) return refuse(model, `no wall "${wallId}" on level "${levelId}"`);
+  if (!OPENING_TYPES.includes(type)) return refuse(model, `type must be ${OPENING_TYPES.join(', ')}`);
+  if (w.kind === 'virtual') return refuse(model, `${wallId} is a virtual wall (no body to open): make it a wall first`);
+  const others = (lv.openings || []).filter(o => o.wall === wallId), top = wallProfile(w, lv).top;
+  const d = { ...OPENING_DEFAULTS[type], head: Math.min(OPENING_DEFAULTS[type].head, top) };
+  let width = Number(spec.width ?? d.width);
+  // a short wall (a door in a small partition): without a measured width the opening fills its widest
+  // free stretch instead of being refused; the width stays a guess (assumed) until measured
+  if (spec.width === undefined && spec.offset === undefined && freeSpot(w, others, width) === null) {
+    const widest = widestFree(w, others);
+    if (widest >= 300) width = Math.floor(widest);
+  }
+  const offset = spec.offset ?? freeSpot(w, others, width);
+  if (offset === null) return refuse(model, `no room for a ${width} mm ${type} on ${wallId}`);
+  const used = new Set(model.levels.flatMap(l => (l.openings || []).map(o => o.id)));
+  let n = 1; while (used.has(`o_${type}_${n}`)) n++;
+  const o = { id: `o_${type}_${n}`, ...(spec.name ? { name: String(spec.name).trim() } : {}), wall: wallId, type, offset: Number(offset), width, sill: Number(spec.sill ?? d.sill), head: Number(spec.head ?? d.head) };
+  if (type === 'door' && DOOR_OPENS.includes(spec.opens)) { o.opens = spec.opens; o.slide = spec.slide ?? 'near'; o.swing = spec.swing ?? 'right'; }   // sliding or pocket
+  else if (type === 'door') { o.hinge = spec.hinge ?? 'near'; o.swing = spec.swing ?? 'right'; }
+  if (type === 'window') { o.opens = spec.opens ?? 'fixed'; if (spec.hinge) o.hinge = spec.hinge; if (spec.swing) o.swing = spec.swing; }
+  if ((type === 'door' || type === 'window') && spec.leaves === 2) o.leaves = 2;
+  if ((type === 'door' || type === 'window') && spec.thickness !== undefined) o.thickness = Number(spec.thickness);
+  const assumed = openingAssumed({ ...o, assumed: Array.isArray(spec.assumed) ? spec.assumed : MEASURES.filter(k => spec[k] === undefined) });   // a door or passage on the floor: sill 0 is not a guess; a copy keeps its source's
+  if (assumed.length) o.assumed = assumed;
+  const err = checkOpening(o, w, lv, others);
+  if (err.length) return refuse(model, ...err.map(e => `${o.id}: ${e}`));
+  const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, openings: [...(l.openings || []), o] });
+  return { ...finish({ ...model, levels }, levelId, {}, options), opening: o };
+}
+
+/** Change an opening (null removes a field). A value set here counts as measured. */
+export function setOpening(model, levelId, id, props, options = {}) {
+  const lv = levelOf(model, levelId), o = lv?.openings?.find(x => x.id === id);
+  if (!o) return refuse(model, `no opening "${id}" on level "${levelId}"`);
+  const keys = Object.keys(props || {});
+  if (keys.includes('id')) return refuse(model, 'ids never change');
+  const next = { ...o };
+  for (const k of keys) { if (props[k] === null) delete next[k]; else next[k] = props[k]; }
+  // a door or window turned into a passage loses what a passage does not have; set directly, it is refused below
+  if (keys.includes('type') && next.type !== 'door' && next.type !== 'window') { for (const k of ['hinge', 'swing', 'leaves', 'thickness']) if (!keys.includes(k)) delete next[k]; }
+  const sliding = next.type === 'door' && DOOR_OPENS.includes(next.opens);
+  if (next.type !== 'window' && !sliding) delete next.opens;
+  if (next.type !== 'door' || !sliding) delete next.slide;
+  if (sliding) { next.slide ??= 'near'; next.swing ??= 'right'; delete next.hinge; }               // a sliding door has no hinges
+  else if (next.type === 'door') { next.hinge ??= 'near'; next.swing ??= 'right'; }
+  if (next.type === 'window' && !WINDOW_OPENS.includes(next.opens)) next.opens = 'fixed';
+  const assumed = openingAssumed({ ...next, assumed: keys.includes('assumed') ? props.assumed || [] : (o.assumed || []).filter(k => !keys.includes(k)) });
+  if (assumed.length) next.assumed = assumed; else delete next.assumed;
+  const w = lv.walls.find(x => x.id === next.wall);
+  if (!w) return refuse(model, `${id}: no wall "${next.wall}"`);
+  const err = checkOpening(next, w, lv, (lv.openings || []).filter(x => x.wall === next.wall));
+  if (err.length) return refuse(model, ...err.map(e => `${id}: ${e}`));
+  const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, openings: l.openings.map(x => x.id === id ? nameFirst(next) : x) });
+  return finish({ ...model, levels }, levelId, {}, options);
+}
+
+export function deleteOpening(model, levelId, id, options = {}) {
+  const lv = levelOf(model, levelId);
+  if (!lv?.openings?.some(x => x.id === id)) return refuse(model, `no opening "${id}" on level "${levelId}"`);
+  const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, openings: l.openings.filter(x => x.id !== id) });
+  return finish({ ...model, levels }, levelId, {}, options);
+}
+
+// ---- fixtures (lamps, switches; PLANTERN.md §6.1) ----------------------------------------------
+
+/**
+ * Add a lamp or switch. spec = { kind, pos?: [x, y] | attach?: { wall, side?, offset, gap? }, z?,
+ * radius? }. A wall fixture's side defaults to the room side of the wall (the right of a wall made
+ * from a room edge); a ceiling lamp's z defaults to the ceiling. Heights not given are listed in
+ * `assumed`. Returns { model, report, fixture }.
+ */
+export function addFixture(model, levelId, spec = {}, options = {}) {
+  const lv = levelOf(model, levelId);
+  if (!lv) return refuse(model, `no level "${levelId}"`);
+  const kind = spec.kind;
+  if (!FIXTURE_KINDS.includes(kind)) return refuse(model, `kind must be ${FIXTURE_KINDS.join(' or ')}`);
+  const used = new Set(model.levels.flatMap(l => (l.fixtures || []).map(f => f.id)));
+  let n = 1; while (used.has(`f_${kind}_${n}`)) n++;
+  const fx = { id: `f_${kind}_${n}`, ...(spec.name ? { name: String(spec.name).trim() } : {}), kind };
+  if (spec.attach) fx.attach = { side: 'right', ...spec.attach };
+  else if (spec.pos) fx.pos = spec.pos.map(Number);
+  const zDefault = kind === 'switch' ? FIXTURE_DEFAULTS.switch.z : spec.attach ? FIXTURE_DEFAULTS.wallLamp.z : (spec.pos ? roomCeiling(lv, roomAt(lv, spec.pos, pointInPolygon)) : lv.ceilingHeight ?? 2400);
+  fx.z = Number(spec.z ?? zDefault);
+  if (kind === 'lamp') fx.radius = Number(spec.radius ?? FIXTURE_DEFAULTS.lamp.radius);
+  if (Array.isArray(spec.assumed)) { if (spec.assumed.length) fx.assumed = [...spec.assumed]; }   // a copy keeps what its source still had as defaults
+  else if (spec.z === undefined && !(kind === 'lamp' && !spec.attach)) fx.assumed = ['z'];
+  const { errors } = checkFixture(fx, lv);
+  if (errors.length) return refuse(model, ...errors.map(e => `${fx.id}: ${e}`));
+  const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, fixtures: [...(l.fixtures || []), fx] });
+  return { ...finish({ ...model, levels }, levelId, {}, options), fixture: fx };
+}
+
+// ---- objects (PLANTERN.md §6.1): boxes with a size, on a wall or standing in a room ----
+
+/**
+ * Add an object. spec = { name?, size?, z?, color?, attach: { wall, side?, offset?, gap? } | pos: [x, y], rotationDeg? }.
+ * Sizes and heights not given take defaults (a wall cabinet 900 × 350 × 700 at 1400, a box on the floor
+ * 800 × 800 × 800) and are listed in `assumed` until measured. Returns { model, report, object }.
+ */
+export function addObject(model, levelId, spec = {}, options = {}) {
+  const lv = levelOf(model, levelId);
+  if (!lv) return refuse(model, `no level "${levelId}"`);
+  const wall = !!spec.attach, d = wall ? OBJECT_DEFAULTS.wall : OBJECT_DEFAULTS.free;
+  const used = new Set(model.levels.flatMap(l => (l.objects || []).map(o => o.id)));
+  let n = 1; while (used.has(`ob_box_${n}`) || allIds(model).has(`ob_box_${n}`)) n++;
+  const o = { id: `ob_box_${n}`, kind: 'box', ...(spec.name ? { name: spec.name } : {}) };
+  if (wall) o.attach = { side: 'right', offset: 0, ...spec.attach };
+  else if (spec.pos) { o.pos = spec.pos.map(Number); o.rotationDeg = Number(spec.rotationDeg ?? 0); }
+  o.size = (spec.size ?? d.size).map(Number);
+  o.z = Number(spec.z ?? d.z);
+  if (spec.color) o.color = spec.color;
+  const assumed = Array.isArray(spec.assumed) ? spec.assumed : [...(spec.size ? [] : ['size']), ...(spec.z === undefined && wall ? ['z'] : [])];
+  if (assumed.length) o.assumed = assumed;
+  const { errors } = checkObject(o, lv);
+  if (errors.length) return refuse(model, ...errors.map(e => `${o.id}: ${e}`));
+  const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, objects: [...(l.objects || []), o] });
+  return { ...finish({ ...model, levels }, levelId, {}, options), object: o };
+}
+
+/** Change an object (null removes a field; `pos` and `attach` replace each other). A value set here counts as measured. */
+export function setObject(model, levelId, id, props, options = {}) {
+  const lv = levelOf(model, levelId), ob = lv?.objects?.find(x => x.id === id);
+  if (!ob) return refuse(model, `no object "${id}" on level "${levelId}"`);
+  const keys = Object.keys(props || {});
+  if (keys.includes('id')) return refuse(model, 'ids never change');
+  const next = { ...ob };
+  for (const k of keys) { if (props[k] === null) delete next[k]; else next[k] = props[k]; }
+  if (props.pos) { delete next.attach; next.rotationDeg ??= 0; }
+  if (props.attach) { delete next.pos; delete next.rotationDeg; }
+  const assumed = keys.includes('assumed') ? props.assumed || [] : (ob.assumed || []).filter(k => !keys.includes(k));   // a copy brings its source's
+  if (assumed.length) next.assumed = assumed; else delete next.assumed;
+  const { errors } = checkObject(next, lv);
+  if (errors.length) return refuse(model, ...errors.map(e => `${id}: ${e}`));
+  const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, objects: l.objects.map(x => x.id === id ? next : x) });
+  return finish({ ...model, levels }, levelId, {}, options);
+}
+
+export function deleteObject(model, levelId, id, options = {}) {
+  const lv = levelOf(model, levelId);
+  if (!lv?.objects?.some(x => x.id === id)) return refuse(model, `no object "${id}" on level "${levelId}"`);
+  const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, objects: l.objects.filter(x => x.id !== id) });
+  return finish({ ...model, levels }, levelId, {}, options);
+}
+
+/** Change a fixture (null removes a field; `pos` and `attach` replace each other). A value set here counts as measured. */
+export function setFixture(model, levelId, id, props, options = {}) {
+  const lv = levelOf(model, levelId), fx = lv?.fixtures?.find(x => x.id === id);
+  if (!fx) return refuse(model, `no fixture "${id}" on level "${levelId}"`);
+  const keys = Object.keys(props || {});
+  if (keys.includes('id')) return refuse(model, 'ids never change');
+  const next = { ...fx };
+  for (const k of keys) { if (props[k] === null) delete next[k]; else next[k] = props[k]; }
+  if (props.pos) delete next.attach;
+  if (props.attach) delete next.pos;
+  const assumed = keys.includes('assumed') ? props.assumed || [] : (fx.assumed || []).filter(k => !keys.includes(k));
+  if (assumed.length) next.assumed = assumed; else delete next.assumed;
+  const { errors } = checkFixture(next, lv);
+  if (errors.length) return refuse(model, ...errors.map(e => `${id}: ${e}`));
+  const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, fixtures: l.fixtures.map(x => x.id === id ? nameFirst(next) : x) });
+  return finish({ ...model, levels }, levelId, {}, options);
+}
+
+/** Delete a fixture. Its binding in location.json (if any) is then reported by the viewer's validation. */
+export function deleteFixture(model, levelId, id, options = {}) {
+  const lv = levelOf(model, levelId);
+  if (!lv?.fixtures?.some(x => x.id === id)) return refuse(model, `no fixture "${id}" on level "${levelId}"`);
+  const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, fixtures: l.fixtures.filter(x => x.id !== id) });
+  return finish({ ...model, levels }, levelId, {}, options);
+}
+
+/**
+ * A wall's thickness measured at a door or window reveal (the depth of its side, face to face through the wall). It sets
+ * the thickness and takes it off the still-to-measure list. A wall with a room on its far face is
+ * as thick as the gap between the two rooms: there the measurement is only compared, never forced,
+ * and report.reveal says by how much the rooms disagree with it.
+ * Returns { model, report } with report.reveal = { wall, measured, was, applied, diff? }.
+ */
+export function revealThickness(model, levelId, wallId, measured, options = {}) {
+  const lv = levelOf(model, levelId), w = lv?.walls?.find(x => x.id === wallId), t = Number(measured);
+  if (!w) return refuse(model, `no wall "${wallId}" on level "${levelId}"`);
+  if (!(t > 0)) return refuse(model, 'the thickness must be a number of mm');
+  if (isShared(w, new Map((lv.rooms || []).map(r => [r.id, r])))) {
+    const diff = Math.round((t - (w.thickness ?? 0)) * 10) / 10;
+    return { model, report: { errors: [], issues: [], reveal: { wall: wallId, measured: t, was: w.thickness, applied: false, diff } } };
+  }
+  const r = setWallProps(model, levelId, wallId, { thickness: t }, options);
+  return { model: r.model, report: { ...r.report, reveal: { wall: wallId, measured: t, was: w.thickness, applied: !r.report.errors.length } } };
+}
+
+// ---- materials (PLANTERN.md §6.2) ------------------------------------------------------------------
+
+/** Material id from a name: "Oak panel" → m_oak_panel, unique in the model. */
+export function newMaterialId(model, name) {
+  const slug = String(name || 'material').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'material';
+  let id = `m_${slug}`, k = 2;
+  while (model.materials?.[id]) id = `m_${slug}_${k++}`;
+  return id;
+}
+
+/** Add or change a material: props = { name?, color?, texture?, uvScale? } (null removes a field). Returns { model, report, id }. */
+export function setMaterial(model, id, props) {
+  const mid = id || newMaterialId(model, props?.name);
+  const m = { ...(model.materials?.[mid] || {}) };
+  for (const [k, v] of Object.entries(props || {})) { if (v === null || v === '') delete m[k]; else m[k] = k === 'uvScale' ? Number(v) : v; }
+  const next = { ...model, materials: { ...(model.materials || {}), [mid]: m } };
+  const errs = checkMaterials(next).filter(i => i.severity === 'error' && i.id === mid);
+  if (errs.length) return refuse(model, ...errs.map(e => `${mid}: ${e.msg}`));
+  return { model: next, report: { errors: [], issues: validate(next) }, id: mid };
+}
+
+/** Delete a material; refused while a wall side uses it. */
+export function deleteMaterial(model, id) {
+  if (!model.materials?.[id]) return refuse(model, `no material "${id}"`);
+  const users = materialUse(model).get(id);
+  if (users.length) return refuse(model, `${id} is used by ${users.join(', ')}: give those sides another colour or material first`);
+  const { [id]: _, ...rest } = model.materials;
+  const next = { ...model, materials: rest };
+  return { model: next, report: { errors: [], issues: validate(next) } };
+}
+
+/** Name a colour in the palette (an empty name removes it from the palette; walls keep their colours). */
+export function nameColor(model, color, name) {
+  const c = String(color || '').toLowerCase();
+  if (!/^#[0-9a-f]{6}$/.test(c)) return refuse(model, 'colour must look like #rrggbb');
+  const rest = (model.palette || []).filter(p => p.color.toLowerCase() !== c), n = String(name ?? '').trim();
+  const palette = n ? [...rest, { color: c, name: n }] : rest;
+  const next = { ...model, palette };
+  if (!palette.length) delete next.palette;
+  return { model: next, report: { errors: [], issues: validate(next) } };
+}
+
+/**
+ * Make a material from a colour: a new material with that colour (named `name`), and, for each
+ * wall side in `sides` ([{ level, wall, side }]; by default every side painted exactly that colour),
+ * the side switched to the material, so they all follow it from now on.
+ * Returns { model, report: { replaced: [{ level, wall, side }] }, id }.
+ */
+export function materialFromColor(model, color, name, sides) {
+  const c = String(color || '').toLowerCase();
+  if (!/^#[0-9a-f]{6}$/.test(c)) return refuse(model, 'colour must look like #rrggbb');
+  const made = setMaterial(model, null, { name: String(name || '').trim() || c, color: c });
+  if (made.report.errors.length) return made;
+  const want = sides ?? model.levels.flatMap(lv => (lv.walls || []).flatMap(w => ['left', 'right', 'top', 'ends']
+    .filter(s => w.sides?.[s]?.color?.toLowerCase() === c && !w.sides[s].material).map(side => ({ level: lv.id, wall: w.id, side }))));
+  const replaced = [];
+  const levels = made.model.levels.map(lv => ({ ...lv, walls: (lv.walls || []).map(w => {
+    const mine = want.filter(x => x.level === lv.id && x.wall === w.id);
+    if (!mine.length) return w;
+    const sidesNext = { ...(w.sides || {}) };
+    for (const { side } of mine) { const { color: _c, ...rest } = sidesNext[side] || {}; sidesNext[side] = { ...rest, material: made.id }; replaced.push({ level: lv.id, wall: w.id, side }); }
+    return { ...w, sides: sidesNext };
+  }) }));
+  // without a list: chimney sides and walls painted per room in that colour switch too
+  const perRoom = (x, key, kind) => {
+    const hit = Object.entries(x[key] || {}).filter(([, s]) => s?.color?.toLowerCase() === c && !s.material);
+    if (!hit.length) return x;
+    const next = { ...x[key] };
+    for (const [room] of hit) { next[room] = { material: made.id }; replaced.push({ [kind]: x.id, room }); }
+    return { ...x, [key]: next };
+  };
+  const levels1 = sides ? levels : levels.map(lv => ({ ...lv, walls: (lv.walls || []).map(x => perRoom(x, 'roomSides', 'wall')) }));
+  const levels2 = sides ? levels1 : levels1.map(lv => ({ ...lv, ...(lv.solids ? { solids: lv.solids.map(so => {
+    const hit = Object.entries(so.sides || {}).filter(([, s]) => s?.color?.toLowerCase() === c && !s.material);
+    if (!hit.length) return so;
+    const next = { ...so.sides };
+    for (const [room] of hit) { next[room] = { material: made.id }; replaced.push({ level: lv.id, solid: so.id, room }); }
+    return { ...so, sides: next };
+  }) } : {}) }));
+  const next = { ...made.model, levels: levels2 };
+  return { model: next, report: { errors: [], issues: validate(next), replaced }, id: made.id };
+}

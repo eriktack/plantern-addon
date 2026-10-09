@@ -1,0 +1,11 @@
+{
+  "name": "plantern",
+  "private": true,
+  "type": "module",
+  "description": "Data-driven house floor plan with live Home Assistant lighting. No build step; package.json only enables ES modules for Node tests.",
+  "scripts": {
+    "serve": "node tools/serve.js 3000",
+    "test": "node --test"
+  },
+  "version": "0.1.0"
+}

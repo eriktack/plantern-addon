@@ -1,0 +1,565 @@
+{
+  "schemaVersion": 1,
+  "units": "mm",
+  "site": { "origin": [0,0], "northAngleDeg": 0 },
+  "levels": [
+    {
+      "id": "basement",
+      "name": "Basement",
+      "elevation": -2450,
+      "elevationFrom": { "level": "ground", "relation": "below" },
+      "floorThickness": 300,
+      "ceilingHeight": 2200,
+      "rooms": [
+        {
+          "id": "r_cellar",
+          "name": "Cellar",
+          "exterior": false,
+          "polygon": [[0,0],[0,2800],[3600,2800],[3600,0]],
+          "capture": {
+            "mode": "rectilinear",
+            "raw": {
+              "start": [0,0],
+              "origin": { "ref": "r_kitchen#p0", "offset": [0,0] },
+              "heading": 90,
+              "lengths": [2800,3600,2800,3600],
+              "turns": "RRRR",
+              "closure": "square"
+            }
+          }
+        },
+        {
+          "id": "r_boiler",
+          "name": "Boiler room",
+          "exterior": false,
+          "polygon": [[3800,0],[3800,2800],[5600,2800],[5600,0]],
+          "capture": {
+            "mode": "rectilinear",
+            "raw": {
+              "start": [3800,0],
+              "origin": { "ref": "r_cellar#p3", "offset": [200,0] },
+              "heading": 90,
+              "lengths": [2800,1800,2800,1800],
+              "turns": "RRRR",
+              "closure": "square"
+            }
+          }
+        }
+      ],
+      "walls": [
+        {
+          "id": "w_cellar_e0",
+          "kind": "wall",
+          "a": [0,0],
+          "b": [0,2800],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_cellar"],
+          "from": ["r_cellar#e0"],
+          "assumed": ["thickness"]
+        },
+        {
+          "id": "w_cellar_e1",
+          "kind": "wall",
+          "a": [0,2800],
+          "b": [5600,2800],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_cellar","r_boiler"],
+          "from": ["r_cellar#e1","r_boiler#e1"],
+          "assumed": ["thickness"]
+        },
+        {
+          "id": "w_cellar_e2",
+          "kind": "wall",
+          "a": [3600,2800],
+          "b": [3600,0],
+          "thickness": 200,
+          "justify": "left",
+          "rooms": ["r_cellar","r_boiler"],
+          "from": ["r_cellar#e2","r_boiler#e0"]
+        },
+        {
+          "id": "w_cellar_e3",
+          "kind": "wall",
+          "a": [5600,0],
+          "b": [0,0],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_boiler","r_cellar"],
+          "from": ["r_boiler#e3","r_cellar#e3"],
+          "assumed": ["thickness"]
+        },
+        {
+          "id": "w_boiler_e2",
+          "kind": "wall",
+          "a": [5600,2800],
+          "b": [5600,0],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_boiler"],
+          "from": ["r_boiler#e2"],
+          "assumed": ["thickness"]
+        }
+      ],
+      "openings": [
+        {
+          "id": "o_cellar_door",
+          "wall": "w_cellar_e2",
+          "type": "door",
+          "offset": 900,
+          "width": 800,
+          "sill": 0,
+          "head": 2100,
+          "hinge": "near",
+          "swing": "right",
+          "assumed": ["head"]
+        }
+      ],
+      "solids": [],
+      "objects": [],
+      "fixtures": [
+        { "id": "f_cellar_lamp", "kind": "lamp", "pos": [1800,1400], "z": 2200, "radius": 3000 }
+      ],
+      "capture": { "ceilingHeight": 2200, "floorToFloor": 2450 },
+      "stairs": [
+        {
+          "id": "st_cellar",
+          "to": "ground",
+          "start": { "ref": "r_cellar#p0", "offset": [100,0] },
+          "heading": 90,
+          "width": 900,
+          "flights": [
+            { "risers": 13, "length": 2760 }
+          ],
+          "underside": "sloped",
+          "sides": "sloped",
+          "waist": 150
+        }
+      ]
+    },
+    {
+      "id": "ground",
+      "name": "Ground floor",
+      "elevation": 0,
+      "floorThickness": 250,
+      "ceilingHeight": 2500,
+      "rooms": [
+        {
+          "id": "r_kitchen",
+          "name": "Kitchen",
+          "exterior": false,
+          "polygon": [[0,0],[0,4000],[5000,4000],[5000,0]],
+          "capture": { "mode": "rectilinear", "raw": { "heading": 90, "lengths": [4000, 5000, 4000, 5000] } }
+        },
+        {
+          "id": "r_living",
+          "name": "Living room",
+          "exterior": false,
+          "polygon": [[5200,0],[5200,4000],[9200,4000],[9200,0]],
+          "capture": {
+            "mode": "lengths",
+            "raw": {
+              "start": [5200,0],
+              "heading": 90,
+              "lengths": [4000,4000,4000,4000],
+              "diagonals": [
+                { "a": 0, "b": 2, "length": 5656.9 },
+                { "a": 1, "b": 3, "length": 5656.9 }
+              ]
+            }
+          }
+        },
+        { "id": "r_terrace", "name": "Terrace", "exterior": true, "polygon": [[5200,-200],[9400,-200],[9400,-2200],[5200,-2200]] },
+        {
+          "id": "r_studio",
+          "name": "Studio",
+          "polygon": [[-2400,0],[-2400,1100],[-1400,1100],[-1400,2600],[-2600,2600],[-2600,4000],[-200,4000],[-200,0]],
+          "capture": {
+            "mode": "rectilinear",
+            "raw": {
+              "start": [-2400,0],
+              "origin": { "ref": "r_kitchen#p1", "offset": [-2400,-4000] },
+              "heading": 90,
+              "lengths": [1100,1000,1500,1200,1400,2400,4000,2200],
+              "turns": "RRLLRRRR",
+              "closure": "square"
+            }
+          },
+          "exterior": false
+        }
+      ],
+      "walls": [
+        {
+          "id": "w_k_w",
+          "kind": "wall",
+          "a": [0,0],
+          "b": [0,4000],
+          "thickness": 200,
+          "justify": "left",
+          "rooms": ["r_kitchen","r_studio"],
+          "sides": { "right": { "material": "m_panel_demo" }, "left": { "color": "#d8d4cc" } },
+          "from": ["r_kitchen#e0","r_studio#e6"]
+        },
+        {
+          "id": "w_k_n",
+          "kind": "wall",
+          "a": [-2600,4000],
+          "b": [9200,4000],
+          "thickness": 200,
+          "justify": "left",
+          "rooms": ["r_studio","r_kitchen","r_living"],
+          "sides": { "right": { "color": "#e9dfc9" }, "left": { "color": "#d8d4cc" } },
+          "from": ["r_studio#e5","r_kitchen#e1","r_living#e1"]
+        },
+        {
+          "id": "w_k_e",
+          "kind": "wall",
+          "a": [5000,4000],
+          "b": [5000,0],
+          "thickness": 200,
+          "justify": "left",
+          "rooms": ["r_kitchen","r_living"],
+          "sides": { "right": { "color": "#e9dfc9" }, "left": { "color": "#d8d4cc" } },
+          "from": ["r_kitchen#e2","r_living#e0"]
+        },
+        {
+          "id": "w_l_e",
+          "kind": "wall",
+          "a": [9200,4000],
+          "b": [9200,0],
+          "thickness": 200,
+          "justify": "left",
+          "rooms": ["r_living"],
+          "sides": { "right": { "color": "#cfd8dc" }, "left": { "color": "#d8d4cc" } },
+          "from": ["r_living#e2"]
+        },
+        {
+          "id": "w_l_s",
+          "kind": "wall",
+          "a": [9200,0],
+          "b": [-2400,0],
+          "thickness": 200,
+          "justify": "left",
+          "rooms": ["r_living","r_terrace","r_kitchen","r_studio"],
+          "sides": { "right": { "color": "#cfd8dc" }, "left": { "color": "#d8d4cc" } },
+          "from": ["r_living#e3","r_kitchen#e3","r_studio#e7","r_terrace#e0"]
+        },
+        {
+          "id": "w_t_rail_e",
+          "kind": "railing",
+          "style": "balusters",
+          "a": [9400,-200],
+          "b": [9400,-2200],
+          "thickness": 40,
+          "justify": "right",
+          "base": 0,
+          "height": 1000,
+          "rooms": ["r_terrace"],
+          "from": ["r_terrace#e1"]
+        },
+        {
+          "id": "w_t_rail_s",
+          "kind": "railing",
+          "style": "balusters",
+          "a": [9400,-2200],
+          "b": [5200,-2200],
+          "thickness": 40,
+          "justify": "right",
+          "base": 0,
+          "height": 1000,
+          "rooms": ["r_terrace"],
+          "from": ["r_terrace#e2"]
+        },
+        {
+          "id": "w_t_half_w",
+          "kind": "wall",
+          "a": [5200,-2200],
+          "b": [5200,-200],
+          "thickness": 150,
+          "justify": "right",
+          "base": 0,
+          "height": 1000,
+          "sides": { "left": { "color": "#b8a78f" }, "right": { "color": "#b8a78f" } },
+          "rooms": ["r_terrace"],
+          "from": ["r_terrace#e3"]
+        },
+        {
+          "id": "w_studio_e0",
+          "kind": "wall",
+          "a": [-2400,0],
+          "b": [-2400,1100],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_studio"],
+          "from": ["r_studio#e0"]
+        },
+        {
+          "id": "w_studio_e1",
+          "kind": "wall",
+          "a": [-2400,1100],
+          "b": [-1400,1100],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_studio"],
+          "from": ["r_studio#e1"]
+        },
+        {
+          "id": "w_studio_e2",
+          "kind": "wall",
+          "a": [-1400,1100],
+          "b": [-1400,2600],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_studio"],
+          "from": ["r_studio#e2"]
+        },
+        {
+          "id": "w_studio_e3",
+          "kind": "wall",
+          "a": [-1400,2600],
+          "b": [-2600,2600],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_studio"],
+          "from": ["r_studio#e3"]
+        },
+        {
+          "id": "w_studio_e4",
+          "kind": "wall",
+          "a": [-2600,2600],
+          "b": [-2600,4000],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_studio"],
+          "from": ["r_studio#e4"]
+        },
+        {
+          "id": "w_studio_lintel",
+          "kind": "wall",
+          "a": [-1500,0],
+          "b": [-1500,1100],
+          "thickness": 200,
+          "justify": "center",
+          "base": 2200,
+          "height": 300,
+          "sides": { "left": { "color": "#e8e0d0" }, "right": { "color": "#e8e0d0" } },
+          "anchor": { "a": { "ref": "r_studio#p2", "offset": [-100, -1100] }, "b": { "ref": "r_studio#p2", "offset": [-100, 0] } }
+        }
+      ],
+      "openings": [
+        { "id": "o_k_win", "wall": "w_k_n", "type": "window", "offset": 3800, "width": 1400, "sill": 900, "head": 2100 },
+        { "id": "o_pass", "wall": "w_k_e", "type": "passage", "offset": 1000, "width": 1800, "sill": 0, "head": 2100 },
+        { "id": "o_l_win", "wall": "w_l_e", "type": "window", "offset": 1400, "width": 1200, "sill": 900, "head": 2100 },
+        { "id": "o_l_door", "wall": "w_l_s", "type": "door", "offset": 800, "width": 900, "sill": 0, "head": 2100 },
+        { "id": "o_passage_1", "wall": "w_k_w", "type": "passage", "offset": 2900, "width": 900, "sill": 0, "head": 2000 }
+      ],
+      "solids": [
+        {
+          "id": "s_chimney",
+          "kind": "chimney",
+          "polygon": [[8500,3300],[8500,4000],[9200,4000],[9200,3300]],
+          "base": 0,
+          "color": "#6b4f3a"
+        }
+      ],
+      "objects": [
+        {
+          "id": "ob_wallcab1",
+          "kind": "box",
+          "attach": { "wall": "w_k_w", "side": "right", "offset": 600, "gap": 0 },
+          "size": [900,350,700],
+          "z": 1400,
+          "color": "#e8e0d0"
+        },
+        { "id": "ob_sofa", "kind": "box", "pos": [6000,600], "rotationDeg": 0, "size": [2200,900,800], "z": 0, "color": "#5b6b8c" },
+        { "id": "ob_table", "kind": "box", "pos": [1700,1500], "rotationDeg": 0, "size": [1600,900,750], "z": 0, "color": "#8b6b4a" }
+      ],
+      "fixtures": [
+        { "id": "f_k_lamp", "kind": "lamp", "pos": [2500,2000], "z": 2400, "radius": 3600 },
+        { "id": "f_l_lamp", "kind": "lamp", "pos": [7200,2000], "z": 2400, "radius": 3600 },
+        { "id": "f_k_switch", "kind": "switch", "attach": { "wall": "w_k_n", "side": "right", "offset": 6800 }, "z": 1100 },
+        {
+          "id": "f_t_lamp",
+          "kind": "lamp",
+          "attach": { "wall": "w_l_s", "side": "left", "offset": 2400, "gap": 100 },
+          "z": 2100,
+          "radius": 3000
+        },
+        { "id": "f_studio_lamp", "kind": "lamp", "pos": [-1000,2000], "z": 2400, "radius": 3600 }
+      ],
+      "capture": { "ceilingHeight": 2500, "floorToFloor": 2750 },
+      "stairs": [
+        {
+          "id": "st_main",
+          "to": "upper",
+          "start": { "ref": "r_living#p1", "offset": [400,0] },
+          "heading": 0,
+          "width": 900,
+          "flights": [
+            { "risers": 7, "length": 1500 },
+            { "risers": 8, "length": 1750 }
+          ],
+          "turn": "R",
+          "landing": "square",
+          "underside": "sloped"
+        }
+      ]
+    },
+    {
+      "id": "upper",
+      "name": "Upper floor",
+      "elevation": 2750,
+      "elevationFrom": { "level": "ground", "relation": "above" },
+      "floorThickness": 250,
+      "ceilingHeight": 2400,
+      "rooms": [
+        {
+          "id": "r_bedroom",
+          "name": "Bedroom",
+          "exterior": false,
+          "polygon": [[0,0],[0,4000],[5000,4000],[5000,0]],
+          "capture": {
+            "mode": "rectilinear",
+            "raw": {
+              "start": [0,0],
+              "origin": { "ref": "r_kitchen#p0", "offset": [0,0] },
+              "heading": 90,
+              "lengths": [4000,5000,4000,5000],
+              "turns": "RRRR",
+              "closure": "square"
+            }
+          }
+        },
+        {
+          "id": "r_landing",
+          "name": "Landing",
+          "exterior": false,
+          "polygon": [[5200,0],[5200,4000],[9200,4000],[9200,0]],
+          "capture": {
+            "mode": "rectilinear",
+            "raw": {
+              "start": [5200,0],
+              "origin": { "ref": "r_living#p0", "offset": [0,0] },
+              "heading": 90,
+              "lengths": [4000,4000,4000,4000],
+              "turns": "RRRR",
+              "closure": "square"
+            }
+          }
+        }
+      ],
+      "walls": [
+        {
+          "id": "w_bedroom_e0",
+          "kind": "wall",
+          "a": [0,0],
+          "b": [0,4000],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_bedroom"],
+          "from": ["r_bedroom#e0"],
+          "assumed": ["thickness"]
+        },
+        {
+          "id": "w_bedroom_e1",
+          "kind": "wall",
+          "a": [0,4000],
+          "b": [9200,4000],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_bedroom","r_landing"],
+          "from": ["r_bedroom#e1","r_landing#e1"],
+          "assumed": ["thickness"]
+        },
+        {
+          "id": "w_bedroom_e2",
+          "kind": "wall",
+          "a": [5000,4000],
+          "b": [5000,0],
+          "thickness": 200,
+          "justify": "left",
+          "rooms": ["r_bedroom","r_landing"],
+          "from": ["r_bedroom#e2","r_landing#e0"]
+        },
+        {
+          "id": "w_bedroom_e3",
+          "kind": "wall",
+          "a": [9200,0],
+          "b": [0,0],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_landing","r_bedroom"],
+          "from": ["r_landing#e3","r_bedroom#e3"],
+          "assumed": ["thickness"]
+        },
+        {
+          "id": "w_landing_e2",
+          "kind": "wall",
+          "a": [9200,4000],
+          "b": [9200,0],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_landing"],
+          "from": ["r_landing#e2"],
+          "assumed": ["thickness"]
+        }
+      ],
+      "openings": [
+        {
+          "id": "o_bed_win",
+          "wall": "w_bedroom_e1",
+          "type": "window",
+          "offset": 1500,
+          "width": 1400,
+          "sill": 900,
+          "head": 2100,
+          "opens": "fixed"
+        },
+        { "id": "o_bed_pass", "wall": "w_bedroom_e2", "type": "passage", "offset": 1000, "width": 1000, "sill": 0, "head": 2100 },
+        {
+          "id": "o_land_win",
+          "wall": "w_landing_e2",
+          "type": "window",
+          "offset": 1400,
+          "width": 1200,
+          "sill": 900,
+          "head": 2100,
+          "opens": "fixed"
+        }
+      ],
+      "solids": [
+        {
+          "kind": "chimney",
+          "id": "s_chimney_up",
+          "polygon": [[8500,3300],[8500,4000],[9200,4000],[9200,3300]],
+          "base": 0,
+          "color": "#6b4f3a",
+          "capture": {
+            "mode": "rectilinear",
+            "raw": {
+              "start": [8500,3300],
+              "origin": { "ref": "s_chimney#p0", "offset": [0,0] },
+              "heading": 90,
+              "lengths": [700,700,700,700],
+              "turns": "RRRR",
+              "closure": "square"
+            }
+          }
+        }
+      ],
+      "objects": [],
+      "fixtures": [
+        { "id": "f_bed_lamp", "kind": "lamp", "pos": [2500,2000], "z": 2400, "radius": 3600 },
+        { "id": "f_land_lamp", "kind": "lamp", "pos": [6200,1800], "z": 2400, "radius": 3600 }
+      ],
+      "capture": { "ceilingHeight": 2400 }
+    }
+  ],
+  "anchors": [],
+  "checks": [
+    { "id": "c_kitchen_diag", "a": "r_kitchen#p0", "b": "r_kitchen#p2", "measured": 6403, "note": "laser, corner to corner" },
+    { "id": "c_living_diag", "a": "r_living#p0", "b": "r_living#p2", "measured": 5640, "note": "demo: deviates" }
+  ],
+  "materials": { "m_panel_demo": { "name": "Panel (demo)", "color": "#dcc9a3", "texture": "assets/panel.png", "uvScale": 500 } }
+}

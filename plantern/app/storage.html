@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Plantern · Storage</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="src/styles.css">
+<style>
+  body{display:block;min-height:100%;padding:0 0 env(safe-area-inset-bottom,0)}
+  #app{max-width:760px;margin:0 auto;padding:10px 14px 40px}
+  h1{margin:8px 0 2px} h2{margin:22px 0 8px}
+  .lead{color:var(--mut);margin:0 0 12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:10px 0}
+  .card .top{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+  .card .title{font-size:16px;font-weight:600}
+  .card .where{font:12px ui-monospace,Consolas,monospace;color:var(--mut);word-break:break-all;margin-top:2px}
+  .badge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:9px;border:1px solid var(--line);color:var(--mut);margin-left:6px;vertical-align:1px}
+  .badge.ok{color:var(--ok);border-color:#2f6b4f}.badge.bad{color:var(--bad);border-color:#7a2f2b}.badge.warn{color:var(--warn);border-color:#6f5520}
+  .houses{margin:8px 0 0;padding:0;list-style:none}
+  .houses li{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+  .houses li .nm{font-weight:500}
+  .houses li .acts{display:flex;gap:6px;flex-wrap:wrap}
+  .houses a{color:var(--acc);text-decoration:none}
+  .btns{display:flex;gap:6px;flex-wrap:wrap}
+  button.go,a.go{background:var(--acc);color:#14161a;border-color:var(--acc);font-weight:600}
+  button.big{font-size:15px;padding:9px 14px;border-radius:9px}
+  button.quiet{background:transparent;border-color:var(--line);color:var(--mut)}
+  .choice{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .choice button{text-align:left;padding:14px;border-radius:10px;font-size:15px;line-height:1.35}
+  .choice button small{display:block;margin-top:4px}
+  @media(max-width:560px){.choice{grid-template-columns:1fr}}
+  label.f{display:block;font-size:13px;color:var(--mut);margin:10px 0 3px}
+  input.t{width:100%;background:#14161a;color:var(--fg);border:1px solid #3a404b;border-radius:8px;padding:8px 10px;font:14px ui-monospace,Consolas,monospace}
+  .browser{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:8px}
+  .browser .bar{display:flex;gap:6px;padding:8px;background:#181b20;border-bottom:1px solid var(--line)}
+  .browser .bar input{flex:1;min-width:0}
+  .browser .places{display:flex;gap:6px;flex-wrap:wrap;padding:8px;border-bottom:1px solid var(--line)}
+  .browser .list{max-height:300px;overflow:auto}
+  .browser .row{display:flex;gap:8px;align-items:center;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;padding:9px 12px;font-size:14px}
+  .browser .row:hover{background:#242830}
+  .browser .row .tag{margin-left:auto;font-size:11px;color:var(--acc)}
+  .browser .empty{padding:12px;color:var(--mut);font-size:13px}
+  .msg{margin:8px 0;padding:8px 10px;border-radius:8px;border-left:3px solid var(--acc);background:#1c1f25;font-size:13px}
+  .msg.err{border-color:var(--bad)} .msg.ok{border-color:var(--ok)}
+  .switch{display:flex;gap:8px;align-items:center;font-size:14px}
+  .switch input{width:18px;height:18px}
+  [hidden]{display:none!important}
+</style>
+<script type="module" src="src/storage/page.js"></script>
+</head>
+<body>
+<div id="app">
+  <nav class="nav" aria-label="Pages"><a href="index.html" title="The plan with lights (2D / 3D)">Plan</a><a href="room-editor.html" title="Edit rooms, walls, openings and lamps (desktop)">Editor</a><a href="wizard.html" title="Measure a room, wall by wall (phone)">Rooms</a><a href="openings.html" title="Doors, windows, switches and lamps (phone)">Doors &amp; lights</a><a href="storage.html" class="on" aria-current="page" title="Where your houses are kept: folders, network shares, git">Storage</a></nav>
+  <h1>Storage</h1>
+  <p class="lead">Where your houses are kept: a folder on this computer, a network share or a git repository. Plantern keeps them up to date and notices changes made elsewhere.</p>
+  <div id="msg"></div>
+
+  <section id="list"></section>
+  <div class="btns" style="margin-top:12px"><button id="addBtn" class="go big">+ Add storage</button><button id="newHouseBtn" class="big">+ New house</button></div>
+
+  <section id="wizard" class="card" hidden></section>
+
+  <h2>Home Assistant</h2>
+  <p class="lead">The Home Assistant your lamps and switches live in. Plantern connects to it itself: the access token stays in Plantern's settings on this computer and is never sent to a page.</p>
+  <div id="haMsg"></div>
+  <section id="haList"></section>
+  <div class="btns" style="margin-top:8px"><button id="haAdd" class="big">+ Add connection</button></div>
+  <section id="haForm" class="card" hidden></section>
+  <section id="haHouses"></section>
+</div>
+</body>
+</html>

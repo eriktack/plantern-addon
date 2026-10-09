@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Plantern</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="src/styles.css">
+<!-- three.js r170 is vendored (vendor/three/) and only loaded when the 3D view or GLB export is first used; no network needed. -->
+<script type="importmap">
+{ "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/"
+} }
+</script>
+<script type="module" src="src/app.js"></script>
+</head>
+<body>
+<main>
+  <svg id="plan"></svg>
+  <div id="view3d" hidden></div>
+  <div id="viewbar" role="tablist">
+    <button data-view="2d" class="on">2D</button><button data-view="3d">3D</button>
+  </div>
+  <div id="status"></div>
+  <div id="compass"></div>
+</main>
+<aside>
+  <nav class="nav" aria-label="Pages"><a href="index.html" class="on" aria-current="page" title="The plan with lights (2D / 3D)">Plan</a><a href="room-editor.html" title="Edit rooms, walls, openings and lamps (desktop)">Editor</a><a href="wizard.html" title="Measure a room, wall by wall (phone)">Rooms</a><a href="openings.html" title="Doors, windows, switches and lamps (phone)">Doors &amp; lights</a><a href="storage.html" title="Where your houses are kept: folders, network shares, git">Storage</a></nav>
+  <div class="row sel">
+    <select id="loc" aria-label="Location"></select>
+    <select id="level" aria-label="Level" hidden></select>
+  </div>
+  <h2>Home Assistant</h2>
+  <div id="haStatus" class="help"></div>
+  <div id="ents"></div>
+  <section id="panel3d" hidden>
+    <h2>3D view</h2>
+    <div class="row btns">
+      <button id="daylight" title="Toggle daylight">Daylight</button>
+      <button id="proj" title="Orthographic / perspective">Perspective</button>
+      <button id="resetView">Reset view</button>
+    </div>
+    <div id="stackRow" class="grid2" hidden>
+      <label>Levels <select id="stackMode"><option value="this">this level</option><option value="below">this and below</option><option value="all">all levels</option></select></label>
+      <label class="inl"><input type="checkbox" id="exploded"> Exploded</label>
+    </div>
+    <label title="Lamps that are on cast shadows, brightest first. Shadows are the heavy part of 3D: fewer is faster on phones and wall tablets. Remembered in this browser; the house's defaults are settings.render3d.shadows in location.json">Shadows <small id="shadowDev">on this computer</small>
+      <input type="range" id="shadowLvl" min="0" max="4" step="1"> <span id="shadowTxt"></span></label>
+    <p class="help">Drag: orbit · right-drag: pan · wheel: zoom · click lamp/switch: toggle</p>
+  </section>
+  <section id="panel2d">
+    <h2>Measure <button id="mbtn" title="Measure (M)">M</button></h2>
+    <div id="read"><small>Press M, then pick two points.</small></div>
+    <button id="pin" disabled>Pin as check</button>
+  </section>
+  <h2>Checks</h2>
+  <div id="checks"></div>
+  <div id="ckNote" class="help"></div>
+  <h2>Validation <span id="issueCount"></span></h2>
+  <div id="issues"></div>
+  <h2>Export</h2>
+  <div class="row btns">
+    <button id="expSvg" title="2D plan as SVG">SVG</button>
+    <button id="expGlb" title="3D model as binary glTF">GLB</button>
+    <button id="copy" title="Copy model.json to the clipboard">Model JSON</button>
+  </div>
+  <p class="help">2D: wheel zoom · drag pan · click lamp/switch: toggle<br>
+  <b>M</b> measure · click snap points · <b>Tab</b> cycle candidates · <b>Alt</b> free point · <b>Shift</b>-click chains · <b>Esc</b> clears</p>
+</aside>
+</body>
+</html>
