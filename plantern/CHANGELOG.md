@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4
+
+- Fix: after an update the dashboard card could fail with "Custom element doesn't exist: plantern-card", because the browser mixed the new card with old cached files. Every file of the card now carries the card's version.
+
 ## 0.1.3
 
 - The dashboard card has a 2D / 3D switch, a background choice (dark, card colour, transparent) and fills the space the dashboard gives it.
