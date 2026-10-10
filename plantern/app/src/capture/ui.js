@@ -20,6 +20,7 @@ import { overlapsAfterApply, describeOverlaps } from './overlap.js';
 import { bearingFromHeading, northAngleOf, roundDeg } from '../model/orientation.js';
 import { buildCapture, captureToForm, captureFromPolygon, newRoomId, lockOffers, residualCells, describeLockOffer, parseNumbers } from './edit.js';
 import { wallName, wallLabelsSvg } from './labels.js';
+import { placeFields, readPlaceForm, northAngleFromWall, placeSummary } from './place.js';
 import { moveCapture, dragCorner, snapMove, dragWallEnd, moveWall, rotateObject } from './drag.js';
 import { roundCapture, roundToForm, roundMovedTo, crossWall } from './round.js';
 import { solidCircle, roomEdge } from '../geometry/circle.js';
@@ -45,7 +46,7 @@ import { fitTo, pinchView } from './map-view.js';
 import { anchorStatus } from '../model/anchors.js';
 import { modelAreas, fmtArea } from '../geometry/area.js';
 import { stairsPlan, totalRisers } from '../geometry/stairs.js';
-import { renameFromName, applyRoom, removeRoom, setWallProps, unbindWall, deleteWall, linkWalls, fillWalls, setNorthAngle, splitWall, addOpening, setOpening, deleteOpening, addFixture, setFixture, deleteFixture, setMaterial, deleteMaterial, nameColor, materialFromColor } from '../edit/ops.js';
+import { renameFromName, applyRoom, removeRoom, setWallProps, unbindWall, deleteWall, linkWalls, fillWalls, setSite, splitWall, addOpening, setOpening, deleteOpening, addFixture, setFixture, deleteFixture, setMaterial, deleteMaterial, nameColor, materialFromColor } from '../edit/ops.js';
 import { resolveSide, materialUse, usedColors } from '../model/materials.js';
 import { sideStrips, wallProfile } from '../geometry/walls.js';
 import { wallInfo, wallToForm, wallPropsFromForm, stillToMeasure, openingInfo, openingToForm, openingPropsFromForm, offsetFrom, offsetTo, measureCorners, defaultCorner } from '../edit/inspect.js';
@@ -126,6 +127,59 @@ function commit(next, key = null) {
   dirty = model !== savedModel;
   refresh();
   queueMicrotask(afterCommit);              // after the caller has finished (it may reopen a form)
+}
+
+// ---- Place the house (PLANTERN.md §14.4-§14.5, logic in place.js) ----
+const placeFieldsNow = () => ({ position: $('placePos').value, north: $('north').value, height: $('placeHeight').value });
+
+/** Show what the form says, in words, and turn the dial; nothing is stored until Apply. */
+function previewPlace() {
+  const r = readPlaceForm(placeFieldsNow(), model.site);
+  $('placeSays').textContent = [...(r.says ? [r.says] : []), ...r.notes.map(n => `⚠ ${n}`), ...r.errors.map(e => `✗ ${e}`)].join('\n');
+  $('placeSays').style.whiteSpace = 'pre-wrap';
+  $('placeSays').style.color = r.errors.length ? 'var(--bad)' : '';
+  const t = $('north').value.trim().replace(',', '.'), v = t === '' ? 0 : Number(t);
+  $('placeDial').innerHTML = compassSvg(Number.isFinite(v) ? v : northAngleOf(model));
+  $('placeMsg').textContent = '';
+}
+
+/** Fill the section from the model (also after undo and redo, and for Revert). */
+function fillPlace() {
+  const f = placeFields(model.site);
+  $('placePos').value = f.position; $('north').value = f.north; $('placeHeight').value = f.height;
+  $('placeSum').textContent = placeSummary(model.site);
+  $('placeBadge').textContent = model.site?.georef?.origin ? '· placed' : '· not placed';
+  previewPlace();
+}
+
+function fillPlaceWalls() {
+  const sel = $('placeWall'), keep = sel.value, walls = level()?.walls || [];
+  sel.replaceChildren(...walls.map(w => new Option(`${w.name || w.id}: (${Math.round(w.a[0])}, ${Math.round(w.a[1])}) → (${Math.round(w.b[0])}, ${Math.round(w.b[1])})`, w.id)));
+  if (keep && walls.some(w => w.id === keep)) sel.value = keep;
+}
+
+/** A wall and the compass bearing of its direction give the north angle. */
+function useWallBearing() {
+  fillPlaceWalls();
+  const w = (level()?.walls || []).find(x => x.id === $('placeWall').value), b = Number($('placeBearing').value.trim().replace(',', '.'));
+  if (!w) { $('placeMsg').textContent = 'Pick a wall first.'; return; }
+  if (!Number.isFinite(b) || $('placeBearing').value.trim() === '') { $('placeMsg').textContent = 'Type the compass bearing in degrees (0 = north, 90 = east).'; return; }
+  $('north').value = String(northAngleFromWall(w, b));
+  previewPlace();
+  $('placeMsg').textContent = 'Worked out; press Apply to keep it.';
+}
+
+function applyPlace() {
+  const r = readPlaceForm(placeFieldsNow(), model.site);
+  if (!r.ok) { previewPlace(); $('placeMsg').textContent = `Not applied: ${r.errors.join(' ')}`; return; }
+  const s = setSite(model, r.props);
+  if (s.report.errors.length) { $('placeMsg').textContent = `Not applied: ${s.report.errors.join(' ')}`; return; }
+  if (!s.report.changed.length) { $('placeMsg').textContent = 'Nothing changed.'; return; }
+  commit(s.model);
+  fillPlace();
+  const warn = (s.report.issues || []).filter(i => i.id === 'site');
+  $('placeMsg').textContent = warn.length ? `Applied, but: ${warn.map(i => i.msg).join(' ')}` : 'Applied.';
+  setStatus('house place changed');
 }
 
 // ---- edit mode ----
@@ -285,7 +339,7 @@ function undoRedo(which) {
   if (stairsId && !stairs()) stairsId = null;
   if (objectId && !object()) objectId = null;
   openingFormFor = null; fixtureFormFor = null;
-  $('north').value = northAngleOf(model) || '';
+  fillPlace();
   wallFormFor = null;
   if (!wallId) loadFormForSelection();
   refresh();
@@ -335,12 +389,17 @@ async function init() {
     const up = () => { bar.classList.remove('drag'); bar.removeEventListener('pointermove', move); try { localStorage.setItem('plantern.editor.aside', parseInt($('cap').style.width, 10)); } catch { /* no storage */ } draw(); };
     bar.addEventListener('pointermove', move); bar.addEventListener('pointerup', up, { once: true });
   });
-  $('north').value = northAngleOf(model) || '';
-  $('north').addEventListener('input', () => {
-    const t = $('north').value.trim(), v = t === '' ? 0 : Number(t);
-    const r = setNorthAngle(model, v);
-    if (!r.report.errors.length) commit(r.model, 'north');
-  });
+  // Place the house: position, north angle and ground-floor height; Apply writes them with setSite() (place.js has the logic)
+  fillPlace();
+  for (const id of ['placePos', 'north', 'placeHeight', 'placeBearing']) {
+    $(id).addEventListener('input', () => previewPlace());
+    $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); if (id === 'placeBearing') useWallBearing(); else applyPlace(); } });
+  }
+  $('placeApply').onclick = applyPlace;
+  $('placeRevert').onclick = fillPlace;
+  $('placeWall').addEventListener('focus', fillPlaceWalls);
+  $('placeSect').addEventListener('toggle', () => { if ($('placeSect').open) fillPlaceWalls(); });
+  $('placeUseWall').onclick = useWallBearing;
   $('name').addEventListener('input', () => { if (draft) { draft.name = $('name').value; $('rid').value = draft.solid ? newSolidId(model, draft.name || $('sKind').value) : newRoomId(model, draft.name); refreshNextTo(); } recompute(); });
   $('sShape').addEventListener('change', () => { if (isRound()) loadRound(solved?.capture?.mode === 'circle' ? solved.capture : null); else syncRound(); recompute(); });
   $('rRoom').addEventListener('change', () => { fillRoundWalls(); syncRound(); recompute(); });

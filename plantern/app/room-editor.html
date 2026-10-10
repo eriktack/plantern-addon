@@ -100,9 +100,23 @@
     <div id="checkList"></div>
     <div id="ckErr" class="help" style="color:var(--bad)"></div>
   </details>
-  <details class="sect"><summary>House orientation</summary>
-  <label>Plan north is rotated <input id="north" inputmode="decimal" placeholder="0" style="width:90px;display:inline-block" autocomplete="off"> ° clockwise from true north
-    <small>Pick any direction as "plan north" (e.g. along the front wall) and enter how far it is from real north; the plan stays in the house's own axes.</small></label>
+  <details class="sect" id="placeSect"><summary>Place the house <span id="placeBadge" class="help"></span></summary>
+    <p class="help" id="placeSum"></p>
+    <label>Where plan point (0, 0) is
+      <small>Type or paste a position in any form: <code>59.33, 18.07</code> · <code>59°19.8′N 18°4.1′E</code> · <code>N 6580743, E 674572</code> (SWEREF 99 TM) · a link from a maps app. Empty = not placed.</small>
+      <input id="placePos" autocomplete="off" placeholder="59.33, 18.07"></label>
+    <div id="placeSays" class="help"></div>
+    <label>Plan north is rotated <input id="north" inputmode="decimal" placeholder="0" style="width:90px;display:inline-block" autocomplete="off"> ° clockwise from true north
+      <small>Pick any direction as "plan north" (e.g. along the front wall) and enter how far it is from real north; the plan stays in the house's own axes.</small></label>
+    <details class="sect"><summary>…or from a wall and a compass bearing</summary>
+      <label>Wall (runs from its start to its end, in plan millimetres)<select id="placeWall"></select></label>
+      <label>Compass bearing of the direction from its start to its end <input id="placeBearing" inputmode="decimal" placeholder="e.g. 28" style="width:90px;display:inline-block" autocomplete="off"> ° <small>0 = north, 90 = east, 180 = south, 270 = west</small></label>
+      <button type="button" id="placeUseWall">Work out the north angle</button>
+    </details>
+    <div id="placeDial" title="The plan's axes and true north"></div>
+    <label>Ground-floor finished floor <input id="placeHeight" inputmode="decimal" placeholder="e.g. 42.5" style="width:110px;display:inline-block" autocomplete="off"> m above sea level (RH 2000)
+      <small>The height of the finished floor of the ground floor, which is the plan's zero. Measured or read from a drawing, never guessed.</small></label>
+    <div style="margin-top:6px"><button type="button" class="primary" id="placeApply">Apply</button> <button type="button" id="placeRevert">Revert</button> <span id="placeMsg" class="help"></span></div>
   </details>
   </div>
   <div id="edit" hidden>
