@@ -22,6 +22,19 @@ card as a dashboard resource itself. In a dashboard choose **Add card, Plantern*
 dashboard is in YAML mode, or Home Assistant refuses the automatic step, the add-on log tells you the resource to
 add by hand (Settings, Dashboards, Resources: `/local/plantern/src/card/plantern-card.js`, JavaScript module).
 
+The card has a **2D / 3D** switch in its header and fills the space the dashboard gives it (use a panel view or a
+sized grid cell to make it big). In the card's editor, or in YAML:
+
+```yaml
+type: custom:plantern-card
+location: /local/plantern/locations/<house>/location.json
+view: 3d                # or 2d (default): what it opens on
+levels: [ground, upper] # only these floors: one = just that floor; several = shown together (no picker)
+cycle: 8                # with several floors: one at a time, this many seconds each (a slideshow)
+background: transparent # dark (default), card (the theme's card colour) or transparent (the dashboard shows through)
+height: 600             # the least height in pixels (default 420)
+```
+
 Files in `/local` are served without login, so anyone who can reach your Home Assistant's address sees the plans
 of the houses listed in Plantern (not the Storage page, tokens or keys).
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.3
+
+- The dashboard card has a 2D / 3D switch, a background choice (dark, card colour, transparent) and fills the space the dashboard gives it.
+- Floors in the card are pills instead of a dropdown. Choose which floors the card shows: one, several together, or a slideshow (seconds per floor).
+
+## 0.1.2
+
+- The add-on log now starts every line with a date and time.
+
 ## 0.1.1
 
 - Fix: the dashboard card is now published to the right folder (/homeassistant/www/plantern in current Home Assistant), so it shows up under Add card.

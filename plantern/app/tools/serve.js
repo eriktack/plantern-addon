@@ -5,6 +5,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPlanternServer } from './server.js';
 import { startupLines } from './net.js';
+import { stampConsole, wantsTimestamps } from './log.js';
+
+if (wantsTimestamps()) stampConsole();
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.argv[2] || process.env.PORT || 3000);
