@@ -271,6 +271,8 @@ export function openingToForm(o, top, where = {}) {
     height: guess('sill') || guess('head') ? '' : String(o.head - o.sill), below: guess('head') ? '' : String(top - o.head),
     hinge: o.leaves === 2 ? 'both' : (isSliding(o) ? o.slide : o.hinge) ?? 'near', swing: o.swing ?? 'right', opens: o.opens ?? (o.type === 'door' ? 'swing' : 'fixed'), measured: !still.length,
     thickness: o.thickness === undefined ? '' : String(o.thickness),
+    // how the unit looks (decision 124)
+    colorUse: !!o.color, color: o.color ?? '', placement: o.placement ?? '', sillDepth: o.sillDepth === undefined ? '' : String(o.sillDepth), sillColorUse: !!o.sillColor, sillColor: o.sillColor ?? '',
     // shown in empty fields: clearly a default, not a value
     placeholders: Object.fromEntries(Object.entries({ offset: pos, width: o.width, sill: o.sill, head: o.head, height: o.head - o.sill, below: top - o.head }).map(([k, v]) => [k, `${v} · default`])),
   };
@@ -332,6 +334,18 @@ export function openingPropsFromForm(o, form, top, where = {}) {
   }
   if (type !== 'passage' && changed('thickness')) { const v = num('thickness'); if (v !== undefined) props.thickness = v; }
   if (type === 'window' && form.opens !== before.opens) props.opens = form.opens;
+  // the look: a colour (the checkbox says whether it is its own), where it sits across the wall, a window's sill board; null removes
+  const keep = (k, v) => { if ((o[k] ?? null) !== (v ?? null)) props[k] = v ?? null; };
+  if (type === 'passage') { for (const k of ['color', 'placement', 'sillDepth', 'sillColor']) keep(k, null); }
+  else {
+    keep('color', form.colorUse ? form.color : null);
+    keep('placement', form.placement && form.placement !== 'middle' ? form.placement : null);
+    if (type === 'window') {
+      const t = String(form.sillDepth ?? '').trim();
+      if (t === '') keep('sillDepth', null); else { const v = Number(t); if (Number.isFinite(v)) keep('sillDepth', v); else errors.push(`sillDepth: "${form.sillDepth}" is not a number of mm`); }
+      keep('sillColor', form.sillColorUse && t !== '' ? form.sillColor : null);
+    } else for (const k of ['sillDepth', 'sillColor']) keep(k, null);
+  }
   if (type !== 'door' && o.slide !== undefined) props.slide = null;
   if (form.measured) for (const k of openingAssumed(o)) if (props[k] === undefined) props[k] = o[k];
   return { props, errors };

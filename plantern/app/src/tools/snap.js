@@ -31,7 +31,11 @@ export function collectSnapPoints(model, level, geo) {
     (geo.objectFootprint(o) || []).forEach((p, i) => P(`${o.id}#c${i}`, p, 'object corner', 2));
     if (o.attach) P(`${o.id}#attach`, geo.resolveAttach(o.attach)?.p, 'attach point', 1);
   }
-  for (const fx of level.fixtures || []) P(`${fx.id}#${fx.attach ? 'attach' : 'pos'}`, geo.fixturePos(fx), 'fixture', 1);
+  for (const fx of level.fixtures || []) {
+    P(`${fx.id}#${fx.attach ? 'attach' : 'pos'}`, geo.fixturePos(fx), 'fixture', 1);        // (an LED strip: its middle)
+    const line = geo.fixtureLine?.(fx);
+    if (line) { P(`${fx.id}#a`, line[0], 'fixture', 1); P(`${fx.id}#b`, line[line.length - 1], 'fixture', 1); }   // a strip's two ends
+  }
   // stairs: the corners of what they cover (when the level's geometry has them worked out, buildModelGeometry)
   for (const s of geo.stairs || []) (s.layout?.outline || []).forEach((p, i) => P(`${s.id}#p${i}`, p, 'stairs corner', 2));
   for (const an of model.anchors || []) {

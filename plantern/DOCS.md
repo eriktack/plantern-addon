@@ -17,7 +17,7 @@ entry works without it.
 
 ## The dashboard card
 
-The add-on copies the card and your houses to `/config/www/plantern/` (served as `/local/plantern/`) and adds the
+The add-on copies the card and your houses to `/homeassistant/www/plantern/` (`/config` in older Home Assistant) (served as `/local/plantern/`) and adds the
 card as a dashboard resource itself. In a dashboard choose **Add card, Plantern** and pick a house. If the
 dashboard is in YAML mode, or Home Assistant refuses the automatic step, the add-on log tells you the resource to
 add by hand (Settings, Dashboards, Resources: `/local/plantern/src/card/plantern-card.js`, JavaScript module).

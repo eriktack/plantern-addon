@@ -24,7 +24,22 @@ export async function writeAtomic(file, text, mode) {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
   await fs.writeFile(tmp, text, mode ? { encoding: 'utf8', mode } : 'utf8');
-  await fs.rename(tmp, file);
+  await renameRetry(tmp, file);
+}
+
+/**
+ * fs.rename that tries again when Windows says the target is busy for a moment (EPERM / EBUSY / EACCES: a virus scanner,
+ * the indexer or a file watcher holds it): a save then goes through instead of failing on a lock that is gone a moment
+ * later. After the last try the temporary file is removed and the error is thrown. `rename` and `wait` can be replaced (tests).
+ */
+export async function renameRetry(from, to, { tries = 6, rename = fs.rename, wait = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
+  for (let i = 1; ; i++) {
+    try { return await rename(from, to); }
+    catch (e) {
+      if (!['EPERM', 'EBUSY', 'EACCES'].includes(e.code) || i >= tries) { await fs.rm(from, { force: true }).catch(() => {}); throw e; }
+      await wait(25 * 2 ** (i - 1));
+    }
+  }
 }
 
 /** { stores: [...], showDemo } with defaults. */

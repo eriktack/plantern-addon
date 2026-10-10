@@ -2,11 +2,11 @@
 // entities fit a fixture (by kind and by how its name and room read against the entity's id and
 // friendly name), and the binding written into location.json → bindings.
 
-const DOMAINS = { lamp: ['light', 'switch'], switch: ['switch', 'light', 'input_boolean'] };
+const DOMAINS = { lamp: ['light', 'switch'], strip: ['light', 'switch'], switch: ['switch', 'light', 'input_boolean'] };
 const words = s => String(s ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9åäöæø]+/).filter(w => w.length > 1);
 
 /**
- * The entities that fit a fixture, best first: [{ id, label, score }]. kind 'lamp' | 'switch';
+ * The entities that fit a fixture, best first: [{ id, label, score }]. kind 'lamp' | 'strip' | 'switch';
  * names: words to match (the fixture's name, its room's name, the room's HA area).
  */
 export function suggestEntities(states, { kind = 'lamp', names = [] } = {}) {
@@ -31,3 +31,7 @@ export function setBinding(location, id, { entity, controls, look } = {}) {
   if (Object.keys(b).length) bindings[id] = b; else delete bindings[id];
   return { ...location, bindings };
 }
+
+const canon = v => (Array.isArray(v) ? `[${v.map(canon)}]` : v && typeof v === 'object' ? `{${Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canon(v[k])}`)}}` : JSON.stringify(v ?? null));
+/** Do two versions of location.json hold the same binding for fixture `id`? (key order does not matter) */
+export const sameBinding = (a, b, id) => canon(a.bindings?.[id]) === canon(b.bindings?.[id]);

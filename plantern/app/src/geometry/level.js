@@ -1,4 +1,6 @@
 import { add, mul } from './vec.js';
+import { polylineMid } from './strip.js';
+import { fixtureHeight, stripForm } from '../model/fixtures.js';
 import { openingSymbol } from './openings.js';
 import { wallFrame, wallJoins, wallPieces, hasBody, facePoint, centrePoint, wallProfile } from './walls.js';
 import { cutWallPieces } from './solids.js';
@@ -27,7 +29,38 @@ export function buildLevelGeometry(level) {
     return { wall: w, frame: f, side, dir, p: add(facePoint(w, f, side, at.offset), mul(dir, at.gap || 0)) };
   }
 
-  const fixturePos = fx => (fx.attach ? resolveAttach(fx.attach)?.p : fx.pos) ?? null;
+  /**
+   * The polyline of an LED strip (decisions 121, 122): along a wall face from attach.offset for attach.length; along one side
+   * (attach.edge) of an object's footprint; or along an opening's width on the wall face (attach.side). It is worked out here, from
+   * what the strip is attached to, so it follows it. null for other fixtures and when the target is missing.
+   */
+  function fixtureLine(fx) {
+    const form = stripForm(fx);
+    if (form === 'wall') {
+      const a = resolveAttach(fx.attach), b = resolveAttach({ ...fx.attach, offset: fx.attach.offset + (fx.attach.length || 0) });
+      return a && b ? [a.p, b.p] : null;
+    }
+    if (form === 'object') {
+      const ob = (level.objects || []).find(x => x.id === fx.attach.object), fp = ob && objectFootprint(ob);
+      if (!fp || fp.length < 2) return null;
+      // along one side of the footprint, optionally only from attach.offset for attach.length and set back attach.inset towards the middle
+      const p = fp[fx.attach.edge % fp.length], q = fp[(fx.attach.edge + 1) % fp.length], L = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+      const u = [(q[0] - p[0]) / L, (q[1] - p[1]) / L], c = [fp.reduce((s, v) => s + v[0], 0) / fp.length, fp.reduce((s, v) => s + v[1], 0) / fp.length];
+      let n = [-u[1], u[0]];
+      if (n[0] * (c[0] - (p[0] + q[0]) / 2) + n[1] * (c[1] - (p[1] + q[1]) / 2) < 0) n = [-n[0], -n[1]];
+      const off = Math.min(Math.max(fx.attach.offset ?? 0, 0), L), len = Math.min(fx.attach.length ?? L - off, L - off), inset = fx.attach.inset ?? 0;
+      const a = [p[0] + u[0] * off + n[0] * inset, p[1] + u[1] * off + n[1] * inset];
+      return [a, [a[0] + u[0] * len, a[1] + u[1] * len]];
+    }
+    if (form === 'opening') {
+      const o = (level.openings || []).find(x => x.id === fx.attach.opening);
+      const a = o && resolveAttach({ wall: o.wall, side: fx.attach.side, offset: o.offset }), b = o && resolveAttach({ wall: o.wall, side: fx.attach.side, offset: o.offset + o.width });
+      return a && b ? [a.p, b.p] : null;
+    }
+    return null;
+  }
+  const fixtureZ = fx => fixtureHeight(fx, level);
+  const fixturePos = fx => (fx.kind === 'strip' ? (fixtureLine(fx) && polylineMid(fixtureLine(fx))) : fx.attach ? resolveAttach(fx.attach)?.p : fx.pos) ?? null;
 
   /** Footprint of an attached box object: width along the wall, depth away from the face. */
   function objectFootprint(o) {
@@ -48,7 +81,7 @@ export function buildLevelGeometry(level) {
     return [centrePoint(w, f, o.offset), centrePoint(w, f, o.offset + o.width)];
   }
 
-  return { level, walls, wallById, frames, caps, pieces, issues, resolveAttach, fixturePos, objectFootprint, openingLine };
+  return { level, walls, wallById, frames, caps, pieces, issues, resolveAttach, fixturePos, fixtureLine, fixtureZ, objectFootprint, openingLine };
 }
 
 /**

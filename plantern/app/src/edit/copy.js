@@ -171,8 +171,13 @@ export function duplicate(model, levelId, kind, id, options = {}) {
     if (!x) return no(`no fixture "${id}"`);
     const spec = { ...fixtureSpecFrom(x), ...named(x, lv.fixtures) };
     let r;
-    if (x.attach) {
-      for (const offset of [x.attach.offset + 300, x.attach.offset - 300]) {
+    if (x.kind === 'strip' && x.attach.object !== undefined) {                          // another side of the same object (not on top of it)
+      r = addFixture(model, levelId, { ...spec, attach: { ...x.attach, edge: (x.attach.edge + 2) % 4 } }, options);
+    } else if (x.kind === 'strip' && x.attach.opening !== undefined && x.attach.wall === undefined) {  // the other edge of the window
+      r = addFixture(model, levelId, { ...spec, attach: { ...x.attach, at: x.attach.at === 'head' ? 'sill' : 'head' } }, options);
+    } else if (x.attach) {
+      const gap = x.attach.length ? x.attach.length + 100 : 300;                      // a strip beside itself, not on top
+      for (const offset of [x.attach.offset + gap, x.attach.offset - gap]) {
         if (offset < 0) continue;
         r = addFixture(model, levelId, { ...spec, attach: { ...x.attach, offset } }, options);
         if (!r.report.errors.length) break;

@@ -1,6 +1,7 @@
 // Openings (doors, windows, passages; PLANTERN.md §6.1): the rules an opening must meet. Pure.
 
 import { wallProfile } from '../geometry/walls.js';
+import { PLACEMENTS } from '../geometry/fittings.js';
 
 export const OPENING_TYPES = ['door', 'window', 'passage'];
 export const WINDOW_OPENS = ['fixed', 'side-hung', 'top-hung', 'bottom-hung', 'tilt-turn', 'sliding'];
@@ -58,6 +59,12 @@ export function checkOpening(o, wall, level, others = []) {
     else if (!(o.thickness > 0)) err.push('thickness must be more than 0');
     else if (wall.thickness && o.thickness > wall.thickness + 1) err.push(`the ${o.type} (${o.thickness} mm) is thicker than the wall (${wall.thickness} mm)`);
   }
+  // how the unit looks (3D, and where it sits across the wall in the plan): colour, placement, a window's sill board
+  const hex = v => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
+  if (o.color !== undefined && (o.type === 'passage' || !hex(o.color))) err.push(o.type === 'passage' ? 'a passage has no colour (nothing is in it)' : 'color must look like #rrggbb');
+  if (o.placement !== undefined && (o.type === 'passage' || !PLACEMENTS.includes(o.placement))) err.push(o.type === 'passage' ? 'a passage has no placement (it is as deep as the wall)' : `placement must be ${PLACEMENTS.map(p => `"${p}"`).join(', ')}`);
+  if (o.sillDepth !== undefined && (o.type !== 'window' || !(o.sillDepth >= 0))) err.push(o.type !== 'window' ? 'sillDepth is for windows' : 'sillDepth must be 0 or more (mm)');
+  if (o.sillColor !== undefined && (o.type !== 'window' || !hex(o.sillColor))) err.push(o.type !== 'window' ? 'sillColor is for windows' : 'sillColor must look like #rrggbb');
   return err;
 }
 

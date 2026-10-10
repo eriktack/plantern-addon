@@ -16,7 +16,7 @@ import path from 'node:path';
 import { checkWritablePath } from '../src/model/save.js';
 import { formatJson } from '../src/model/format.js';
 import { Registry } from './store/registry.js';
-import { defaultDataDir } from './store/settings.js';
+import { defaultDataDir, renameRetry } from './store/settings.js';
 import { houseApi, readJsonBody, sameOrigin, writeGuard } from './store/api.js';
 import { createHaHub, haApi, supervisorFromEnv } from './ha/api.js';
 import { createPublisher, publishDir } from './ha/publish.js';
@@ -72,7 +72,7 @@ async function handleSave(root, req, res) {
     await fs.mkdir(path.dirname(file), { recursive: true });
     const tmp = `${file}.tmp-${process.pid}`;
     await fs.writeFile(tmp, text, 'utf8');
-    await fs.rename(tmp, file);                                  // atomic: a reader never sees half a file
+    await renameRetry(tmp, file);                                // atomic: a reader never sees half a file
   } catch (e) { return send(res, 500, { error: `could not write ${rel}: ${e.message}` }); }
   send(res, 200, { ok: true, path: rel });
 }
@@ -123,7 +123,7 @@ export function createPlanternServer(root, { env = process.env, dataDir = defaul
     const explicit = publishTo !== publishDir({ SUPERVISOR_TOKEN: env.SUPERVISOR_TOKEN });
     // the default folder is inside the add-on's /config mapping: without the mapping there is nothing to publish to
     const mapped = explicit ? Promise.resolve() : fs.access(path.dirname(path.dirname(publishTo)));
-    server.published = mapped.then(() => publisher.start(), () => { console.log('Plantern card: the add-on has no access to the Home Assistant config folder (/config), so the card is not published. Check the add-on is up to date.'); publisher = null; });
+    server.published = mapped.then(() => publisher.start(), () => { console.log('Plantern card: the add-on has no access to the Home Assistant config folder (/homeassistant or /config), so the card is not published. Check the add-on is up to date.'); publisher = null; });
   }
   server.registry = registry; server.ha = ha; server.publisher = () => publisher;
   server.on('close', () => { publisher?.stop(); registry.close(); ha.close(); });

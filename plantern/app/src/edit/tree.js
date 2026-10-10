@@ -25,7 +25,7 @@ export function levelTree(level) {
   const wallAt = (w, s) => { const L = len(w.a, w.b) || 1; return [w.a[0] + (w.b[0] - w.a[0]) * s / L, w.a[1] + (w.b[1] - w.a[1]) * s / L]; };
   const objectLabel = o => o.name || (o.attach ? 'wall object' : 'object');
   const objectNode = (o, key) => ({ key, kind: 'object', id: o.id, label: objectLabel(o), note: `${o.id} · ${o.size.map(Math.round).join('×')}`, warn: !!o.assumed?.length, children: [] });
-  const fixtureKind = x => x.kind === 'switch' ? 'switch' : x.attach ? 'wall lamp' : 'lamp';
+  const fixtureKind = x => x.kind === 'switch' ? 'switch' : x.kind === 'strip' ? 'LED strip' : x.attach ? 'wall lamp' : 'lamp';
   // a friendly name is the label, with what it is and its id beside it
   const fixtureLabel = x => x.name || fixtureKind(x), fixtureNote = x => x.name ? `${fixtureKind(x)} · ${x.id}` : x.id;
   const thingsOn = (w, keep) => [

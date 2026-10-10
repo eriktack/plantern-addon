@@ -10,16 +10,19 @@
 
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
+import { promises as fs, existsSync } from 'node:fs';
 import { writeAtomic } from '../store/settings.js';
 import { connectWithin } from './bridge.js';
 
 export const CARD_ENTRY = 'src/card/plantern-card.js';
 export const BUILTIN_CONNECTION = 'home_assistant';
 
-/** Where to publish: PLANTERN_PUBLISH_DIR, else /config/www/plantern when running as an add-on, else nowhere. */
-export function publishDir(env = process.env) {
-  return env.PLANTERN_PUBLISH_DIR || (env.SUPERVISOR_TOKEN ? '/config/www/plantern' : null);
+/** Where to publish: PLANTERN_PUBLISH_DIR, else Home Assistant's config folder as an add-on (/homeassistant, where the
+    `homeassistant_config` mapping puts it; /config in older setups), else nowhere. */
+export function publishDir(env = process.env, exists = existsSync) {
+  if (env.PLANTERN_PUBLISH_DIR) return env.PLANTERN_PUBLISH_DIR;
+  if (!env.SUPERVISOR_TOKEN) return null;
+  return exists('/homeassistant') ? '/homeassistant/www/plantern' : '/config/www/plantern';
 }
 
 const IMPORT = /(?:\bfrom\s*|\bimport\s*\(?\s*)['"](\.{1,2}\/[^'"]+)['"]/g;

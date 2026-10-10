@@ -90,10 +90,10 @@ async function main() {
     view3d?.setFixture(fx.id, a);
   }
   // the 3D view can show several levels: their lamps and switches are all live
-  let stackMode = STACK_MODES.includes(readPrefs().stack) ? readPrefs().stack : 'this', exploded = !!readPrefs().exploded;
+  let stackMode = STACK_MODES.includes(readPrefs().stack) ? readPrefs().stack : 'this', exploded = !!readPrefs().exploded, ceilings = !!readPrefs().ceilings;
   const shownLevels = () => levelStack(model, level, stackMode, exploded).map(s => ({ ...s, geo: geos.get(s.level.id) }));
   const refreshFixtures = () => shownLevels().forEach(s => s.level.fixtures?.forEach(applyFixture));
-  const build3d = () => view3d.build({ level, geo: state().geo, levels: shownLevels(), settings: state().settings, fixtureLabel, ...looks });
+  const build3d = () => view3d.build({ level, geo: state().geo, levels: shownLevels(), settings: state().settings, fixtureLabel, ceilings, ...looks });
 
   async function toggleFixture(fx) {
     const r = toggleCalls(bindings, id => ha.getState(id), fx);
@@ -196,9 +196,9 @@ async function main() {
   const keepCamera = cam => { if (level) writePrefs({ projection: cam.projection, cameras: { [cameraKey(locId, level.id)]: cam } }); };
   document.querySelectorAll('#viewbar button').forEach(b => (b.onclick = () => setView(b.dataset.view)));
   $('stackRow').hidden = model.levels.length < 2;
-  $('stackMode').value = stackMode; $('exploded').checked = exploded;
-  const restack = () => { stackMode = $('stackMode').value; exploded = $('exploded').checked; writePrefs({ stack: stackMode, exploded }); if (!view3d) return; build3d(); view3d.resetView(); refreshFixtures(); };
-  $('stackMode').onchange = restack; $('exploded').onchange = restack;
+  $('stackMode').value = stackMode; $('exploded').checked = exploded; $('ceilings').checked = ceilings;
+  const restack = () => { stackMode = $('stackMode').value; exploded = $('exploded').checked; ceilings = $('ceilings').checked; writePrefs({ stack: stackMode, exploded, ceilings }); if (!view3d) return; build3d(); view3d.resetView(); refreshFixtures(); };
+  $('stackMode').onchange = restack; $('exploded').onchange = restack; $('ceilings').onchange = restack;
   // shadows: a level per kind of device (the house's settings), changed with the slider and remembered in this browser
   const device = globalThis.matchMedia?.('(pointer: coarse)').matches ? 'mobile' : 'desktop';
   $('shadowDev').textContent = device === 'mobile' ? 'on this phone or tablet' : 'on this computer';
@@ -232,12 +232,13 @@ async function main() {
   for (const id of boundEntities(loc)) {
     const d = document.createElement('div');
     d.className = 'row';
-    // the lamps' friendly names when they have them, the entity id beside
+    // what a person reads: the name of the lamp in the plan, else Home Assistant's friendly name (filled in below), else the id;
+    // the entity id and its state are in the tooltip, not on the row
     const named = model.levels.flatMap(l => l.fixtures || []).filter(fx => bindings[fx.id]?.entity === id && fx.name).map(fx => fx.name);
-    d.innerHTML = `<label><input type="checkbox"> ${named.length ? `${esc(named.join(', '))} <small>${esc(id)}</small>` : esc(id)}</label>${id.startsWith('light.') ? '<input type="range" min="1" max="255">' : ''}`;
+    d.innerHTML = `<div class="ent"><span class="nm">${esc(named.join(', ') || id)}</span><label class="sw"><input type="checkbox" role="switch" aria-label="${esc(named.join(', ') || id)}"><span class="knob"></span></label></div>${id.startsWith('light.') ? '<input type="range" min="1" max="255" aria-label="Brightness">' : ''}`;
     $('ents').appendChild(d);
     const [cb, rg] = d.querySelectorAll('input');
-    rows[id] = { d, cb, rg };
+    rows[id] = { d, cb, rg, nm: d.querySelector('.nm'), named: named.length > 0 };
     const domain = id.split('.')[0], call = (svc, data) => ha.callService(domain, svc, data, { entity_id: id }).catch(e => status(`HA: ${e.message}`));
     cb.onchange = () => call(cb.checked ? 'turn_on' : 'turn_off', {});
     if (rg) rg.onchange = () => call('turn_on', { brightness: +rg.value });
@@ -248,7 +249,8 @@ async function main() {
     if (!r) return;
     const s = ha.getState(id), a = appearance(s);
     r.d.classList.toggle('missing', !a.available);
-    r.d.title = s ? s.state : 'not found in HA';
+    if (!r.named && s?.attributes?.friendly_name) { r.nm.textContent = s.attributes.friendly_name; r.cb.setAttribute('aria-label', s.attributes.friendly_name); }
+    r.nm.title = `${id} · ${s ? s.state : 'not found in HA'}`;
     r.cb.disabled = !a.available;
     r.cb.checked = a.on;
     if (r.rg) { r.rg.disabled = !a.on; r.rg.value = s?.attributes?.brightness ?? 255; }

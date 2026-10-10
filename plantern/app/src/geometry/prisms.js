@@ -5,16 +5,19 @@ import { solidStretches, solidTop, clipConvex, quadOrder } from './solids.js';
 import { solidCircle } from './circle.js';
 import { wallLookPieces } from './paint.js';
 import { pointInPolygon } from './polygon.js';
-import { stairSolids } from './stairs.js';
+import { stairSolids, stairRails } from './stairs.js';
+import { openingFittings } from './fittings.js';
+import { roomCeiling } from '../model/rooms.js';
 
 /** Default colours; model colours (sides.*.color, solid/object color) win. */
 export const DEFAULT_COLORS = Object.freeze({
   wall: '#e6e2da', wallTop: '#9a958c', railing: '#3a3d42', glass: '#9fd3ff',
-  floor: '#c8b293', floorExterior: '#8f8f86', solid: '#6b4f3a', object: '#888888', stair: '#b59f7e',
+  ceiling: '#f2efe8', floor: '#c8b293', floorExterior: '#8f8f86', solid: '#6b4f3a', object: '#888888', stair: '#b59f7e', handrail: '#6b5442',
 });
 
 const RAIL_CAP = 50;   // mm: solid top rail of a railing
 const SEEN_BELOW = 600; // mm: how far below a floor the stairs seen through its opening are drawn
+const CEILING = 30;     // mm: thickness of a ceiling plate, above the ceiling line
 const PAINT = 3;       // mm: the paint skin on a solid's face where a room has its own look for it
 
 /**
@@ -23,13 +26,16 @@ const PAINT = 3;       // mm: the paint skin on a solid's face where a room has 
  * Prism: { id, kind, poly, z0, z1, color, sides?: { left, right, other, n, u, tex? }, slope?, opacity? }
  *   slope (sloped walls): { top?, bottom? }, each { origin, u, L, a, b }: the height runs straight from
  *   a (at origin) to b (L mm along u); z0 / z1 are then the lowest and highest points.
- *   kind: floor | wall | railing | rail | glass | solid | paint | object
+ *   kind: floor | ceiling | wall | railing | rail | glass | frame | leaf | sill | handrail | post | solid | paint | object
+ *   frame, leaf, sill, glass: what fills an opening (geometry/fittings.js)
  *   paint: a thin skin on the stretch of a solid's face along a room painted for that room (solids[].sides)
  *   sides: colours of the wall's left / right faces (and top and ends), n = its left normal, u = its
  *   direction; tex = { left?, right? } { texture, uvScale } when that side's material has an image.
  * `materials` = the model's materials table (sides may name one instead of a colour).
+ * `options.ceilings`: draw a ceiling plate over every indoor room (default: only over rooms with their own lower ceiling, translucent,
+ * so the lamps under them still show from above; decision 127).
  */
-export function levelPrisms(level, geo, materials = {}) {
+export function levelPrisms(level, geo, materials = {}, options = {}) {
   const out = [], P = p => out.push(p);
   const ft = level.floorThickness ?? 0;
 
@@ -42,10 +48,22 @@ export function levelPrisms(level, geo, materials = {}) {
         color: r.floorColor || (r.exterior ? DEFAULT_COLORS.floorExterior : DEFAULT_COLORS.floor), ...(holes.length ? { holes } : {}) });
   }
 
+  // ceilings: a room with its own lower ceiling always has its plate (translucent, so it can be seen through from above); with
+  // `options.ceilings` every indoor room has one, opaque (for a view from inside)
+  for (const r of level.rooms || []) {
+    if (r.exterior || !(r.polygon?.length >= 3)) continue;
+    const lowered = Number.isFinite(r.ceilingHeight) && r.ceilingHeight < (level.ceilingHeight ?? 2400) - 1;
+    if (!lowered && !options.ceilings) continue;
+    const top = roomCeiling(level, r);
+    P({ id: r.id, kind: 'ceiling', poly: r.polygon, z0: top, z1: top + CEILING, color: r.ceilingColor || DEFAULT_COLORS.ceiling, ...(options.ceilings ? {} : { opacity: 0.45 }) });
+  }
+
   // stairs starting here: one block per step from the floor up to its surface (open undersides: a thin tread)
   for (const s of geo.stairs || []) {
     if (!s.layout) continue;
     for (const b of stairSolids(s.layout, s.stairs)) P({ id: s.id, kind: 'stair', ...b, color: DEFAULT_COLORS.stair });
+    // its handrail and posts (decision 125)
+    for (const { rail, post, ...b } of stairRails(s.layout, s.stairs)) P({ id: s.id, kind: post ? 'post' : 'handrail', ...b, color: DEFAULT_COLORS.handrail });
   }
   // stairs arriving from below: the steps seen through the opening in this floor, from their own floor up (below this level's floor)
   const seen = new Set();
@@ -122,10 +140,8 @@ export function levelPrisms(level, geo, materials = {}) {
       if (sill > lowAt) for (const lp of looks([quad])) for (const sp of slopeParts([lp.poly])) P({ id: o.id, kind: 'wall', poly: sp.poly, z0, z1: sill, color: lp.sides.right, sides: lp.sides, ...(prof.sloped && !onFloor ? { slope: { bottom: lineOf('bottom', sp.s) } } : {}) });
       else if (z0 < base) P({ id: o.id, kind: 'floor', poly: quad, z0, z1: base, color: DEFAULT_COLORS.floor });
       if (head < highAt || (prof.sloped && head < top)) for (const lp of looks([quad])) for (const sp of slopeParts([lp.poly])) P({ id: o.id, kind: 'wall', poly: sp.poly, z0: head, z1: top, color: lp.sides.right, sides: lp.sides, ...(prof.sloped ? { slope: { top: lineOf('top', sp.s) } } : {}) });
-      if (o.type === 'window' && head > sill) {
-        const c0 = centrePoint(w, f, s0), c1 = centrePoint(w, f, s1), d = mul(f.n, 10);
-        P({ id: o.id, kind: 'glass', poly: [add(c0, d), add(c1, d), add(c1, mul(d, -1)), add(c0, mul(d, -1))], z0: sill, z1: head, color: DEFAULT_COLORS.glass, opacity: 0.25 });
-      }
+      // what fills the opening: a window's frame, sash, glass and sill board; a door's casing and closed leaf (geometry/fittings.js)
+      for (const fit of openingFittings(w, f, { ...o, sill, head })) P(fit);
     }
   }
 

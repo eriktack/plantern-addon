@@ -19,7 +19,7 @@ import { anchorStatus, newAnchorId } from '../model/anchors.js';
 import { isShared, edgeOfRef } from '../geometry/bound.js';
 import { wallProfile } from '../geometry/walls.js';
 import { OPENING_TYPES, OPENING_DEFAULTS, checkOpening, openingAssumed, DOOR_OPENS, WINDOW_OPENS } from '../model/openings.js';
-import { FIXTURE_KINDS, FIXTURE_DEFAULTS, checkFixture } from '../model/fixtures.js';
+import { FIXTURE_KINDS, FIXTURE_DEFAULTS, checkFixture, stripForm } from '../model/fixtures.js';
 import { checkMaterials, materialUse } from '../model/materials.js';
 import { checkSolid } from '../model/solids.js';
 import { checkStairs } from '../model/stairs.js';
@@ -292,7 +292,8 @@ export const blockingErrors = report => (report.issues || []).filter(i => i.seve
 export function deleteWall(model, levelId, wallId, options = {}) {
   const lv = levelOf(model, levelId), w = lv?.walls?.find(x => x.id === wallId);
   if (!w) return refuse(model, `no wall "${wallId}" on level "${levelId}"`);
-  const held = [...(lv.objects || []), ...(lv.fixtures || [])].filter(x => x.attach?.wall === wallId).map(x => x.id);
+  const gone = new Set((lv.openings || []).filter(o => o.wall === wallId).map(o => o.id));
+  const held = [...(lv.objects || []), ...(lv.fixtures || [])].filter(x => x.attach?.wall === wallId || (x.kind === 'strip' && gone.has(x.attach?.opening))).map(x => x.id);
   if (held.length) return refuse(model, `${wallId}: ${held.join(', ')} ${held.length > 1 ? 'are' : 'is'} attached to it; move or delete ${held.length > 1 ? 'them' : 'it'} first`);
   const removedOpenings = (lv.openings || []).filter(o => o.wall === wallId).map(o => o.id);
   const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, walls: l.walls.filter(x => x.id !== wallId), ...(l.openings ? { openings: l.openings.filter(o => o.wall !== wallId) } : {}) });
@@ -710,15 +711,23 @@ export function setOpening(model, levelId, id, props, options = {}) {
 export function deleteOpening(model, levelId, id, options = {}) {
   const lv = levelOf(model, levelId);
   if (!lv?.openings?.some(x => x.id === id)) return refuse(model, `no opening "${id}" on level "${levelId}"`);
-  const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, openings: l.openings.filter(x => x.id !== id) });
-  return finish({ ...model, levels }, levelId, {}, options);
+  const held = (lv.fixtures || []).filter(x => x.kind === 'strip' && x.attach?.opening === id && x.attach.wall === undefined).map(x => x.id);
+  if (held.length) return refuse(model, `${id}: ${held.join(', ')} ${held.length > 1 ? 'are' : 'is'} attached to it; delete ${held.length > 1 ? 'them' : 'it'} first`);
+  // lamps that stood in it stay on the wall face (they only lose the "stands in" link)
+  const freed = (lv.fixtures || []).filter(x => x.attach?.opening === id).map(x => x.id);
+  const levels = model.levels.map(l => l.id !== levelId ? l : {
+    ...l, openings: l.openings.filter(x => x.id !== id),
+    ...(freed.length ? { fixtures: l.fixtures.map(x => { if (x.attach?.opening !== id) return x; const { opening: _o, ...attach } = x.attach; return { ...x, attach }; }) } : {}),
+  });
+  return finish({ ...model, levels }, levelId, {}, options, { freed });
 }
 
 // ---- fixtures (lamps, switches; PLANTERN.md §6.1) ----------------------------------------------
 
 /**
- * Add a lamp or switch. spec = { kind, pos?: [x, y] | attach?: { wall, side?, offset, gap? }, z?,
- * radius? }. A wall fixture's side defaults to the room side of the wall (the right of a wall made
+ * Add a lamp, switch or LED strip. spec = { kind, pos?: [x, y] | attach?: { wall, side?, offset, gap?, length? (a strip) }, z?, radius? }.
+ * A strip is attached to a wall (`wall`, `offset`, `length`), an object (`object`, `edge` 0-3, `at` bottom | top) or an opening
+ * (`opening`, `side`, `at` sill | head), so it follows it; on an object or an opening its height comes from that (no `z`). A wall fixture's side defaults to the room side of the wall (the right of a wall made
  * from a room edge); a ceiling lamp's z defaults to the ceiling. Heights not given are listed in
  * `assumed`. Returns { model, report, fixture }.
  */
@@ -730,13 +739,18 @@ export function addFixture(model, levelId, spec = {}, options = {}) {
   const used = new Set(model.levels.flatMap(l => (l.fixtures || []).map(f => f.id)));
   let n = 1; while (used.has(`f_${kind}_${n}`)) n++;
   const fx = { id: `f_${kind}_${n}`, ...(spec.name ? { name: String(spec.name).trim() } : {}), kind };
-  if (spec.attach) fx.attach = { side: 'right', ...spec.attach };
+  const form = stripForm({ kind, attach: spec.attach });
+  if (form === 'object') fx.attach = { object: spec.attach.object, edge: spec.attach.edge ?? 0, at: spec.attach.at ?? 'bottom', ...(spec.attach.offset ? { offset: spec.attach.offset } : {}), ...(spec.attach.length !== undefined ? { length: spec.attach.length } : {}), ...(spec.attach.inset ? { inset: spec.attach.inset } : {}) };
+  else if (form === 'opening') fx.attach = { opening: spec.attach.opening, side: spec.attach.side ?? 'right', at: spec.attach.at ?? 'sill' };
+  else if (spec.attach) fx.attach = { side: 'right', ...spec.attach };
   else if (spec.pos) fx.pos = spec.pos.map(Number);
-  const zDefault = kind === 'switch' ? FIXTURE_DEFAULTS.switch.z : spec.attach ? FIXTURE_DEFAULTS.wallLamp.z : (spec.pos ? roomCeiling(lv, roomAt(lv, spec.pos, pointInPolygon)) : lv.ceilingHeight ?? 2400);
-  fx.z = Number(spec.z ?? zDefault);
+  const derived = form === 'object' || form === 'opening';           // its height is the height of what it follows
+  const zDefault = kind === 'strip' ? FIXTURE_DEFAULTS.strip.wallZ : kind === 'switch' ? FIXTURE_DEFAULTS.switch.z : spec.attach ? FIXTURE_DEFAULTS.wallLamp.z : (spec.pos ? roomCeiling(lv, roomAt(lv, spec.pos, pointInPolygon)) : lv.ceilingHeight ?? 2400);
+  if (!derived) fx.z = Number(spec.z ?? zDefault);
   if (kind === 'lamp') fx.radius = Number(spec.radius ?? FIXTURE_DEFAULTS.lamp.radius);
+  if (kind === 'strip') fx.radius = Number(spec.radius ?? FIXTURE_DEFAULTS.strip.radius);
   if (Array.isArray(spec.assumed)) { if (spec.assumed.length) fx.assumed = [...spec.assumed]; }   // a copy keeps what its source still had as defaults
-  else if (spec.z === undefined && !(kind === 'lamp' && !spec.attach)) fx.assumed = ['z'];
+  else if (!derived && spec.z === undefined && !(kind === 'lamp' && !spec.attach)) fx.assumed = ['z'];
   const { errors } = checkFixture(fx, lv);
   if (errors.length) return refuse(model, ...errors.map(e => `${fx.id}: ${e}`));
   const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, fixtures: [...(l.fixtures || []), fx] });
@@ -791,12 +805,15 @@ export function setObject(model, levelId, id, props, options = {}) {
 export function deleteObject(model, levelId, id, options = {}) {
   const lv = levelOf(model, levelId);
   if (!lv?.objects?.some(x => x.id === id)) return refuse(model, `no object "${id}" on level "${levelId}"`);
+  const held = (lv.fixtures || []).filter(x => x.kind === 'strip' && x.attach?.object === id).map(x => x.id);
+  if (held.length) return refuse(model, `${id}: ${held.join(', ')} ${held.length > 1 ? 'are' : 'is'} attached to it; delete ${held.length > 1 ? 'them' : 'it'} first`);
   const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, objects: l.objects.filter(x => x.id !== id) });
   return finish({ ...model, levels }, levelId, {}, options);
 }
 
 /** Change a fixture (null removes a field; `pos` and `attach` replace each other). A value set here counts as measured. */
 export function setFixture(model, levelId, id, props, options = {}) {
+  props = { ...(props || {}) };
   const lv = levelOf(model, levelId), fx = lv?.fixtures?.find(x => x.id === id);
   if (!fx) return refuse(model, `no fixture "${id}" on level "${levelId}"`);
   const keys = Object.keys(props || {});
@@ -805,8 +822,16 @@ export function setFixture(model, levelId, id, props, options = {}) {
   for (const k of keys) { if (props[k] === null) delete next[k]; else next[k] = props[k]; }
   if (props.pos) delete next.attach;
   if (props.attach) delete next.pos;
+  let zDefaulted = false;
+  if (next.kind === 'strip') {                                    // on an object or an opening its height is theirs; on a wall it is its own
+    const derived = stripForm(next) === 'object' || stripForm(next) === 'opening';
+    if (derived) delete next.z;
+    else if (!Number.isFinite(next.z)) { next.z = FIXTURE_DEFAULTS.strip.wallZ; zDefaulted = true; }
+  }
   const assumed = keys.includes('assumed') ? props.assumed || [] : (fx.assumed || []).filter(k => !keys.includes(k));
   if (assumed.length) next.assumed = assumed; else delete next.assumed;
+  if (next.kind === 'strip' && next.z === undefined && next.assumed) { const k = next.assumed.filter(a => a !== 'z'); if (k.length) next.assumed = k; else delete next.assumed; }
+  if (zDefaulted) next.assumed = [...new Set([...(next.assumed || []), 'z'])];
   const { errors } = checkFixture(next, lv);
   if (errors.length) return refuse(model, ...errors.map(e => `${id}: ${e}`));
   const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, fixtures: l.fixtures.map(x => x.id === id ? nameFirst(next) : x) });
@@ -921,4 +946,34 @@ export function materialFromColor(model, color, name, sides) {
   }) } : {}) }));
   const next = { ...made.model, levels: levels2 };
   return { model: next, report: { errors: [], issues: validate(next), replaced }, id: made.id };
+}
+
+// ---- ids from names, for things made in the Editor (a new thing gets its id when it is first applied) ----
+
+const NAMED = { object: ['ob_', 'objects'], fixture: ['f_', 'fixtures'], opening: ['o_', 'openings'], wall: ['w_', 'walls'], stairs: ['st_', 'stairs'] };
+
+/** The id a thing of `kind` would get from its name ("Kitchen cabinet" → ob_kitchen_cabinet; _2, _3 when taken), or null without a usable name. */
+export function idFromName(model, kind, name) {
+  const slug = String(name || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!slug || !NAMED[kind]) return null;
+  const used = allIds(model);
+  let id = `${NAMED[kind][0]}${slug}`, k = 2;
+  while (used.has(id)) id = `${NAMED[kind][0]}${slug}_${k++}`;
+  return id;
+}
+
+/**
+ * Give a thing the id its name makes (see idFromName), when nothing else refers to its old id (an opening in a
+ * wall, a lamp in an opening, a snap point `<id>#…`): a thing that is new has nothing referring to it, so its id
+ * can still change; an old one keeps the id it has. Returns { model, report, id, renamed }.
+ */
+export function renameFromName(model, levelId, kind, id, options = {}) {
+  const lv = levelOf(model, levelId), coll = NAMED[kind]?.[1], x = coll && lv?.[coll]?.find(v => v.id === id);
+  if (!x) return { ...refuse(model, `no ${kind} "${id}" on level "${levelId}"`), id, renamed: false };
+  const next = idFromName(model, kind, x.name);
+  if (!next || next === id) return { model, report: { errors: [], issues: [] }, id, renamed: false };
+  const text = JSON.stringify(model);
+  if (text.split(`"${id}"`).length - 1 > 1 || text.includes(`"${id}#`)) return { model, report: { errors: [], issues: [] }, id, renamed: false };   // referred to elsewhere
+  const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, [coll]: l[coll].map(v => v.id === id ? { ...v, id: next } : v) });
+  return { ...finish({ ...model, levels }, levelId, {}, options), id: next, renamed: true };
 }
