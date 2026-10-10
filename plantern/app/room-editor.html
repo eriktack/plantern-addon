@@ -281,6 +281,7 @@
       <button id="wAddPassage" title="An opening without a door">+ Passage</button>
       <button id="wAddSwitch">+ Switch</button>
       <button id="wAddWallLamp">+ Wall lamp</button>
+      <button id="wAddStrip" title="An LED strip along this wall: under a cabinet, behind a TV">+ LED strip</button>
       <button id="wAddObject" title="A box on this wall: a wall cabinet, a shelf">+ Wall object</button>
     </div>
     <div class="grid2">
@@ -322,10 +323,22 @@
       <label id="oSwingRow"><span id="oSwingLbl">Opens into</span> <select id="oSwing"><option value="right">right</option><option value="left">left</option></select></label>
     </div>
     <label id="oThickRow">Thickness of the <span id="oThickWhat">window</span> itself <small>mm, its frame or leaf (not the hole in the wall); empty = not measured</small><input id="oThick" inputmode="numeric" autocomplete="off"></label>
+    <div id="oLookBox">
+      <label id="oPlaceRow">Sits <small>where the <span id="oPlaceWhat">window</span> is across the wall (the plan and 3D)</small><select id="oPlace"><option value="">in the middle of the wall</option><option value="left">flush with the left side</option><option value="right">flush with the right side</option></select></label>
+      <div class="grid2">
+        <div id="oColorRow"><label class="inl"><input type="checkbox" id="oColorUse"> Colour of its frame</label> <input type="color" id="oColor" value="#f2f0ea"></div>
+        <div id="oSillRow" class="grid2" style="grid-column:1/-1">
+          <label>Sill board <small>mm out from the wall, empty = none</small><input id="oSillDepth" inputmode="numeric" autocomplete="off"></label>
+          <div><label class="inl"><input type="checkbox" id="oSillColorUse"> Its colour</label> <input type="color" id="oSillColor" value="#d8d4cc"></div>
+        </div>
+      </div>
+    </div>
     <div id="oErr" class="help" style="color:var(--bad)"></div>
     <div class="row btns">
       <button class="moved" id="oApply">Apply opening changes</button>
       <button class="moved" id="oDelete">Delete opening</button>
+      <button id="oAddLamp" title="A lamp that stands in this opening, e.g. a window star or a lamp on the sill">+ Lamp in it</button>
+      <button id="oAddStrip" title="An LED strip along this window or door (its sill or its top): it follows it">+ LED strip</button>
       <button id="oBack">← its wall</button>
     </div>
   </section>
@@ -340,7 +353,14 @@
       <label>Height <small id="xZNote">mm above the floor</small><input id="xZ" inputmode="numeric" autocomplete="off"></label>
       <label id="xRadiusRow">Light reaches <small>mm (plan glow)</small><input id="xRadius" inputmode="numeric" autocomplete="off"></label>
       <label id="xOffsetRow">Position <small id="xOffsetNote">mm along the wall</small><input id="xOffset" inputmode="numeric" autocomplete="off"></label>
+      <label id="xLenRow">Length <small id="xLenNote">mm along the wall</small><input id="xLen" inputmode="numeric" autocomplete="off"></label>
+      <label id="xTargetRow">On <small id="xTargetNote">what the strip follows</small><select id="xTarget"></select></label>
+      <label id="xEdgeRow">Side <small>of the object it runs along</small><select id="xEdge"></select></label>
+      <label id="xStartRow">Starts <small>mm along that side from its first corner (empty = at the corner)</small><input id="xStart" inputmode="numeric" autocomplete="off"></label>
+      <label id="xInsetRow">Set back <small>mm in from the edge, e.g. behind the front of a cabinet (empty = on the edge)</small><input id="xInset" inputmode="numeric" autocomplete="off"></label>
+      <label id="xAtRow">Where <small id="xAtNote">at which edge</small><select id="xAt"></select></label>
       <label id="xSideRow">On the side of <select id="xSide"><option value="right">right</option><option value="left">left</option></select></label>
+      <label id="xInRow">Stands in <small>a window or door of this wall (a lamp in the glass); “nothing” = on the wall face</small><select id="xIn"></select></label>
       <label id="xXRow">x <small>mm, east</small><input id="xX" inputmode="numeric" autocomplete="off"></label>
       <label id="xYRow">y <small>mm, north</small><input id="xY" inputmode="numeric" autocomplete="off"></label>
     </div>
@@ -388,6 +408,7 @@
     <div class="row btns">
       <button class="moved" id="obApply">Apply object changes</button>
       <button class="moved" id="obDelete">Delete object</button>
+      <button id="obAddStrip" title="An LED strip along a side of this object, e.g. under a wall cabinet: it moves with it">+ LED strip</button>
     </div>
   </section>
   <section id="stairsPanel" hidden>
@@ -425,6 +446,8 @@
     <div class="grid2">
       <label>Underneath <select id="stUnder"><option value="closed">closed (solid blocks)</option><option value="sloped">solid, sloped underside</option><option value="open">open (treads only)</option></select></label>
       <label>Sides <select id="stSides"><option value="stepped">stepped</option><option value="sloped">sloped panels</option></select></label>
+      <label>Handrail <small>walking up</small><select id="stRail"><option value="none">none</option><option value="left">on the left</option><option value="right">on the right</option><option value="both">on both sides</option></select></label>
+      <label id="stRailHRow">Rail height <small>mm above the steps' noses, empty = 900</small><input id="stRailH" inputmode="numeric" placeholder="900" autocomplete="off"></label>
       <label id="stWaistRow">Thickness under the steps <small>mm, sloped underside</small><input id="stWaist" inputmode="numeric" placeholder="150" autocomplete="off"></label>
     </div>
     <div id="stErr" class="help" style="color:var(--bad)"></div>

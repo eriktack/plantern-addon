@@ -290,3 +290,57 @@ export function stairSolids(layout, st, { steps = layout.steps, dz = 0, withSide
   }
   return out;
 }
+
+// ---- handrails (decision 125) ----
+
+/** mm: handrail height above the nose line, the rail's section (width, depth), a post's side, the longest gap between posts. */
+export const STAIR_RAIL = Object.freeze({ height: 900, rail: 45, depth: 40, post: 45, gap: 1000 });
+
+/**
+ * The handrail of a stair for 3D, as prisms in plan mm like stairSolids(): [{ poly, z0, z1, slope?, rail? | post? }]. `st.handrail` is
+ * "left", "right" or "both" (walking up; absent or "none": no rail), `st.handrailHeight` the height above the nose line (default 900).
+ * A rail runs along the chosen side of every flight, parallel to its nose line, with a post at each end and at most STAIR_RAIL.gap
+ * apart; on the outer side of a turn it carries on round the free edges of the landing (level on a square landing, rising through
+ * winders), on the inner side the two flights meet in one post. Heights are above the floor of the level the stair starts on, plus `dz`.
+ */
+export function stairRails(layout, st, { dz = 0 } = {}) {
+  const mode = st.handrail;
+  if (mode !== 'left' && mode !== 'right' && mode !== 'both') return [];
+  const H = Number(st.handrailHeight) > 0 ? Number(st.handrailHeight) : STAIR_RAIL.height, W = layout.width, riser = layout.riser, { rail: RW, depth: RD, post: PW } = STAIR_RAIL;
+  const out = [], posts = new Map();
+  const nose = (f, s) => f.h0 + riser + (riser / f.d) * s + dz;                      // the line through the noses of a flight, at s from its front edge
+  const thin = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, n = [-(b[1] - a[1]) / L * RW / 2, (b[0] - a[0]) / L * RW / 2]; return [[a[0] - n[0], a[1] - n[1]], [b[0] - n[0], b[1] - n[1]], [b[0] + n[0], b[1] + n[1]], [a[0] + n[0], a[1] + n[1]]].map(pt); };
+  const post = (p, z0, z1) => {                                                      // posts that meet (a flight end and the landing corner) are one
+    const key = `${Math.round(p[0])},${Math.round(p[1])}`, o = posts.get(key);
+    posts.set(key, o ? { p: o.p, z0: Math.min(o.z0, z0), z1: Math.max(o.z1, z1) } : { p, z0, z1 });
+  };
+  // a rail member between two points whose rail tops are at za and zb
+  const member = (a, b, za, zb) => {
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (!(L > 0)) return;
+    const u = [(b[0] - a[0]) / L, (b[1] - a[1]) / L], line = (x, y) => ({ origin: a, u, L, a: r1(x), b: r1(y) });
+    out.push({ poly: thin(a, b), z0: Math.min(za, zb) - RD, z1: Math.max(za, zb), ...(Math.abs(za - zb) > 0.5 ? { slope: { bottom: line(za - RD, zb - RD), top: line(za, zb) } } : {}), rail: true });
+  };
+  for (const side of mode === 'both' ? ['left', 'right'] : [mode]) {
+    const w = side === 'left' ? 0 : W, outer = side === (st.turn === 'L' ? 'right' : 'left');   // the side the landing's free edges are on
+    layout.flights.forEach((f, k) => {
+      if (!(f.run > 0) || !(f.d > 0)) return;                                       // a flight of one riser has no treads to follow
+      const a = add(f.o, mul(f.r, w)), b = add(a, mul(f.u, f.run)), zA = nose(f, 0) + H, zB = nose(f, f.run) + H;
+      member(a, b, zA, zB);
+      const n = Math.max(1, Math.ceil(f.run / STAIR_RAIL.gap));
+      for (let i = 0; i <= n; i++) { const s = f.run * i / n; post(add(a, mul(f.u, s)), nose(f, s) - riser, nose(f, s) + H); }
+      const tn = layout.turns?.[k];
+      if (tn && outer) {
+        const P = tn.poly, chain = st.turn === 'L' ? [P[3], P[2], P[1]] : [P[0], P[1], P[2]];   // the landing's near-right → far-right → far-left (an L to the left), or the mirror
+        const next = layout.flights[k + 1], z2 = next && next.d > 0 ? nose(next, 0) + H : zB, rising = layout.winders > 0;
+        const lens = chain.slice(1).map((p, i) => Math.hypot(p[0] - chain[i][0], p[1] - chain[i][1])), total = lens.reduce((x, y) => x + y, 0) || 1;
+        let cum = 0;
+        const zs = chain.map((_, i) => { const z = rising ? zB + (z2 - zB) * cum / total : zB; cum += lens[i] ?? 0; return z; });
+        chain.slice(1).forEach((p, i) => member(chain[i], p, zs[i], zs[i + 1]));
+        chain.forEach((p, i) => post(p, zs[i] - H - (rising ? riser : 0), zs[i]));
+      }
+    });
+  }
+  for (const { p, z0, z1 } of posts.values()) out.push({ poly: [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, y]) => pt([p[0] + x * PW / 2, p[1] + y * PW / 2])), z0, z1, post: true });
+  return out;
+}

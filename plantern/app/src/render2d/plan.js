@@ -9,6 +9,7 @@ import { solidStretches, paintStrip } from '../geometry/solids.js';
 import { solidCircle } from '../geometry/circle.js';
 import { wallLookPieces } from '../geometry/paint.js';
 import { stairsPlan } from '../geometry/stairs.js';
+import { stripSamples } from '../geometry/strip.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 export const el = (t, a = {}, parent) => {
@@ -18,6 +19,8 @@ export const el = (t, a = {}, parent) => {
   return e;
 };
 
+/** A strip's many overlapping glows are each dimmer than a lamp's, so they add up to about one lamp's light. */
+const STRIP_GLOW = 0.55;
 const OPENING_STYLE = { window: { stroke: '#6cb6ff' }, door: { stroke: '#e0a060' }, passage: { stroke: '#8b93a1' } };
 
 /**
@@ -151,6 +154,7 @@ export function createPlanView(svg, hooks = {}) {
     for (const fx of level.fixtures || []) {
       const c = geo.fixturePos(fx);
       if (!c) continue;
+      if (fx.kind === 'strip') { drawStrip(fx, geo.fixtureLine(fx), fixtureLabel, defs, gFix, gLight, occ); continue; }
       const s = toSvg(c), g = el('g', { class: 'fix', transform: `translate(${s[0]} ${s[1]})` }, gFix);
       el('title', {}, g).textContent = fixtureLabel(fx);
       fixEls[fx.id] = fx.kind === 'lamp' ? el('circle', { r: 120 }, g) : el('rect', { x: -90, y: -90, width: 180, height: 180, rx: 30 }, g);
@@ -172,18 +176,46 @@ export function createPlanView(svg, hooks = {}) {
   }
 
   /** Update one fixture from its appearance ({ available, on, brightness, rgb }). Touches only that fixture. */
+  /**
+   * An LED strip (decision 121): a line along its polyline, and a glow that is the union of the light of sample points along it
+   * (each one a lamp-like visibility polygon with the strip's radius), so the light stops at walls and spreads along the line.
+   */
+  function drawStrip(fx, line, fixtureLabel, defs, gFix, gLight, occ) {
+    if (!line) return;
+    const pts = svgPoints(line), g = el('g', { class: 'fix' }, gFix);
+    el('title', {}, g).textContent = fixtureLabel(fx);
+    el('polyline', { points: pts, fill: 'none', stroke: 'transparent', 'stroke-width': 300, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);   // the part to click
+    fixEls[fx.id] = el('polyline', { points: pts, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'pointer-events': 'none' }, g);
+    if (fx.radius) {
+      const group = el('g', {}, gLight), stops = [];
+      stripSamples(line).forEach((c, i) => {
+        const s = toSvg(c), gr = el('radialGradient', { id: `g_${fx.id}_${i}`, gradientUnits: 'userSpaceOnUse', cx: s[0], cy: s[1], r: fx.radius }, defs);
+        for (const o of [0, 0.45, 1]) stops.push(el('stop', { offset: o }, gr));
+        el('polygon', { points: svgPoints(visibility(c, fx.radius, occ)), fill: `url(#g_${fx.id}_${i})`, style: 'mix-blend-mode:screen' }, group);
+      });
+      lightEls[fx.id] = { stops, path: group, k: STRIP_GLOW };
+    }
+    setFixture(fx.id, { available: false, on: false, brightness: 0, rgb: [255, 214, 170] });
+  }
+
   function setFixture(id, a) {
     const sh = fixEls[id];
     if (!sh) return;
     const col = `rgb(${a.rgb.join(',')})`;
-    sh.setAttribute('fill', !a.available ? 'none' : a.on ? col : '#4a505a');
-    sh.setAttribute('stroke', !a.available ? '#e5534b' : a.on ? '#fff' : '#8b93a1');
-    sh.setAttribute('stroke-width', 24);
-    sh.setAttribute('stroke-dasharray', a.available ? '' : '40 30');
+    if (sh.tagName === 'polyline') {                                  // an LED strip: a line
+      sh.setAttribute('stroke', !a.available ? '#e5534b' : a.on ? col : '#4a505a');
+      sh.setAttribute('stroke-width', 60);
+      sh.setAttribute('stroke-dasharray', a.available ? '' : '120 90');
+    } else {
+      sh.setAttribute('fill', !a.available ? 'none' : a.on ? col : '#4a505a');
+      sh.setAttribute('stroke', !a.available ? '#e5534b' : a.on ? '#fff' : '#8b93a1');
+      sh.setAttribute('stroke-width', 24);
+      sh.setAttribute('stroke-dasharray', a.available ? '' : '40 30');
+    }
     const le = lightEls[id];
     if (le) {
       le.path.style.display = a.on ? '' : 'none';
-      le.stops.forEach((s, i) => { s.setAttribute('stop-color', col); s.setAttribute('stop-opacity', [0.9, 0.5, 0][i] * a.brightness); });
+      le.stops.forEach((s, i) => { s.setAttribute('stop-color', col); s.setAttribute('stop-opacity', [0.9, 0.5, 0][i % 3] * a.brightness * (le.k ?? 1)); });
     }
   }
 

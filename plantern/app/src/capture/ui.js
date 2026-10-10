@@ -24,7 +24,10 @@ import { moveCapture, dragCorner, snapMove, dragWallEnd, moveWall, rotateObject 
 import { roundCapture, roundToForm, roundMovedTo, crossWall } from './round.js';
 import { solidCircle, roomEdge } from '../geometry/circle.js';
 import { solveExtra, checkRows, checkCorners } from '../model/checks.js';
-import { suggestEntities, setBinding } from '../ha/suggest.js';
+import { suggestEntities, setBinding, sameBinding } from '../ha/suggest.js';
+import { serialRunner } from './save-queue.js';
+import { stripForm } from '../model/fixtures.js';
+import { FITTING_DEFAULTS } from '../geometry/fittings.js';
 import { checkLook } from '../ha/appearance.js';
 import { compassSvg } from '../render2d/compass.js';
 import { roomNameLayout, labelPoint, pointInPolygon } from '../geometry/polygon.js';
@@ -42,7 +45,7 @@ import { fitTo, pinchView } from './map-view.js';
 import { anchorStatus } from '../model/anchors.js';
 import { modelAreas, fmtArea } from '../geometry/area.js';
 import { stairsPlan, totalRisers } from '../geometry/stairs.js';
-import { applyRoom, removeRoom, setWallProps, unbindWall, deleteWall, linkWalls, fillWalls, setNorthAngle, splitWall, addOpening, setOpening, deleteOpening, addFixture, setFixture, deleteFixture, setMaterial, deleteMaterial, nameColor, materialFromColor } from '../edit/ops.js';
+import { renameFromName, applyRoom, removeRoom, setWallProps, unbindWall, deleteWall, linkWalls, fillWalls, setNorthAngle, splitWall, addOpening, setOpening, deleteOpening, addFixture, setFixture, deleteFixture, setMaterial, deleteMaterial, nameColor, materialFromColor } from '../edit/ops.js';
 import { resolveSide, materialUse, usedColors } from '../model/materials.js';
 import { sideStrips, wallProfile } from '../geometry/walls.js';
 import { wallInfo, wallToForm, wallPropsFromForm, stillToMeasure, openingInfo, openingToForm, openingPropsFromForm, offsetFrom, offsetTo, measureCorners, defaultCorner } from '../edit/inspect.js';
@@ -146,17 +149,61 @@ function isDoubleClick(kind, id) {
   lastClick = hit ? null : { kind, id, t: now };
   return hit;
 }
+// ---- new things are created by their first Apply (decision 120) ----
+// + Object, + Door, + Lamp, + Stairs, a drawn wall and Duplicate put the thing into the model so the plan and its form can
+// show it, but it is "fresh" until its first Apply: leaving the editor (Cancel, Esc, another click) takes it out again, Save
+// waits for it, and its id is made from the name typed (ob_kitchen_cabinet) when it is applied, not before.
+let fresh = null;                                                // { kind, id, autoId, base (the model before it), what }
+const FRESH_ERR = { object: 'obErr', opening: 'oErr', fixture: 'xErr', wall: 'wErr', stairs: 'stErr' };
+const isFresh = () => !!fresh && !!editing && editing.kind === fresh.kind && editing.id === fresh.id;
+const setSelectedId = (kind, id) => { if (kind === 'object') objectId = id; else if (kind === 'opening') openingId = id; else if (kind === 'fixture') fixtureId = id; else if (kind === 'wall') wallId = id; else if (kind === 'stairs') stairsId = id; };
+const forgetForms = () => { objectFormFor = null; openingFormFor = null; fixtureFormFor = null; wallFormFor = null; stairsFormFor = null; };   // the forms refill from the model
+/** Call right after a new thing was made and opened: `base` is the model from before it. */
+function startFresh(kind, id, base, what) { fresh = { kind, id, autoId: id, base, what }; showEditBar(); }
+/** Take the unapplied new thing out again (the model goes back to before it was made). */
+function discardFresh() {
+  const f = fresh; fresh = null;
+  if (!f) return;
+  model = history.rewindTo(f.base) || f.base;
+  dirty = model !== savedModel;
+  setSelectedId(f.kind, null);
+  forgetForms();
+}
+/**
+ * Before something new is made: a new thing still being edited and never applied is dropped first (asking when it was
+ * changed). `hosts` are the ids the new thing goes on (a wall, an opening): when that is the unapplied thing itself it must
+ * be applied first, because its id is not settled yet. Returns false when it stays.
+ */
+function dropFresh(hosts = []) {
+  if (!isFresh()) { if (fresh && !editing) fresh = null; return true; }
+  if (hosts.includes(fresh.id)) { setStatus(`Apply the new ${fresh.what} first: Apply creates it and gives it its id`); return false; }
+  return leaveEdit();
+}
+/** The first Apply of a new thing worked (or had nothing to change): it exists now, with the id its name makes. */
+function settleFresh() {
+  const f = fresh; fresh = null;
+  $(FRESH_ERR[f.kind]).textContent = '';
+  let id = f.id;
+  const r = id === f.autoId ? renameFromName(model, levelId, f.kind, id, opts()) : null;
+  if (r?.renamed && !r.report.errors.length) {
+    id = r.id; setSelectedId(f.kind, id); if (editing) editing.id = id;           // before the commit redraws, which looks the thing up by its id
+    forgetForms();
+    commit(r.model);
+  }
+  setStatus(`${id} created (not saved yet)`);
+}
 function snap() { if (!editing) return; editSnap = panelState(); showEditBar(); }
 function showEditBar() {
   if (!editing) return;
   const [a, d] = BAR[editing.kind], changed = isDirty();
+  const isNew = isFresh();
   $('edApply').disabled = $(a).disabled;
-  $('edApply').textContent = /anyway/.test($(a).textContent) ? 'Apply anyway' : 'Apply';
-  $('edDelete').hidden = $(d).hidden;
-  $('edDup').hidden = !(['object', 'opening', 'fixture'].includes(editing.kind) || (editing.kind === 'wall' && wall() && !wall().from?.length));
+  $('edApply').textContent = /anyway/.test($(a).textContent) ? 'Apply anyway' : isNew ? 'Apply (create)' : 'Apply';
+  $('edDelete').hidden = $(d).hidden || isNew;                    // a new thing is cancelled, not deleted
+  $('edDup').hidden = isNew || !(['object', 'opening', 'fixture'].includes(editing.kind) || (editing.kind === 'wall' && wall() && !wall().from?.length));
   $('edRevert').disabled = !changed;
-  $('edClose').textContent = changed ? 'Cancel' : 'Close';
-  $('edState').textContent = changed ? '● changes not applied yet' : '';
+  $('edClose').textContent = changed || isNew ? 'Cancel' : 'Close';
+  $('edState').textContent = isNew ? `● new ${fresh.what}: created when you Apply` : changed ? '● changes not applied yet' : '';
 }
 /** Open the editor for one thing (leaving the current one first, asking if it has unapplied changes). */
 function enterEdit(kind, id, o = {}) {
@@ -185,7 +232,10 @@ function editDraft(d) {
 /** Back to the house view; false when the user keeps the unapplied changes. */
 function leaveEdit({ ask = true, noBack = false } = {}) {
   if (!editing) return true;
-  if (ask && isDirty() && !confirm('Discard the changes you have not applied?')) return false;
+  if (isFresh()) {                                                // a new thing that was never applied: leaving removes it
+    if (ask && isDirty() && !confirm(`Discard this new ${fresh.what}?`)) return false;
+    discardFresh();
+  } else if (ask && isDirty() && !confirm('Discard the changes you have not applied?')) return false;
   const was = editing;
   if (peekId) { peekId = null; peekSel = null; $('peekBar').hidden = true; $('peekCard').hidden = true; }
   editing = null; editSnap = null; draft = null;
@@ -300,7 +350,12 @@ async function init() {
     if (draft?.solid && !draft.name) $('rid').value = newSolidId(model, $('sKind').value);
   });
   // the edit bar: Apply / Revert / Close (Cancel with unapplied changes) / Delete
-  $('edApply').onclick = () => $(BAR[editing.kind][0]).click();
+  $('edApply').onclick = () => {
+    const f = isFresh() ? fresh : null, before = model;
+    $(BAR[editing.kind][0]).click();
+    // the first Apply creates a new thing, also when the defaults are fine as they are ("Nothing changed")
+    if (f && fresh === f && (model !== before || $(FRESH_ERR[f.kind]).textContent === 'Nothing changed.')) settleFresh();
+  };
   $('edDelete').onclick = () => $(BAR[editing.kind][1]).click();
   $('edRevert').onclick = revertEdit;
   $('edClose').onclick = () => leaveEdit();
@@ -356,19 +411,19 @@ async function init() {
     matId = null; $('matForm').hidden = true; commit(r.model);
   };
   for (const [btn, type] of [['wAddDoor', 'door'], ['wAddWindow', 'window'], ['wAddPassage', 'passage']]) $(btn).onclick = () => {
-    if (!okToDiscard()) return;
-    const r = addOpening(model, levelId, wallId, type, {}, opts());
+    if (!dropFresh([wallId]) || !okToDiscard()) return;
+    const base = model, r = addOpening(model, levelId, wallId, type, {}, opts());
     if (r.report.errors.length) { $('wErr').textContent = r.report.errors.join('; '); return; }
-    commit(r.model); enterEdit('opening', r.opening.id, { ask: false });
-    setStatus(`${r.opening.id} added with default sizes: measure it and type the real values (not saved yet)`);
+    commit(r.model); enterEdit('opening', r.opening.id, { ask: false }); startFresh('opening', r.opening.id, base, type);
+    setStatus(`${r.opening.id} is a new ${type} with default sizes: measure it, name it and Apply to create it`);
   };
   $('oApply').onclick = applyOpening;
   const placeFixture = (spec, what) => {
-    if (!okToDiscard()) return;
-    const r = addFixture(model, levelId, spec, opts());
+    if (!dropFresh([spec.attach?.wall, spec.attach?.opening]) || !okToDiscard()) return;
+    const base = model, r = addFixture(model, levelId, spec, opts());
     if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
-    commit(r.model); enterEdit('fixture', r.fixture.id, { ask: false });
-    setStatus(`${r.fixture.id} added: ${what} (not saved yet)`);
+    commit(r.model); enterEdit('fixture', r.fixture.id, { ask: false }); startFresh('fixture', r.fixture.id, base, spec.kind === 'switch' ? 'switch' : spec.kind === 'strip' ? 'LED strip' : 'lamp');
+    setStatus(`${r.fixture.id} is new: ${what}. Name it and Apply to create it`);
   };
   $('newStairs').onclick = newStairs;
   $('editLevel').onclick = editLevel;
@@ -414,11 +469,34 @@ async function init() {
     if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
     stairsId = null; commit(r.model);
   };
-  for (const id of ['stShape', 'stLanding', 'stRef', 'stUnder']) $(id).onchange = syncStairsRows;
+  for (const id of ['stShape', 'stLanding', 'stRef', 'stUnder', 'stRail']) $(id).onchange = syncStairsRows;
+  $('obAddStrip').onclick = () => {                               // under the front of the object (the side farthest from its wall)
+    const o = object(), fp = o && curGeo.objectFootprint(o);
+    if (!fp) return;
+    const a = o.attach && curGeo.resolveAttach(o.attach);
+    const mid = i => [(fp[i][0] + fp[(i + 1) % fp.length][0]) / 2, (fp[i][1] + fp[(i + 1) % fp.length][1]) / 2];
+    let edge = 0;
+    if (a) { let far = -Infinity; fp.forEach((_, i) => { const d = (mid(i)[0] - a.p[0]) * a.dir[0] + (mid(i)[1] - a.p[1]) * a.dir[1]; if (d > far) { far = d; edge = i; } }); }
+    placeFixture({ kind: 'strip', attach: { object: o.id, edge, at: 'bottom' } }, `under the ${a ? 'front' : 'first side'} of the object; choose the side and whether it is under or on top`);
+  };
+  $('oAddStrip').onclick = () => {                                // along the window (its sill) or door (its top), on the room side
+    const o = opening(), w = o && level().walls.find(v => v.id === o.wall);
+    if (!w) return;
+    placeFixture({ kind: 'strip', attach: { opening: o.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', at: o.type === 'window' ? 'sill' : 'head' } }, `along the ${o.type === 'window' ? 'sill' : 'top'} of the ${o.type}; choose which edge and which side of the wall`);
+  };
+  $('wAddStrip').onclick = () => {
+    const w = wall(), L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), length = Math.min(1200, Math.round(L / 2));
+    placeFixture({ kind: 'strip', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: Math.round((L - length) / 2), length } }, 'along the middle of the wall; set where it starts and how long it is');
+  };
   $('addCeilingLamp').onclick = () => placeFixture({ kind: 'lamp', pos: labelPoint(room().polygon).pos }, 'in the middle of the room; set its position and height');
   $('wAddSwitch').onclick = () => { const w = wall(), L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]); placeFixture({ kind: 'switch', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: Math.round(L / 2) } }, 'in the middle of the wall'); };
   $('wAddWallLamp').onclick = () => { const w = wall(), L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]); placeFixture({ kind: 'lamp', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: Math.round(L / 2) } }, 'in the middle of the wall'); };
   $('xApply').onclick = applyFixture;
+  $('oAddLamp').onclick = () => {                                 // a lamp that stands in this opening (window star, lamp on the sill)
+    const o = opening(), w = o && level().walls.find(v => v.id === o.wall);
+    if (!w) return;
+    placeFixture({ kind: 'lamp', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: Math.round(o.offset + o.width / 2), opening: o.id }, z: Math.round((o.sill + o.head) / 2), assumed: ['z'] }, 'in the middle of the opening; set its position and height');
+  };
   $('xDelete').onclick = () => {
     if (!confirm(`Delete ${fixtureId}? (A Home Assistant binding for it in location.json would then point at nothing.)`)) return;
     const r = deleteFixture(model, levelId, fixtureId, opts());
@@ -837,9 +915,10 @@ function drawingClick(e) {
   const r = addWall(model, levelId, { a: drawing.a.pos, b, anchor }, opts());
   if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
   stopDrawing();
+  const base = model;
   commit(r.model);
-  enterEdit('wall', r.wall.id, { ask: false });
-  setStatus(`${r.wall.id} drawn: set its thickness, height or base (a lintel: its underside), then Apply`);
+  enterEdit('wall', r.wall.id, { ask: false }); startFresh('wall', r.wall.id, base, 'wall');
+  setStatus(`${r.wall.id} drawn: set its thickness, height or base (a lintel: its underside), name it and Apply to create it`);
 }
 function drawWallOverlay() {
   const svg = $('preview');
@@ -1117,11 +1196,11 @@ function fillCopyInto(kind, self) {
 /** Duplicate: a copy beside it, then opened. */
 function duplicateEdited() {
   if (!editing || !okToDiscard()) return;
-  const { kind, id } = editing, r = duplicate(model, levelId, kind, id, opts());
+  const { kind, id } = editing, base = model, r = duplicate(model, levelId, kind, id, opts());
   if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
   commit(r.model);
-  enterEdit(kind, r.id, { ask: false });
-  setStatus(`${r.id}: a copy of ${nameOf(id)} beside it (not saved yet)`);
+  enterEdit(kind, r.id, { ask: false }); startFresh(kind, r.id, base, `copy of ${nameOf(id)}`);
+  setStatus(`${r.id}: a copy of ${nameOf(id)} beside it. Name it and Apply to create it`);
 }
 
 function selectSolid(id) { shape = 'solid'; roomId = id; wallId = null; openingId = null; fixtureId = null; stairsId = null; objectId = null; draft = null; loadFormForSelection(); refresh(); }
@@ -1516,6 +1595,7 @@ function showOpening() {
   }
   $('oSwing').options[0].textContent = onRight;
   $('oSwing').options[1].textContent = onLeft;
+  $('oPlace').options[1].textContent = `flush with the ${onLeft} side`; $('oPlace').options[2].textContent = `flush with the ${onRight} side`;
   if (openingFormFor !== o) {
     const f = openingToForm(o, info.top, fromOf(o.id, info.wall));
     $('oName').value = f.name; $('oType').value = f.type; $('oOffset').value = f.offset; $('oWidth').value = f.width; $('oSill').value = f.sill; $('oHead').value = f.head;
@@ -1523,6 +1603,8 @@ function showOpening() {
     if (f.type === 'door') $('oDoorOpens').value = f.opens; else { $('oDoorOpens').value = 'swing'; $('oOpens').value = f.opens; }
     for (const [id, k] of [['oOffset', 'offset'], ['oWidth', 'width'], ['oSill', 'sill'], ['oHead', 'head'], ['oHeight', 'height'], ['oBelow', 'below']]) $(id).placeholder = f.placeholders[k];
     $('oThick').value = f.thickness;
+    $('oColorUse').checked = f.colorUse; $('oColor').value = f.color || FITTING_DEFAULTS[o.type]?.color || '#f2f0ea';
+    $('oPlace').value = f.placement; $('oSillDepth').value = f.sillDepth; $('oSillColorUse').checked = f.sillColorUse; $('oSillColor').value = f.sillColor || FITTING_DEFAULTS.sill.color;
     $('oMeasured').checked = f.measured; $('oErr').textContent = '';
     openingFormFor = o;
     fillCopyInto('opening', o);
@@ -1543,6 +1625,7 @@ function showOpeningRows() {
   $('oSwingRow').hidden = slides && $('oDoorOpens').value === 'pocket';
   $('oThickRow').hidden = t === 'passage';
   $('oThickWhat').textContent = t;
+  $('oLookBox').hidden = t === 'passage'; $('oSillRow').hidden = t !== 'window'; $('oPlaceWhat').textContent = t;
 }
 /**
  * The corner an opening's or wall fixture's position is measured from: { key, s, dir, pos, label }
@@ -1589,7 +1672,7 @@ function switchFrom(kind) {
   draw();
 }
 
-const openingForm = () => ({ name: $('oName').value, type: $('oType').value, offset: $('oOffset').value, width: $('oWidth').value, sill: $('oSill').value, head: $('oHead').value, height: $('oHeight').value, below: $('oBelow').value, hinge: $('oHinge').value, swing: $('oSwing').value, opens: $('oType').value === 'door' ? $('oDoorOpens').value : $('oOpens').value, thickness: $('oThick').value, measured: $('oMeasured').checked });
+const openingForm = () => ({ name: $('oName').value, type: $('oType').value, offset: $('oOffset').value, width: $('oWidth').value, sill: $('oSill').value, head: $('oHead').value, height: $('oHeight').value, below: $('oBelow').value, hinge: $('oHinge').value, swing: $('oSwing').value, opens: $('oType').value === 'door' ? $('oDoorOpens').value : $('oOpens').value, thickness: $('oThick').value, measured: $('oMeasured').checked, colorUse: $('oColorUse').checked, color: $('oColor').value, placement: $('oPlace').value, sillDepth: $('oSillDepth').value, sillColorUse: $('oSillColorUse').checked, sillColor: $('oSillColor').value });
 
 function applyOpening() {
   const info = openingInfo(level(), openingId);
@@ -1604,11 +1687,12 @@ function applyOpening() {
 
 // ---- objects: boxes with a size, on a wall or standing in a room ----
 function placeObject(spec, what) {
-  const r = addObject(model, levelId, spec, opts());
+  if (!dropFresh([spec.attach?.wall])) return;
+  const base = model, r = addObject(model, levelId, spec, opts());
   if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
   commit(r.model);
-  enterEdit('object', r.object.id, { ask: false });
-  setStatus(`${r.object.id} added ${what} (not saved yet)`);
+  enterEdit('object', r.object.id, { ask: false }); startFresh('object', r.object.id, base, 'object');
+  setStatus(`${r.object.id} is a new object ${what}. Name it and Apply to create it`);
 }
 
 function showObject() {
@@ -1676,12 +1760,15 @@ function dragStart(e) {
   if (e.button !== 0 || drawing || measure?.isOn() || peekId) return;
   if (roomDragStart(e)) return;
   if (wallDragStart(e)) return;
+  const endEl = e.target.closest('[data-send]');                  // an end of the selected LED strip: drag it to change where it starts or how long it is
+  if (endEl && !(editing && !(editing.kind === 'fixture' && editing.id === endEl.dataset.id))) { pan = null; dragging = { kind: 'send', id: endEl.dataset.id, end: endEl.dataset.send, x: e.clientX, y: e.clientY, moved: false, frame: 0, key: `send:${endEl.dataset.id}:${Math.round(performance.now())}` }; return; }
   const rotEl = e.target.closest('[data-orot]');
   if (rotEl) { pan = null; dragging = { kind: 'orot', id: rotEl.dataset.orot, x: e.clientX, y: e.clientY, moved: false, frame: 0, key: `rot:${rotEl.dataset.orot}:${Math.round(performance.now())}` }; return; }
   const el = e.target.closest('[data-kind="fixture"], [data-kind="object"]');
   if (!el) return;
   const kind = el.dataset.kind, id = el.dataset.id;
   if (editing && !(editing.kind === kind && editing.id === id)) return;
+  { const sx = kind === 'fixture' && level().fixtures?.find(f => f.id === id); if (sx?.kind === 'strip' && stripForm(sx) !== 'wall') return; }   // on an object or a window it follows that: move that
   pan = null;                                                    // this pointer moves the thing, not the plan
   // where the thing's middle is against the pointer, kept while dragging (the thing does not jump under the pointer)
   const lv = level(), thing = kind === 'fixture' ? lv.fixtures?.find(f => f.id === id) : lv.objects?.find(o => o.id === id);
@@ -1801,6 +1888,22 @@ function dragMove(e) {
   if (!d || (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6)) return;
   if (d.kind === 'room' || d.kind === 'corner') { roomDragMove(e, d); return; }
   if (d.kind === 'wall' || d.kind === 'wallend') { wallDragMove(e, d); return; }
+  if (d.kind === 'send') {
+    d.moved = true;
+    cancelAnimationFrame(d.frame);
+    d.frame = requestAnimationFrame(() => {
+      const x = dragging === d && level().fixtures?.find(f => f.id === d.id), w = x && stripForm(x) === 'wall' && level().walls.find(v => v.id === x.attach.wall);
+      if (!w) return;
+      const f = curGeo.frames.get(w.id), q = freePoint(e), s = (q[0] - w.a[0]) * f.u[0] + (q[1] - w.a[1]) * f.u[1], MIN = 50;
+      const start = x.attach.offset, end = x.attach.offset + x.attach.length;
+      const offset = d.end === 'a' ? Math.min(Math.max(s, 0), end - MIN) : start, length = d.end === 'a' ? end - offset : Math.min(Math.max(s - start, MIN), f.L - start);
+      const r = setFixture(model, levelId, d.id, { attach: { ...x.attach, offset: r1d(offset), length: r1d(length) } }, opts());
+      if (r.report.errors.length) return;
+      commit(r.model, d.key);
+      setStatus(`${d.id}: ${Math.round(length)} mm long, from ${Math.round(offset)} mm (not saved yet)`);
+    });
+    return;
+  }
   if (d.kind === 'orot') {
     d.moved = true;
     cancelAnimationFrame(d.frame);
@@ -1823,7 +1926,7 @@ function dragMove(e) {
     if (d.kind === 'fixture') {
       const x = lv.fixtures.find(f => f.id === d.id);
       if (!x) return;
-      r = setFixture(model, levelId, d.id, x.attach ? { attach: attachNear(p, x.attach, 0) } : { pos: [Math.round(p[0]), Math.round(p[1])] }, opts());
+      r = setFixture(model, levelId, d.id, x.attach ? { attach: attachNear(p, x.attach, x.kind === 'strip' ? x.attach.length : 0) } : { pos: [Math.round(p[0]), Math.round(p[1])] }, opts());
     } else {
       const o = lv.objects.find(f => f.id === d.id);
       if (!o) return;
@@ -1914,6 +2017,7 @@ function renderChecks() {
 
 /** + Stairs: a straight stair from the selected room's corner 0 up to the next level, to adjust in its panel. */
 function newStairs() {
+  if (!dropFresh()) return;
   const lv = level(), above = model.levels.filter(l => l.elevation > lv.elevation && (l.building ?? null) === (lv.building ?? null)).sort((a, b) => a.elevation - b.elevation)[0];
   if (!above) { setStatus('There is no level above this one: add one first (+ New level…)'); return; }
   const rm = shape === 'room' ? room() : null, at = rm || lv.rooms?.[0];
@@ -1922,9 +2026,10 @@ function newStairs() {
   const st = { id: newStairsId(model, 'stairs'), to: above.id, start: { ref: `${at.id}#p0`, offset: [300, 300] }, heading: 90, width: 900, flights: [{ risers, length: (risers - 1) * 250 }] };
   const r = applyStairs(model, levelId, st, opts());
   if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
+  const base = model;
   commit(r.model);
-  enterEdit('stairs', st.id, { ask: false });
-  setStatus(`${st.id} added at corner 0 of ${at.name || at.id} (not saved yet): set where it starts, which way it goes and how many risers`);
+  enterEdit('stairs', st.id, { ask: false }); startFresh('stairs', st.id, base, 'stairs');
+  setStatus(`${st.id} is new, at corner 0 of ${at.name || at.id}: set where it starts, which way it goes and how many risers, name it and Apply to create it`);
 }
 
 /** The stairs panel: where they start, the flights, the landing, the underside; what follows from it. */
@@ -1951,6 +2056,7 @@ function showStairs() {
     [1, 2, 3].forEach(k => { const f = fl[k - 1]; $(`stR${k}`).value = f?.risers ?? ''; $(`stL${k}`).value = f?.length ?? ''; $(`stT${k}`).value = (f?.treads || []).join(', '); });
     $('stTurn').value = st.turn ?? 'L'; $('stLanding').value = st.landing ?? 'square'; $('stWinders').value = st.winders ?? 3;
     $('stUnder').value = st.underside ?? 'closed'; $('stSides').value = st.sides ?? 'stepped'; $('stWaist').value = st.waist ?? '';
+    $('stRail').value = st.handrail ?? 'none'; $('stRailH').value = st.handrailHeight ?? '';
     $('stName').value = st.name ?? ''; $('stErr').textContent = ''; stairsFormFor = st;
     fillCopyInto('stairs', st);
   }
@@ -1962,6 +2068,7 @@ function syncStairsRows() {
   $('stThreeRows').hidden = $('stT3Row').hidden = n < 3;
   $('stWindersRow').hidden = n < 2 || $('stLanding').value !== 'winders';
   $('stWaistRow').hidden = $('stUnder').value !== 'sloped';
+  $('stRailHRow').hidden = $('stRail').value === 'none';
   $('stOxLbl').textContent = ref ? 'x offset' : 'x'; $('stOyLbl').textContent = ref ? 'y offset' : 'y';
 }
 function applyStairsForm() {
@@ -1975,10 +2082,11 @@ function applyStairsForm() {
     flights.push(f);
   }
   const next = { ...st, to: $('stTo').value, heading: num('stHead'), width: num('stWidth'), flights, start: ref ? { ref, offset: [num('stOx') || 0, num('stOy') || 0] } : { pos: [num('stOx'), num('stOy')] } };
-  delete next.turn; delete next.landing; delete next.winders; delete next.underside; delete next.sides; delete next.waist;
+  delete next.turn; delete next.landing; delete next.winders; delete next.underside; delete next.sides; delete next.waist; delete next.handrail; delete next.handrailHeight;
   if (two) { next.turn = $('stTurn').value; next.landing = $('stLanding').value; if (next.landing === 'winders') next.winders = num('stWinders'); }
   if ($('stUnder').value !== 'closed') next.underside = $('stUnder').value;
   if ($('stSides').value === 'sloped') next.sides = 'sloped';
+  if ($('stRail').value !== 'none') { next.handrail = $('stRail').value; if ($('stRailH').value.trim() !== '') next.handrailHeight = num('stRailH'); }
   if ($('stUnder').value === 'sloped' && $('stWaist').value.trim() !== '') next.waist = num('stWaist');
   next.name = $('stName').value.trim() || null;                 // empty: no name (applyStairs drops it)
   if ([next.heading, next.width, ...flights.map(f => f.risers)].some(v => !Number.isFinite(v))) { $('stErr').textContent = 'Direction, width and risers must be numbers.'; return; }
@@ -1994,20 +2102,50 @@ function showFixture() {
   const x = fixture();
   if (!x) { fixtureId = null; $('fixturePanel').hidden = true; return; }
   const lv = level(), w = x.attach && lv.walls.find(v => v.id === x.attach.wall), info = w && wallInfo(lv, w.id);
+  const form = stripForm(x), onObject = form === 'object' ? lv.objects?.find(o => o.id === x.attach.object) : null, onOpening = form === 'opening' ? lv.openings?.find(o => o.id === x.attach.opening) : null;
   const nm = ids => ids.map(id => lv.rooms?.find(r => r.id === id)?.name || id).join(', ') || 'outside';
   $('xTitle').innerHTML = titleHtml(x);
-  $('xInfo').innerHTML = `${x.kind === 'switch' ? 'switch' : x.attach ? 'wall lamp' : 'lamp'}${w ? ` on <a href="#" id="xWall" title="${esc(w.id)}">${esc(refName(w.id))}</a>` : ''}` + (x.assumed?.length ? ` · <b class="warn">still default: ${esc(x.assumed.join(', '))}</b>` : '');
+  $('xInfo').innerHTML = `${x.kind === 'switch' ? 'switch' : x.kind === 'strip' ? 'LED strip' : x.attach ? 'wall lamp' : 'lamp'}${w ? ` on <a href="#" id="xWall" title="${esc(w.id)}">${esc(refName(w.id))}</a>` : ''}${form === 'object' || form === 'opening' ? ` on <a href="#" id="xTargetLink" title="${esc(x.attach.object ?? x.attach.opening)}">${esc(refName(x.attach.object ?? x.attach.opening))}</a>` : ''}` + (x.assumed?.length ? ` · <b class="warn">still default: ${esc(x.assumed.join(', '))}</b>` : '');
   $('xWall')?.addEventListener('click', e => { e.preventDefault(); enterEdit('wall', w.id); });
-  for (const [id, show] of [['xRadiusRow', x.kind === 'lamp'], ['xOffsetRow', !!w], ['xFromRow', !!w], ['xSideRow', !!w], ['xXRow', !w], ['xYRow', !w]]) $(id).hidden = !show;
+  $('xTargetLink')?.addEventListener('click', e => { e.preventDefault(); enterEdit(form, x.attach.object ?? x.attach.opening); });
+  for (const [id, show] of [['xRadiusRow', x.kind !== 'switch'], ['xOffsetRow', !!w], ['xLenRow', (!!w && x.kind === 'strip') || form === 'object'], ['xStartRow', form === 'object'], ['xInsetRow', form === 'object'], ['xFromRow', !!w], ['xSideRow', !!w], ['xInRow', !!w && x.kind === 'lamp'], ['xXRow', !x.attach], ['xYRow', !x.attach], ['xTargetRow', !!onObject || !!onOpening || form === 'object' || form === 'opening'], ['xEdgeRow', form === 'object'], ['xAtRow', form === 'object' || form === 'opening']]) $(id).hidden = !show;
+  $('xSideRow').hidden = !(w || form === 'opening');
+  $('xZ').closest('label').hidden = form === 'object' || form === 'opening';                       // its height is the height of what it follows
   if (w) {
     fillFrom('xFrom', w, x.id);
-    $('xOffsetNote').textContent = 'mm from that corner to its middle';
+    $('xOffsetNote').textContent = x.kind === 'strip' ? 'mm from that corner to where the strip starts' : 'mm from that corner to its middle';
     $('xSide').options[0].textContent = nm(info.sides.right); $('xSide').options[1].textContent = nm(info.sides.left);
+    if (fixtureFormFor !== x) {                                   // the openings of this wall a lamp may stand in
+      const here = (lv.openings || []).filter(o => o.wall === w.id);
+      $('xIn').innerHTML = `<option value="">nothing (on the wall face)</option>` + here.map(o => `<option value="${esc(o.id)}">${esc(o.name || refName(o.id))} · ${esc(o.type)}, ${Math.round(o.offset)}–${Math.round(o.offset + o.width)} mm</option>`).join('');
+      if (x.attach.opening && !here.some(o => o.id === x.attach.opening)) $('xIn').insertAdjacentHTML('beforeend', `<option value="${esc(x.attach.opening)}">${esc(x.attach.opening)} (missing)</option>`);
+      $('xIn').value = x.attach.opening || '';
+    }
   }
+  if (form === 'opening' && onOpening) { const oi = wallInfo(lv, onOpening.wall); if (oi) { $('xSide').options[0].textContent = nm(oi.sides.right); $('xSide').options[1].textContent = nm(oi.sides.left); } }
   $('xZNote').textContent = `mm above the floor (ceiling ${lv.ceilingHeight ?? 2400})`;
   if (fixtureFormFor !== x) {
-    $('xName').value = x.name ?? ''; $('xZ').value = x.z; $('xRadius').value = x.radius ?? '';
-    if (w) { $('xOffset').value = offsetFrom({ offset: x.attach.offset, width: 0 }, fromOf(x.id, w)); $('xSide').value = x.attach.side; } else { $('xX').value = x.pos[0]; $('xY').value = x.pos[1]; }
+    $('xName').value = x.name ?? ''; $('xZ').value = x.z ?? ''; $('xRadius').value = x.radius ?? '';
+    if (form === 'object' || form === 'opening') {                // what it follows, and which edge of it
+      const list = form === 'object' ? lv.objects || [] : lv.openings || [];
+      $('xTarget').innerHTML = list.map(o => `<option value="${esc(o.id)}">${esc(o.name || refName(o.id))}</option>`).join('');
+      if (!list.some(o => o.id === (x.attach.object ?? x.attach.opening))) $('xTarget').insertAdjacentHTML('beforeend', `<option value="${esc(x.attach.object ?? x.attach.opening)}">${esc(x.attach.object ?? x.attach.opening)} (missing)</option>`);
+      $('xTarget').value = x.attach.object ?? x.attach.opening;
+      $('xTargetNote').textContent = form === 'object' ? 'the object it runs along (it moves with it)' : 'the window or door it runs along (it moves with it)';
+      $('xAt').innerHTML = form === 'object' ? '<option value="bottom">under the object (its bottom)</option><option value="top">on top of the object</option>' : '<option value="sill">the bottom of the opening (sill)</option><option value="head">the top of the opening</option>';
+      $('xAt').value = x.attach.at ?? (form === 'object' ? 'bottom' : 'sill');
+      $('xAtNote').textContent = form === 'object' ? 'under it, or on top' : 'along its bottom or its top';
+      if (form === 'object') {
+        const fp = curGeo.objectFootprint(onObject || {}) || [];
+        $('xEdge').innerHTML = [0, 1, 2, 3].map(i => `<option value="${i}">side ${wallName(i)}${fp[i] ? ` · ${Math.round(Math.hypot(fp[(i + 1) % fp.length][0] - fp[i][0], fp[(i + 1) % fp.length][1] - fp[i][1]))} mm long` : ''}</option>`).join('');
+        $('xEdge').value = String(x.attach.edge ?? 0);
+        $('xLen').value = x.attach.length ?? ''; $('xStart').value = x.attach.offset ?? ''; $('xInset').value = x.attach.inset ?? '';
+        $('xLenNote').textContent = 'mm, empty = the rest of the side';
+      }
+      if (form === 'opening') $('xSide').value = x.attach.side;
+    }
+    if (w) { $('xOffset').value = offsetFrom({ offset: x.attach.offset, width: 0 }, fromOf(x.id, w)); $('xSide').value = x.attach.side; $('xLen').value = x.attach.length ?? ''; $('xLenNote').textContent = 'mm along the wall'; }
+    else if (!x.attach) { $('xX').value = x.pos[0]; $('xY').value = x.pos[1]; }
     $('xErr').textContent = ''; fixtureFormFor = x;
     fillCopyInto('fixture', x);
     showBinding(x);
@@ -2026,11 +2164,11 @@ async function showBinding(x) {
   const b = loc.bindings?.[x.id] || {}, lv = level();
   $('xEntity').value = b.entity || ''; $('xBindOut').textContent = '';
   $('xControlsRow').hidden = x.kind !== 'switch';
-  $('xLookRow').hidden = x.kind !== 'lamp';
+  $('xLookRow').hidden = x.kind === 'switch';
   const lk = b.look || {};
   $('xLookBri').value = lk.brightness ?? ''; $('xLookK').value = lk.kelvin ?? ''; $('xLookUseColor').checked = !!lk.color; $('xLookColor').value = lk.color || '#ffd6aa';
   $('xControls').onchange = saveBinding;                              // a ticked lamp is linked at once
-  const lamps = model.levels.flatMap(l => (l.fixtures || []).filter(f => f.kind === 'lamp').map(f => ({ f, l })));
+  const lamps = model.levels.flatMap(l => (l.fixtures || []).filter(f => f.kind !== 'switch').map(f => ({ f, l })));
   $('xControls').innerHTML = lamps.map(({ f, l }) => `<label class="inl"><input type="checkbox" value="${esc(f.id)}"${(b.controls || []).includes(f.id) ? ' checked' : ''}> ${esc(displayName(f))}${l.id !== lv.id ? ` <small>${esc(l.name || l.id)}</small>` : ''}</label>`).join('') || 'No lamps yet.';
   const name = loc.integrations?.ha?.connection;
   $('xEntityNote').textContent = name ? `in ${name}: type a name or id, the best matches come first; picking one links it at once` : 'pick the house\'s Home Assistant on the Storage page to get a list; or type the entity id';
@@ -2052,15 +2190,23 @@ function showEntityPick(open = false) {
   $('xEntityNow').innerHTML = '';                                    // while searching, the list is what counts
   $('xEntityPick').querySelectorAll('[data-ent]').forEach(el => (el.onmousedown = ev => { ev.preventDefault(); $('xEntity').value = el.dataset.ent; showEntityPick(false); $('xEntity').blur(); saveBinding(); }));
 }
-async function saveBinding() {
+// The fields save themselves on change and the Save link saves too: typing a value and clicking the link fires both,
+// so the saves are run one at a time, and one that would change nothing is not sent (decision 118).
+const saveBinding = serialRunner(saveBindingNow);
+async function saveBindingNow() {
+  if (isFresh()) { $('xBindOut').textContent = 'Apply the new lamp first: it is linked to Home Assistant by its id, which Apply settles.'; return; }
   const x = fixture(), entity = $('xEntity').value.trim(), controls = [...$('xControls').querySelectorAll('input:checked')].map(i => i.value);
   if (entity && !/^[a-z_]+\.[a-z0-9_]+$/.test(entity)) { $('xBindOut').textContent = 'An entity id looks like light.kitchen'; return; }
   if (!house?.canSave) { $('xBindOut').textContent = 'This house cannot be saved from here.'; return; }
   const num = id => ($(id).value.trim() === '' ? undefined : Number($(id).value));
-  const look = x.kind === 'lamp' ? { brightness: num('xLookBri'), kelvin: $('xLookUseColor').checked ? undefined : num('xLookK'), color: $('xLookUseColor').checked ? $('xLookColor').value : undefined } : undefined;
+  const look = x.kind !== 'switch' ? { brightness: num('xLookBri'), kelvin: $('xLookUseColor').checked ? undefined : num('xLookK'), color: $('xLookUseColor').checked ? $('xLookColor').value : undefined } : undefined;
   const bad = look ? checkLook(Object.fromEntries(Object.entries(look).filter(([, v]) => v !== undefined))) : [];
   if (bad.length) { $('xBindOut').textContent = bad.join('; '); return; }
   const next = setBinding(loc, x.id, { entity, ...(x.kind === 'switch' ? { controls } : {}), ...(look ? { look } : {}) });
+  if (sameBinding(loc, next, x.id)) {
+    if (!/^(Linked and saved|Link removed)/.test($('xBindOut').textContent)) $('xBindOut').textContent = entity || controls.length || look ? 'Already saved: nothing changed.' : 'Not linked: nothing to save.';
+    return;                                                       // (a run that just saved keeps its "Linked and saved")
+  }
   $('xBindOut').textContent = 'Saving…';
   try { const r = await house.save(next, 'location'); loc = r.value; showEntityPick(); $('xBindOut').textContent = entity || controls.length ? 'Linked and saved (location.json).' : 'Link removed and saved.'; }
   catch (e) { $('xBindOut').textContent = e.conflict ? 'location.json was changed elsewhere meanwhile: reload the page and try again.' : `Not saved: ${e.message}`; }
@@ -2072,13 +2218,28 @@ function applyFixture() {
   const nm = nameChange(x.name, $('xName').value);
   if (nm !== undefined) props.name = nm;
   for (const [id, k] of [['xZ', 'z'], ['xRadius', 'radius']]) if (!$(id).closest('label').hidden && changed(id, x[k])) props[k] = num(id);
-  if (x.attach) {
+  const form = stripForm(x);
+  if (form === 'object') {
+    const opt = id => ($(id).value.trim() === '' ? undefined : num(id));
+    const start = opt('xStart'), len = opt('xLen'), inset = opt('xInset');
+    const next = { object: $('xTarget').value, edge: Number($('xEdge').value), at: $('xAt').value, ...(start ? { offset: start } : {}), ...(len !== undefined ? { length: len } : {}), ...(inset ? { inset } : {}) };
+    if (next.object !== x.attach.object || next.edge !== x.attach.edge || next.at !== (x.attach.at ?? 'bottom') || (next.offset ?? 0) !== (x.attach.offset ?? 0) || next.length !== x.attach.length || (next.inset ?? 0) !== (x.attach.inset ?? 0)) props.attach = next;
+  } else if (form === 'opening') {
+    const next = { opening: $('xTarget').value, side: $('xSide').value, at: $('xAt').value };
+    if (next.opening !== x.attach.opening || next.side !== x.attach.side || next.at !== (x.attach.at ?? 'sill')) props.attach = next;
+  } else if (x.attach) {
     const w = level().walls.find(v => v.id === x.attach.wall), where = fromOf(x.id, w);
     const shown = offsetFrom({ offset: x.attach.offset, width: 0 }, where), d = num('xOffset');
-    if (changed('xOffset', shown) || $('xSide').value !== x.attach.side) props.attach = { ...x.attach, offset: changed('xOffset', shown) ? offsetTo(d, where) : x.attach.offset, side: $('xSide').value };
+    const lenChanged = x.kind === 'strip' && changed('xLen', x.attach.length);
+    if (changed('xOffset', shown) || $('xSide').value !== x.attach.side || lenChanged) props.attach = { ...x.attach, offset: changed('xOffset', shown) ? offsetTo(d, where) : x.attach.offset, side: $('xSide').value, ...(x.kind === 'strip' ? { length: num('xLen') } : {}) };
+    if (!$('xInRow').hidden && $('xIn').value !== (x.attach.opening ?? '')) {                 // stands in an opening, or not any more
+      props.attach = { ...(props.attach || x.attach) };
+      if ($('xIn').value) props.attach.opening = $('xIn').value; else delete props.attach.opening;
+    }
   }
   if (x.pos && (changed('xX', x.pos[0]) || changed('xY', x.pos[1]))) props.pos = [num('xX'), num('xY')];
-  if (Object.entries(props).some(([k, v]) => k !== 'name' && (Array.isArray(v) ? v.some(n => !Number.isFinite(n)) : typeof v === 'object' ? !Number.isFinite(v.offset) : !Number.isFinite(v)))) { $('xErr').textContent = 'Values must be numbers of mm.'; return; }
+  if (props.attach && [props.attach.offset, props.attach.length, props.attach.inset].some(v => v !== undefined && !Number.isFinite(v))) { $('xErr').textContent = 'Values must be numbers of mm.'; return; }
+  if (Object.entries(props).some(([k, v]) => k !== 'name' && k !== 'attach' && (Array.isArray(v) ? v.some(n => !Number.isFinite(n)) : typeof v === 'object' ? !Number.isFinite(v.offset) : !Number.isFinite(v)))) { $('xErr').textContent = 'Values must be numbers of mm.'; return; }
   if (!Object.keys(props).length) { $('xErr').textContent = 'Nothing changed.'; return; }
   const r = setFixture(model, levelId, fixtureId, props, opts());
   if (r.report.errors.length) { $('xErr').textContent = r.report.errors.join('; '); return; }
@@ -2375,9 +2536,15 @@ function draw() {
     const P = curGeo?.fixturePos(x);
     if (!P) continue;
     const [cx, cy] = toSvg(P), sel = x.id === fixtureId, c = sel ? '#ffb454' : x.assumed?.length ? '#e5a93a' : '#f5d76e', r = fs * 0.4;
-    out += `<g data-kind="fixture" data-id="${esc(x.id)}" style="cursor:pointer"><title>${esc(tip(x))}</title><circle cx="${cx}" cy="${cy}" r="${fs}" fill="transparent"/>` + (x.kind === 'switch'
+    const line = curGeo.fixtureLine?.(x), lc = line ? line.map(q => toSvg(q).join(',')).join(' ') : '';
+    out += `<g data-kind="fixture" data-id="${esc(x.id)}" style="cursor:pointer"><title>${esc(tip(x))}</title>` + (line ? `<polyline points="${lc}" fill="none" stroke="transparent" stroke-width="${fs * 1.6}" stroke-linecap="round"/><polyline points="${lc}" fill="none" stroke="${c}" stroke-width="${fs / 3}" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>` : '') + `<circle cx="${cx}" cy="${cy}" r="${fs}" fill="transparent"/>` + (x.kind === 'strip' ? `<circle cx="${cx}" cy="${cy}" r="${r * 0.7}" fill="${c}" stroke="${sel ? '#fff' : '#14161a'}" stroke-width="${fs / 10}"/>` : x.kind === 'switch'
       ? `<rect x="${cx - r}" y="${cy - r}" width="${2 * r}" height="${2 * r}" rx="${r / 3}" fill="#14161a" stroke="${c}" stroke-width="${fs / (sel ? 5 : 8)}"/>`
       : `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${c}" stroke="${sel ? '#fff' : '#14161a'}" stroke-width="${fs / 10}"/>`) + '</g>';
+  }
+  for (const x of lv.fixtures || []) {                            // the ends of the selected LED strip on a wall: handles to drag
+    if (x.id !== fixtureId || stripForm(x) !== 'wall') continue;
+    const line = curGeo.fixtureLine?.(x);
+    if (line) [['a', line[0]], ['b', line[1]]].forEach(([end, q]) => { const [hx, hy] = toSvg(q); out += `<circle data-send="${end}" data-id="${esc(x.id)}" cx="${hx}" cy="${hy}" r="${fs * 0.55}" fill="#fff" fill-opacity=".85" stroke="#ffb454" stroke-width="${fs / 8}" style="cursor:ew-resize"><title>Drag to change where the strip ${end === 'a' ? 'starts' : 'ends'}</title></circle>`; });
   }
   out += underNames.join('');
   out += selectionMarks(lv, fs);
@@ -2580,7 +2747,12 @@ function deleteRoom() {
   setStatus(`deleted ${r.id} (not saved yet)`);
 }
 
-async function save() {
+// one save at a time: a double-click (or a click while the last save is still on its way) saves once, then at most once
+// more, and a save with nothing changed says so instead of writing the same file again (decision 118)
+const save = serialRunner(saveNow);
+async function saveNow() {
+  if (fresh && editing) { $('saveOut').textContent = `Apply or cancel the new ${fresh.what} first: it is not created yet.`; return; }
+  if (!dirty) { if (!/^Saved at/.test($('saveOut').textContent)) $('saveOut').textContent = 'All saved: nothing to save.'; return; }
   const errs = issuesNow.filter(i => i.severity === 'error');
   if (errs.length) { $('saveOut').innerHTML = `<span style="color:var(--bad)">Not saved: ${errs.length} error(s), listed just below. Fix them, or use Download.</span>`; return; }
   $('saveOut').textContent = 'Saving…';

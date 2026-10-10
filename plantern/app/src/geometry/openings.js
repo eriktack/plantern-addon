@@ -12,6 +12,7 @@
 // in the wall (without it, across the whole wall).
 
 import { facePoint, centrePoint } from './walls.js';
+import { unitSpan } from './fittings.js';
 
 /** { lines: [[p, q]], dashed: [[p, q]], arcs: [{ c, r, from, to, dashed }] } for opening o on wall w (frame f). */
 export function openingSymbol(w, f, o) {
@@ -44,10 +45,10 @@ export function openingSymbol(w, f, o) {
   } else if (o.type === 'door') leaf(false);
   else if (o.type === 'window') {
     const c0 = centrePoint(w, f, s0), c1 = centrePoint(w, f, s1);
-    if (o.thickness) {
-      // the frame at its own depth, centred in the wall: both sides and the ends
-      const h = o.thickness / 2, at = (p, k) => [p[0] + f.n[0] * k, p[1] + f.n[1] * k];
-      out.lines.push([at(c0, h), at(c1, h)], [at(c0, -h), at(c1, -h)], [at(c0, h), at(c0, -h)], [at(c1, h), at(c1, -h)], [c0, c1]);
+    if (o.thickness || o.placement) {
+      // the frame at its own depth, where it sits across the wall (centred unless `placement` says flush with a face): both sides and the ends
+      const u = unitSpan(w, f, o), tc = (f.offL - f.offR) / 2, at = (p, t) => [p[0] + f.n[0] * (t - tc), p[1] + f.n[1] * (t - tc)], mid = (u.t0 + u.t1) / 2;
+      out.lines.push([at(c0, u.t1), at(c1, u.t1)], [at(c0, u.t0), at(c1, u.t0)], [at(c0, u.t1), at(c0, u.t0)], [at(c1, u.t1), at(c1, u.t0)], [at(c0, mid), at(c1, mid)]);
     } else {
       const [l0, l1] = face('left'), [r0, r1] = face('right');
       out.lines.push([l0, l1], [r0, r1], [c0, c1]);

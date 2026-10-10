@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Fix: the dashboard card is now published to the right folder (/homeassistant/www/plantern in current Home Assistant), so it shows up under Add card.
+
 ## 0.1.0
 
 - First release.

@@ -2,11 +2,12 @@
 // opening is comes from geometry/stairs.js; whether it fits the house is reported by validate.js.
 //   { id: "st_main", to: "upper", start: { ref, offset: [dx, dy] } | { pos: [x, y] }, heading, width,
 //     flights: [{ risers, length?, treads?: [mm, …] }, …] (1 straight, 2 an L, 3 a U), turn?: "L" | "R", landing?: "square" | "winders",
-//     winders?: n, underside?: "closed" | "open" | "sloped", waist?: mm, sides?: "stepped" | "sloped", opening?: [[x, y], …], assumed?: [...] }
+//     winders?: n, underside?: "closed" | "open" | "sloped", waist?: mm, sides?: "stepped" | "sloped", handrail?: "none" | "left" | "right" | "both" (walking up), handrailHeight?: mm, opening?: [[x, y], …], assumed?: [...] }
 // Pure.
 
 export const STAIR_UNDERSIDES = ['closed', 'open', 'sloped'];
 export const STAIR_SIDES = ['stepped', 'sloped'];
+export const STAIR_HANDRAILS = ['none', 'left', 'right', 'both'];
 export const STAIR_DEFAULTS = Object.freeze({ width: 900, riser: 180, tread: 250, underside: 'closed' });
 
 /** Problems with the fields of a stair: { errors: [msg] }. */
@@ -42,6 +43,8 @@ export function checkStairs(st, model, level) {
   }
   if (st?.underside !== undefined && !STAIR_UNDERSIDES.includes(st.underside)) errors.push(`underside must be ${STAIR_UNDERSIDES.join(' or ')}`);
   if (st?.sides !== undefined && !STAIR_SIDES.includes(st.sides)) errors.push(`sides must be ${STAIR_SIDES.join(' or ')}`);
+  if (st?.handrail !== undefined && !STAIR_HANDRAILS.includes(st.handrail)) errors.push(`handrail must be ${STAIR_HANDRAILS.join(', ')} (walking up)`);
+  if (st?.handrailHeight !== undefined && !(st.handrailHeight >= 300 && st.handrailHeight <= 1500)) errors.push('handrailHeight (above the nose line) must be 300 to 1500 mm');
   if (st?.waist !== undefined && !(st.waist > 0)) errors.push('waist (thickness under a sloped underside) must be more than 0');
   if (st?.opening !== undefined && !(Array.isArray(st.opening) && st.opening.length >= 3 && st.opening.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)))) errors.push('opening must be a polygon of 3 or more points');
   return { errors };

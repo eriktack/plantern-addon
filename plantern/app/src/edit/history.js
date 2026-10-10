@@ -17,6 +17,13 @@ export function createHistory(model, limit = 200) {
       lastKey = key;
       return next;
     },
+    /** Go back to a snapshot taken earlier (what was before something new was started) and forget everything after it; false when it is not in the history. */
+    rewindTo(snapshot) {
+      const i = stack.lastIndexOf(snapshot, at);
+      if (i < 0) return false;
+      stack = stack.slice(0, i + 1); at = i; lastKey = null;
+      return stack[at];
+    },
     undo() { if (at > 0) at--; lastKey = null; return stack[at]; },
     redo() { if (at < stack.length - 1) at++; lastKey = null; return stack[at]; },
   };

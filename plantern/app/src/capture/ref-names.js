@@ -45,7 +45,7 @@ export function refNamer(model) {
       if (kind === 'room') return roomName(id);
       if (kind === 'solid') return solidName(e);
       if (kind === 'opening') return e.name || `${e.type} ${id}`;
-      if (kind === 'fixture') return e.name || `${e.kind === 'switch' ? 'switch' : 'lamp'} ${id}`;
+      if (kind === 'fixture') return e.name || `${e.kind === 'switch' ? 'switch' : e.kind === 'strip' ? 'LED strip' : 'lamp'} ${id}`;
       return e.name || id;
     }
     if (kind === 'room') {
@@ -70,7 +70,7 @@ export function refNamer(model) {
       if (h === 'mid') return `${wallTitle(e)}, middle`;
     }
     if (kind === 'opening' && (m = /^(near|far)\.(left|right)$/.exec(h))) return `${e.name || `${e.type} ${id}`}, ${m[1]} edge (${m[2]} face)`;
-    if (kind === 'fixture') return e.name || `${e.kind === 'switch' ? 'switch' : 'lamp'} ${id}`;
+    if (kind === 'fixture') return e.name || `${e.kind === 'switch' ? 'switch' : e.kind === 'strip' ? 'LED strip' : 'lamp'} ${id}`;
     if (kind === 'object') {
       if ((m = /^c(\d+)$/.exec(h))) return `${e.name || id} corner ${m[1]}`;
       if (h === 'attach') return `${e.name || id} on its wall`;

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { levelPrisms } from '../geometry/prisms.js';
 import { MM, toThree, dirToThree, prismGeometry, cylinderGeometry } from './coords.js';
+import { pointAlong, polylineLength } from '../geometry/strip.js';
 import { pickShadowLamps, SHADOW_COUNT } from '../model/shadows.js';
 
 /**
@@ -171,7 +172,7 @@ export function createView3d(container, hooks = {}) {
    * a level up, shift [dx, dy] sideways in the plan, for the exploded view). Lamps and switches of every shown level are live; the number of lamps casting
    * shadows is shared between them.
    */
-  function build({ level, geo, levels, settings: s, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '' }) {
+  function build({ level, geo, levels, settings: s, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', ceilings = false }) {
     clear();
     settings = s;
     const shown = levels ?? (level ? [{ level, geo, lift: 0 }] : []);
@@ -186,7 +187,7 @@ export function createView3d(container, hooks = {}) {
     g.position.x = shift[0] * MM; g.position.z = -shift[1] * MM;      // plan (x, y) → three (x, -y)
     root.add(g);
 
-    for (const p of levelPrisms(level, geo, materials)) {
+    for (const p of levelPrisms(level, geo, materials, { ceilings })) {
       let geom = p.circle ? cylinderGeometry(THREE, p.circle.center, p.circle.diameter / 2, p.z0, p.z1) : prismGeometry(THREE, p.poly, p.z0, p.z1, p.slope, p.holes), mat;
       if (p.sides) paintSides(geom, p.sides);
       mat = material(p);
@@ -202,6 +203,7 @@ export function createView3d(container, hooks = {}) {
     for (const fx of level.fixtures || []) {
       const pos = geo.fixturePos(fx);
       if (!pos) continue;
+      if (fx.kind === 'strip') { addStrip(fx, geo, level, g, fixtureLabel); continue; }
       const at = new THREE.Vector3(...toThree(pos, fx.z ?? (fx.kind === 'lamp' ? level.ceilingHeight - 100 : 1100)));
       if (fx.kind === 'lamp') {
         const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 12), new THREE.MeshStandardMaterial({ color: 0x444444, emissive: 0x000000 }));
@@ -232,7 +234,42 @@ export function createView3d(container, hooks = {}) {
     }
     }
 
-    function finishBuild() {
+    /**
+   * An LED strip (decision 121): thin emissive segments along its line, and three real lights (its two ends and its middle),
+   * so the room is lit along it without one light per few centimetres. Strips never cast shadows.
+   */
+  function addStrip(fx, geo, level, g, fixtureLabel) {
+    let line = geo.fixtureLine(fx);
+    if (!line) return;
+    // just off the wall face (a strip on a wall or along a window); one on an object follows the object's edge as it is
+    const face = fx.attach?.wall !== undefined ? fx.attach : fx.attach?.opening !== undefined ? { wall: geo.level.openings?.find(o => o.id === fx.attach.opening)?.wall, side: fx.attach.side, offset: 0 } : null;
+    const a = face?.wall && geo.resolveAttach(face);
+    if (a) line = line.map(p => [p[0] + a.dir[0] * 12, p[1] + a.dir[1] * 12]);
+    const z = geo.fixtureZ(fx) ?? 1400, meshes = [], halos = [];
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1], b = line[i], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (!(len > 0)) continue;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(len * MM, 0.02, 0.02), new THREE.MeshStandardMaterial({ color: 0x444444, emissive: 0x000000 }));
+      m.position.set(...toThree([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], z));
+      m.rotation.y = Math.atan2(b[1] - a[1], b[0] - a[0]);
+      m.name = fx.id;
+      m.userData = { fixture: fx, label: fixtureLabel(fx) };
+      // a soft halo round it (the look of a diffuser): wider, additive, only visible when the strip is on
+      const h = new THREE.Mesh(new THREE.BoxGeometry(len * MM, 0.07, 0.07), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+      h.position.copy(m.position); h.rotation.y = m.rotation.y; h.raycast = () => {};
+      g.add(m, h); pickables.push(m); meshes.push(m); halos.push(h);
+    }
+    const lights = [0, 0.5, 1].map(t => {
+      const L = new THREE.PointLight(0xffffff, 0, (fx.radius || 1200) * MM * 1.8, 2);
+      L.position.set(...toThree(pointAlong(line, polylineLength(line) * t), z));
+      L.name = `${fx.id}:light`;
+      g.add(L);
+      return L;
+    });
+    fixtures.set(fx.id, { kind: 'strip', meshes, halos, lights });
+  }
+
+  function finishBuild() {
     bounds = new THREE.Box3().setFromObject(root);
     ground.position.y = bounds.min.y - 0.002;
     const c = bounds.getCenter(new THREE.Vector3()), r = bounds.getSize(new THREE.Vector3()).length() / 2 + 1;
@@ -259,7 +296,15 @@ export function createView3d(container, hooks = {}) {
     if (!f) return;
     f.state = a;
     const col = new THREE.Color(`rgb(${a.rgb.join(',')})`);
-    if (f.kind === 'lamp') {
+    if (f.kind === 'strip') {
+      for (const L of f.lights) { L.visible = a.on; L.color.copy(col); L.intensity = (settings.render3d?.lampIntensity ?? 80) * a.brightness * 0.5; }
+      for (const m of f.meshes) {
+        m.material.color.set(a.available ? (a.on ? col : 0x555555) : 0x7a2a2a);
+        m.material.emissive.copy(a.on ? col : new THREE.Color(0));
+        m.material.emissiveIntensity = a.on ? 2 : 0;
+      }
+      for (const h of f.halos) { h.material.color.copy(col); h.material.opacity = a.on ? 0.25 * a.brightness : 0; }
+    } else if (f.kind === 'lamp') {
       f.light.visible = a.on;
       f.light.color.copy(col);
       f.light.intensity = (settings.render3d?.lampIntensity ?? 80) * a.brightness;

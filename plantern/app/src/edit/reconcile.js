@@ -299,7 +299,7 @@ export function reconcile(model, levelId, change = {}, options = {}) {
           });
           for (const key of ['objects', 'fixtures']) things[key].forEach((x, i) => {
             if (x.attach?.wall !== w.id) return;
-            const m = moveAlong(w, nw, x.attach.offset, key === 'objects' ? x.size?.[0] ?? 0 : 0);
+            const m = moveAlong(w, nw, x.attach.offset, key === 'objects' ? x.size?.[0] ?? 0 : x.attach.length ?? 0);
             things[key][i] = { ...x, attach: { ...x.attach, offset: m.offset, ...(m.flipped ? { side: flipSide(x.attach.side) } : {}) } };
           });
         }
@@ -320,7 +320,7 @@ export function reconcile(model, levelId, change = {}, options = {}) {
         });
         for (const key of ['objects', 'fixtures']) things[key].forEach((x, i) => {
           if (x.attach?.wall !== w.id) return;
-          const size = key === 'objects' ? x.size?.[0] ?? 0 : 0;
+          const size = key === 'objects' ? x.size?.[0] ?? 0 : x.attach.length ?? 0;
           things[key][i] = { ...x, attach: { ...x.attach, wall: into, offset: place(x.attach.offset, size), ...(flipped ? { side: flipSide(x.attach.side) } : {}) } };
           moved.push(x.id);
         });
