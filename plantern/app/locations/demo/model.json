@@ -1,7 +1,11 @@
 {
   "schemaVersion": 1,
   "units": "mm",
-  "site": { "origin": [0,0], "northAngleDeg": 0 },
+  "site": {
+    "origin": [0,0],
+    "northAngleDeg": 0,
+    "georef": { "crs": "EPSG:3006", "origin": [530000,6580000], "groundFloorHeight": 42.5, "source": "typed" }
+  },
   "levels": [
     {
       "id": "basement",

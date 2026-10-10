@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8
+
+- The Editor has a *Place the house* section: where the house is (a position typed or pasted in any form, including a link from a maps app), which way plan north points (typed, or worked out from a wall and a compass bearing), and the height of the ground floor above sea level. It replaces *House orientation*.
+
 ## 0.1.7
 
 - 0.1.6 (card messages as toasts) never reached Home Assistant because the release's test run failed on a timing problem; it is in this release.

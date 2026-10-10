@@ -18,6 +18,7 @@ import { checkRoomOptions } from './rooms.js';
 import { checkObject } from './objects.js';
 import { checkName } from './names.js';
 import { checkMaterials, checkPalette } from './materials.js';
+import { checkSite } from './site.js';
 
 // Issues: { severity: 'error' | 'warn', id, msg }. Never throws on bad data; reports it.
 
@@ -345,7 +346,7 @@ export function validateModel(model, geos) {
   const out = [];
   if (model.units && model.units !== 'mm') out.push({ severity: 'error', id: 'model', msg: `units must be "mm" (got "${model.units}")` });
   checkIds(model, out);
-  out.push(...checkMaterials(model), ...checkPalette(model));
+  out.push(...checkMaterials(model), ...checkPalette(model), ...checkSite(model.site));
   for (const lv of model.levels) out.push(...validateLevel(lv, geos.get(lv.id), model.levels.some(l => l.id !== lv.id && l.elevation < lv.elevation && (l.building ?? null) === (lv.building ?? null)), model.checks).map(x => ({ ...x, level: lv.id })));
   out.push(...validateLevels(model, geos), ...validateStairs(model, geos), ...checkAnchors(model, geos));
   const rooms = model.levels.flatMap(l => l.rooms || []);

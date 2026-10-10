@@ -10,6 +10,7 @@ import { nameFirst } from '../model/names.js';
 import { bindWalls } from './bind.js';
 import { upsertRoom, removeRoom as dropRoom, newRoomId } from '../capture/edit.js';
 import { validateModel } from '../model/validate.js';
+import { checkSite, GEOREF_CRS } from '../model/site.js';
 import { buildLevelGeometry, buildModelGeometry } from '../geometry/level.js';
 import { collectSnapPoints } from '../tools/snap.js';
 import { followLevels, levelOfRef } from './levels.js';
@@ -455,6 +456,55 @@ export function setNorthAngle(model, deg) {
   if (!Number.isFinite(deg)) return refuse(model, 'the angle must be a number');
   const next = { ...model, site: { ...(model.site || { origin: [0, 0] }), northAngleDeg: deg } };
   return { model: next, report: { errors: [], issues: validate(next) } };
+}
+
+const SITE_PROPS = ['northAngleDeg', 'georef'];
+const GEOREF_EDIT_KEYS = ['origin', 'groundFloorHeight', 'accuracy', 'source'];
+const emptyValue = v => v === null || v === undefined || v === '';
+const roundMm = v => (typeof v === 'number' ? Math.round(v * 1000) / 1000 : v);   // metres to the millimetre: no float noise in the file
+
+/**
+ * Where the house is and which way it faces (PLANTERN.md §14.4, `src/model/site.js`): the north angle and `site.georef`.
+ *   props.northAngleDeg   number of degrees; null removes it
+ *   props.georef          { origin?: [east, north] metres (SWEREF 99 TM), groundFloorHeight?: metres (RH 2000), accuracy?: metres,
+ *                           source?: 'typed' | 'map' | 'gps' }: only the keys given change, null (or an empty value) removes one;
+ *                         the whole value null removes the georef. `crs` is set to EPSG:3006 with the origin.
+ * A value of the wrong kind refuses the whole change (errors say why); a believable-but-odd value (outside Sweden) is
+ * accepted and shows in `report.issues` as a warning. Returns { model, report: { errors, changed, issues } }.
+ */
+export function setSite(model, props = {}) {
+  const unknown = Object.keys(props).filter(k => !SITE_PROPS.includes(k));
+  if (unknown.length) return refuse(model, ...unknown.map(k => `${k} cannot be set here`));
+  const site = { ...(model.site || { origin: [0, 0] }) };
+  const errors = [];
+  if ('northAngleDeg' in props) {
+    if (emptyValue(props.northAngleDeg)) delete site.northAngleDeg; else site.northAngleDeg = props.northAngleDeg;
+  }
+  if ('georef' in props) {
+    const g = props.georef;
+    if (emptyValue(g)) delete site.georef;
+    else if (typeof g !== 'object' || Array.isArray(g)) errors.push('georef must be an object');
+    else {
+      const next = { ...(site.georef || {}) };
+      for (const [k, v] of Object.entries(g)) {
+        if (!GEOREF_EDIT_KEYS.includes(k)) errors.push(`georef.${k} cannot be set here`);
+        else if (emptyValue(v)) delete next[k];
+        else next[k] = k === 'origin' && Array.isArray(v) ? v.map(roundMm) : roundMm(v);
+      }
+      if (next.origin) next.crs = GEOREF_CRS;
+      else { delete next.crs; delete next.accuracy; delete next.source; }   // how well and how the position was set mean nothing without it
+      const ordered = {};
+      for (const k of ['crs', 'origin', 'groundFloorHeight', 'accuracy', 'source']) if (k in next) ordered[k] = next[k];
+      if (Object.keys(ordered).length) site.georef = ordered; else delete site.georef;
+    }
+  }
+  const bad = checkSite(site).filter(i => i.severity === 'error').map(i => i.msg);
+  if (errors.length || bad.length) return refuse(model, ...errors, ...bad);
+  const next = { ...model, site };
+  const flat = (s, p = '') => Object.entries(s || {}).flatMap(([k, v]) => (v && typeof v === 'object' && !Array.isArray(v) ? flat(v, `${p}${k}.`) : [[`${p}${k}`, JSON.stringify(v)]]));
+  const before = new Map(flat(model.site)), after = new Map(flat(site));
+  const changed = [...new Set([...before.keys(), ...after.keys()])].filter(k => before.get(k) !== after.get(k));
+  return { model: next, report: { errors: [], changed, issues: validate(next) } };
 }
 
 export { DEFAULT_CEILING, DEFAULT_FLOOR_THICKNESS } from '../model/elevation.js';
