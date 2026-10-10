@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.7
+
+- 0.1.6 (card messages as toasts) never reached Home Assistant because the release's test run failed on a timing problem; it is in this release.
+- Fix: the sync state of a git storage could be left on "ok" instead of "pushed" when two refreshes overlapped.
+
+## 0.1.6
+
+- Messages and errors in the dashboard card are toasts floating over the plan (and fade out), so the plan no longer jumps when one appears.
+
 ## 0.1.5
 
 - Fix: the card's version now also changes when only the way its files are published changes. 0.1.4 kept the same version as 0.1.3, so browsers kept running the old cached card and it stayed missing.

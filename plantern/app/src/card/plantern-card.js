@@ -53,9 +53,13 @@ const STYLE = `
   ha-card[data-bg="transparent"] { background: none; box-shadow: none; border: 0; }
   .fix { cursor: pointer; }
   .lbl { pointer-events: none; }
-  .msg { padding: 8px 16px; color: var(--secondary-text-color); font-size: 0.9em; }
-  .msg:empty { display: none; }
-  .msg.err { color: var(--error-color, #db4437); }
+  ha-card { position: relative; }
+  /* messages float over the plan as a toast, so showing or hiding one never moves the plan */
+  .msg { position: absolute; left: 50%; bottom: 14px; transform: translate(-50%, 8px); max-width: calc(100% - 32px); box-sizing: border-box;
+         padding: 8px 16px; border-radius: 999px; font-size: 0.9em; line-height: 1.3; text-align: center; color: #fff;
+         background: rgba(32, 36, 42, .92); box-shadow: 0 2px 8px rgba(0, 0, 0, .35); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 2; }
+  .msg.show { opacity: 1; transform: translate(-50%, 0); }
+  .msg.err { background: var(--error-color, #db4437); }
 `;
 
 class PlanternCard extends HTMLElement {
@@ -94,16 +98,23 @@ class PlanternCard extends HTMLElement {
     return { location: '/local/plantern/locations/demo/location.json' };
   }
 
-  _say(text, err = false) {
+  /** A toast over the plan. `''` hides it. It fades out by itself after a few seconds (longer for errors) unless `sticky`. */
+  _say(text, err = false, sticky = false) {
     const m = this.shadowRoot.querySelector('.msg');
-    if (m) { m.textContent = text; m.className = err ? 'msg err' : 'msg'; }
+    if (!m) return;
+    clearTimeout(this._toast);
+    if (!text) { m.classList.remove('show'); return; }
+    m.textContent = text;
+    m.className = err ? 'msg err show' : 'msg show';
+    if (!sticky) this._toast = setTimeout(() => m.classList.remove('show'), err ? 7000 : 4000);
   }
 
   async _load() {
     const token = ++this._token, cfg = this._cfg;
     this._stopCycle?.(); this._startCycle = this._stopCycle = null;
     this._ro?.disconnect(); this._plans = [];
-    this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card data-bg="${cfg.background || 'dark'}"><div class="hd"></div><div class="lv" hidden></div><div class="stage"><div class="plans"></div><div class="v3d" hidden></div></div><div class="msg">Loading…</div></ha-card>`;
+    this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card data-bg="${cfg.background || 'dark'}"><div class="hd"></div><div class="lv" hidden></div><div class="stage"><div class="plans"></div><div class="v3d" hidden></div></div><div class="msg"></div></ha-card>`;
+    this._say('Loading…', false, true);
     this._v3dEl = this.shadowRoot.querySelector('.v3d');
     this._view3d = null; this._loading3d = null; this._mode = '2d';
     try {
@@ -114,7 +125,7 @@ class PlanternCard extends HTMLElement {
       if (token !== this._token) return;
       this._show(cfg, loc, model, baseUrl);
     } catch (e) {
-      if (token === this._token) this._say(`Plantern: ${e.message}`, true);
+      if (token === this._token) this._say(`Plantern: ${e.message}`, true, true);
     }
   }
 
@@ -230,7 +241,7 @@ class PlanternCard extends HTMLElement {
 
     ha.subscribe(() => refresh());
     ha.onStatus(s => { if (s === 'connected') this._say(''); });
-    this._say(this._hass ? '' : 'Waiting for Home Assistant…');
+    this._say(this._hass ? '' : 'Waiting for Home Assistant…', false, true);
     this._ha = ha;
     if (this._hass) ha.setHass(this._hass);
   }
