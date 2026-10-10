@@ -1,12 +1,18 @@
-// The Plantern Lovelace card (docs/plans/ha-11-12.md S14): the 2D plan of a house with its lamps and switches
-// live. Home Assistant hands the card `hass`, so there is no URL and no token (HassHA). The house files are the
-// ones the add-on mirrors to /local/plantern/ (S15). Config:
+// The Plantern Lovelace card (docs/plans/ha-11-12.md S14): the plan of a house with its lamps and switches
+// live, in 2D or 3D. Home Assistant hands the card `hass`, so there is no URL and no token (HassHA). The house files
+// are the ones the add-on mirrors to /local/plantern/ (S15). Config:
 //   type: custom:plantern-card
 //   location: /local/plantern/locations/<house>/location.json
-//   level: <level id>   (optional)   title: <text>   (optional)   height: <px>   (optional)
+//   level: <level id>   (optional, the floor it opens on)   title: <text>   (optional)
+//   levels: [<level id>, …]   (optional: only these floors. One: that floor, no picker. Several: shown together, no picker)
+//   cycle: <seconds>          (optional: with several floors, show them one at a time, a slideshow; no levels = all of them)
+//   view: 2d | 3d             (optional, what it opens on; the header has a switch)
+//   background: dark | card | transparent   (optional: the plan's dark, the theme's card colour, or the dashboard behind)
+//   height: <px>              (optional, the least height: the card fills the space its dashboard gives it)
 // Everything but the DOM lives in card-core.js, ../ha/fixture.js and the same geometry and plan modules the viewer uses.
 
-import { cardConfig, houseUrls, housesFromIndex, chooseCardLevel, DEFAULT_INDEX } from './card-core.js';
+import { cardConfig, houseUrls, housesFromIndex, chooseCardLevel, cardLevels, nextLevel, DEFAULT_INDEX } from './card-core.js';
+import { levelStack } from '../geometry/stack.js';
 import { buildModelGeometry } from '../geometry/level.js';
 import { resolveSettings } from '../model/settings.js';
 import { createPlanView } from '../render2d/plan.js';
@@ -22,15 +28,33 @@ const getJson = async url => {
 };
 
 const STYLE = `
-  :host { display: block; }
-  ha-card { overflow: hidden; }
+  :host { display: block; height: 100%; }
+  ha-card { display: flex; flex-direction: column; height: 100%; overflow: hidden; box-sizing: border-box; }
   .hd { display: flex; align-items: center; gap: 8px; padding: 12px 16px 0; }
   .hd .t { flex: 1; font-size: 1.1em; font-weight: 500; color: var(--primary-text-color); }
-  select { font: inherit; color: var(--primary-text-color); background: var(--card-background-color, #fff); border: 1px solid var(--divider-color, #888); border-radius: 6px; padding: 4px 6px; }
-  svg { display: block; width: 100%; height: var(--plantern-height, 420px); background: #1a1d22; touch-action: pan-y; user-select: none; }
+  .seg { display: inline-flex; border: 1px solid var(--divider-color, #888); border-radius: 999px; overflow: hidden; }
+  .seg button { font: inherit; border: 0; padding: 4px 14px; cursor: pointer; color: var(--primary-text-color); background: transparent; }
+  .seg button.on { background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
+  .lv { display: flex; gap: 8px; padding: 10px 16px 0; overflow-x: auto; scrollbar-width: none; }
+  .lv button { font: inherit; font-weight: 500; flex: 0 0 auto; border: 1px solid var(--divider-color, #888); border-radius: 999px; padding: 7px 18px; cursor: pointer; color: var(--primary-text-color); background: transparent; transition: background .15s, color .15s; }
+  .lv button:hover { background: var(--secondary-background-color, #0001); }
+  .lv button.on { background: var(--primary-color, #03a9f4); border-color: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
+  .lv .now { flex: 0 0 auto; padding: 6px 4px; color: var(--secondary-text-color); font-weight: 500; }
+  .stage { position: relative; flex: 1 1 auto; min-height: var(--plantern-height, 420px); margin-top: 8px; }
+  .plans { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 2px; }
+  .pl { position: relative; min-width: 0; min-height: 0; }
+  svg, .v3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  svg { background: #1a1d22; touch-action: pan-y; user-select: none; }
+  .cap { position: absolute; left: 10px; top: 8px; padding: 2px 10px; border-radius: 999px; font-size: 0.85em; color: #fff; background: rgba(0, 0, 0, .45); pointer-events: none; }
+  .v3d canvas { display: block; width: 100%; height: 100%; }
+  [hidden] { display: none !important; }
+  ha-card[data-bg="card"] svg, ha-card[data-bg="transparent"] svg { background: transparent; }
+  ha-card[data-bg="card"] .cap, ha-card[data-bg="transparent"] .cap { color: var(--primary-text-color); background: var(--secondary-background-color, #0001); }
+  ha-card[data-bg="transparent"] { background: none; box-shadow: none; border: 0; }
   .fix { cursor: pointer; }
   .lbl { pointer-events: none; }
   .msg { padding: 8px 16px; color: var(--secondary-text-color); font-size: 0.9em; }
+  .msg:empty { display: none; }
   .msg.err { color: var(--error-color, #db4437); }
 `;
 
@@ -39,6 +63,7 @@ class PlanternCard extends HTMLElement {
     super();
     this.attachShadow({ mode: 'open' });
     this._token = 0;                                              // a newer load makes an older one stop
+    this._plans = [];                                             // the 2D plans on show: [{ level, svg, view }]
   }
 
   setConfig(config) {
@@ -54,10 +79,11 @@ class PlanternCard extends HTMLElement {
   getCardSize() { return Math.max(3, Math.round((this._cfg?.height || 420) / 50)); }
 
   connectedCallback() {
-    this._ro ??= new ResizeObserver(() => this._view?.fit());
-    if (this._svg) this._ro.observe(this._svg);
+    this._ro ??= new ResizeObserver(() => { if (this._mode !== '3d') this._plans.forEach(p => p.view.fit()); });
+    this._plans.forEach(p => this._ro.observe(p.svg));
+    this._startCycle?.();
   }
-  disconnectedCallback() { this._ro?.disconnect(); }
+  disconnectedCallback() { this._ro?.disconnect(); this._stopCycle?.(); }
 
   static getConfigElement() { return document.createElement('plantern-card-editor'); }
   static async getStubConfig() {
@@ -75,8 +101,11 @@ class PlanternCard extends HTMLElement {
 
   async _load() {
     const token = ++this._token, cfg = this._cfg;
-    this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card><div class="hd"></div><svg></svg><div class="msg">Loading…</div></ha-card>`;
-    this._svg = this.shadowRoot.querySelector('svg');
+    this._stopCycle?.(); this._startCycle = this._stopCycle = null;
+    this._ro?.disconnect(); this._plans = [];
+    this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card data-bg="${cfg.background || 'dark'}"><div class="hd"></div><div class="lv" hidden></div><div class="stage"><div class="plans"></div><div class="v3d" hidden></div></div><div class="msg">Loading…</div></ha-card>`;
+    this._v3dEl = this.shadowRoot.querySelector('.v3d');
+    this._view3d = null; this._loading3d = null; this._mode = '2d';
     try {
       const loc = await getJson(cfg.location);
       const { baseUrl, modelUrl } = houseUrls(cfg.location, loc);
@@ -90,49 +119,139 @@ class PlanternCard extends HTMLElement {
   }
 
   _show(cfg, loc, model, baseUrl) {
-    const bindings = loc.bindings || {};
+    const root = this.shadowRoot, bindings = loc.bindings || {};
     const geos = buildModelGeometry(model, { headroom: l => resolveSettings(loc, l).stairHeadroom });
     const ha = new HassHA({ entities: boundEntities(loc) });
     const getState = id => ha.getState(id);
-    let level = chooseCardLevel(model, cfg.level);
+    const { levels: pool, mode: levelMode } = cardLevels(model, cfg);   // select | single | together | cycle
+    let current = pool.find(l => l.id === cfg.level) || (levelMode === 'select' ? chooseCardLevel(model, cfg.level) : pool[0]) || null;
+    const shown = () => levelMode === 'together' ? pool : current ? [current] : [];
+    const levelName = l => l.name || l.id;
 
-    const hd = this.shadowRoot.querySelector('.hd');
-    hd.innerHTML = `<div class="t">${esc(cfg.title ?? loc.name ?? '')}</div>${model.levels.length > 1 ? `<select>${model.levels.map(l => `<option value="${esc(l.id)}">${esc(l.name || l.id)}</option>`).join('')}</select>` : ''}`;
+    const hd = root.querySelector('.hd'), lv = root.querySelector('.lv'), plansEl = root.querySelector('.plans');
+    hd.innerHTML = `<div class="t">${esc(cfg.title ?? loc.name ?? '')}</div><span class="seg"><button data-v="2d" class="on">2D</button><button data-v="3d">3D</button></span>`;
     if (cfg.height) this.shadowRoot.host.style.setProperty('--plantern-height', `${cfg.height}px`);
-    const select = hd.querySelector('select');
-    if (select && level) select.value = level.id;
 
     const fixtureLabel = fx => fx.name || fx.id;
-    const view = createPlanView(this._svg, {
-      interactive: false,                                         // the page keeps its scroll; only taps on lamps and switches act
+    const hooks = {
       onFixtureClick: async fx => {
         const r = toggleCalls(bindings, getState, fx);
         if (r.error) return this._say(r.error, true);
         try { await Promise.all(r.calls.map(c => ha.callService(c.domain, c.service, {}, c.target))); this._say(''); }
         catch (e) { this._say(`Home Assistant: ${e.message}`, true); }
       },
-    });
-    const refresh = () => level?.fixtures?.forEach(fx => view.setFixture(fx.id, fixtureAppearance(bindings, getState, fx)));
-    const showLevel = () => {
-      view.render({ level, geo: level && geos.get(level.id), settings: resolveSettings(loc, level), fixtureLabel, materials: model.materials || {}, baseUrl });
-      refresh();
     };
-    showLevel();
-    if (select) select.onchange = () => { level = model.levels.find(l => l.id === select.value); showLevel(); };
+    let view3d = null;
+    const looks = { materials: model.materials || {}, baseUrl };
+    const refresh = () => shown().forEach(l => l.fixtures?.forEach(fx => {
+      const a = fixtureAppearance(bindings, getState, fx);
+      this._plans.find(p => p.level === l)?.view.setFixture(fx.id, a);
+      view3d?.setFixture(fx.id, a);
+    }));
+    const build3d = () => {
+      const list = shown();
+      // several floors at once are pulled apart, so the lower ones are not hidden under the upper ones
+      const levels = list.length > 1
+        ? levelStack(model, list[0], 'all', true).filter(st => list.includes(st.level))
+        : levelStack(model, list[0], 'this', false);
+      view3d.build({ level: list[0], geo: list[0] && geos.get(list[0].id), levels: levels.map(st => ({ ...st, geo: geos.get(st.level.id) })), settings: resolveSettings(loc, list[0]), fixtureLabel, ...looks });
+    };
+
+    // ---- the floors on show ----
+    const renderPlans = () => {
+      this._ro?.disconnect();
+      plansEl.replaceChildren();
+      this._plans = [];
+      const list = shown();
+      plansEl.style.gridTemplateColumns = list.length > 1 ? '' : '1fr';
+      for (const l of list.length ? list : [null]) {
+        const block = document.createElement('div');
+        block.className = 'pl';
+        block.innerHTML = `<svg></svg>${list.length > 1 ? `<span class="cap">${esc(levelName(l))}</span>` : ''}`;
+        plansEl.append(block);
+        const svg = block.querySelector('svg');
+        const view = createPlanView(svg, { interactive: false, ...hooks });   // the page keeps its scroll; only taps on lamps and switches act
+        view.render({ level: l, geo: l && geos.get(l.id), settings: resolveSettings(loc, l), fixtureLabel, ...looks });
+        this._plans.push({ level: l, svg, view });
+        this._ro?.observe(svg);
+      }
+      if (view3d) build3d();
+      refresh();
+      if (this._mode !== '3d') requestAnimationFrame(() => this._plans.forEach(p => p.view.fit()));
+    };
+
+    // ---- the floor picker: pills, not a system dropdown; a plain name while a slideshow runs ----
+    const drawPicker = () => {
+      if (levelMode === 'select' && pool.length > 1) {
+        lv.hidden = false;
+        lv.innerHTML = pool.map(l => `<button data-l="${esc(l.id)}"${l === current ? ' class="on"' : ''}>${esc(levelName(l))}</button>`).join('');
+        for (const b of lv.querySelectorAll('button')) b.onclick = () => { current = pool.find(l => l.id === b.dataset.l); drawPicker(); renderPlans(); };
+      } else if (levelMode === 'cycle' && current) {
+        lv.hidden = false;
+        lv.innerHTML = `<span class="now">${esc(levelName(current))}</span>`;
+      } else lv.hidden = true;
+    };
+    drawPicker(); renderPlans();
+
+    // ---- the slideshow ----
+    if (levelMode === 'cycle') {
+      let timer = null, hovering = false;
+      const tick = () => {
+        if (hovering || document.hidden || !this.isConnected) return;
+        current = nextLevel(pool, current);
+        drawPicker(); renderPlans();
+      };
+      this._startCycle = () => { if (!timer) timer = setInterval(tick, cfg.cycle * 1000); };
+      this._stopCycle = () => { clearInterval(timer); timer = null; };
+      const ha1 = root.querySelector('ha-card');
+      ha1.addEventListener('pointerenter', () => { hovering = true; });
+      ha1.addEventListener('pointerleave', () => { hovering = false; });
+      if (this.isConnected) this._startCycle();
+    }
+
+    // ---- 2D / 3D; three.js loads only when 3D is first asked for (the add-on mirrors it next to the card, with plain relative imports) ----
+    const ensure3d = () => this._loading3d ??= import('../render3d/view.js').then(m => {
+      view3d = this._view3d = m.createView3d(this._v3dEl, hooks);
+      view3d.setBackground(cfg.background && cfg.background !== 'dark' ? 'transparent' : 'dark');
+      build3d(); refresh();
+      return view3d;
+    }).catch(e => { this._loading3d = null; throw e; });
+    const mark = mode => { for (const b of hd.querySelectorAll('.seg button')) b.classList.toggle('on', b.dataset.v === mode); };
+    const setMode = async mode => {
+      if (mode === '3d') {
+        try { await ensure3d(); this._say(''); } catch (e) { this._say(`Plantern: the 3D view could not load (${e.message})`, true); mode = '2d'; }
+      }
+      this._mode = mode; mark(mode);
+      plansEl.hidden = mode === '3d'; this._v3dEl.hidden = mode !== '3d';
+      if (mode === '3d') view3d.render(); else requestAnimationFrame(() => this._plans.forEach(p => p.view.fit()));
+    };
+    for (const b of hd.querySelectorAll('.seg button')) b.onclick = () => setMode(b.dataset.v);
+    if (cfg.view === '3d') setMode('3d');
+
     ha.subscribe(() => refresh());
     ha.onStatus(s => { if (s === 'connected') this._say(''); });
     this._say(this._hass ? '' : 'Waiting for Home Assistant…');
-    this._ha = ha; this._view = view;
+    this._ha = ha;
     if (this._hass) ha.setHass(this._hass);
-    this._ro?.disconnect(); this._ro?.observe(this._svg);
-    requestAnimationFrame(() => view.fit());
   }
 }
 
-/** The card's visual editor: a house picker (from the mirrored index), title and height. */
+/** The card's visual editor: a house picker (from the mirrored index), the floors, how it looks, title and height. */
 class PlanternCardEditor extends HTMLElement {
   setConfig(config) { this._config = config || {}; this._render(); }
   set hass(h) { this._hass = h; }
+
+  async _levelsOf(url) {
+    this._levelCache ??= {};
+    if (!url) return [];
+    if (!(url in this._levelCache)) {
+      try {
+        const loc = await getJson(url), model = await getJson(houseUrls(url, loc).modelUrl);
+        this._levelCache[url] = (model.levels || []).slice().sort((a, b) => a.elevation - b.elevation).map(l => ({ id: l.id, name: l.name || l.id }));
+      } catch { this._levelCache[url] = []; }
+    }
+    return this._levelCache[url];
+  }
 
   async _render() {
     if (!this._houses) {
@@ -140,22 +259,40 @@ class PlanternCardEditor extends HTMLElement {
     }
     const c = this._config, houses = this._houses;
     const known = houses.some(h => h.url === c.location);
+    const levels = await this._levelsOf(c.location);
+    const picked = new Set(Array.isArray(c.levels) ? c.levels : String(c.levels || '').split(',').map(x => x.trim()).filter(Boolean));
     this.innerHTML = `
       <div style="display:grid;gap:12px;padding:4px 0">
         ${houses.length ? `<label>House<br><select id="house">${known || !c.location ? '' : `<option value="${esc(c.location)}" selected>${esc(c.location)}</option>`}${houses.map(h => `<option value="${esc(h.url)}"${h.url === c.location ? ' selected' : ''}>${esc(h.name)}</option>`).join('')}</select></label>`
           : `<label>Location (URL of the house's location.json)<br><input id="loc" style="width:100%" value="${esc(c.location || '')}" placeholder="/local/plantern/locations/&lt;house&gt;/location.json"></label>
              <div style="opacity:.7;font-size:.9em">No mirrored houses found at ${esc(DEFAULT_INDEX)}. Start the Plantern add-on and connect a storage first.</div>`}
         <label>Title (optional)<br><input id="title" style="width:100%" value="${esc(c.title || '')}"></label>
-        <label>Height in pixels (optional)<br><input id="height" type="number" min="120" max="2000" value="${esc(c.height ?? '')}"></label>
+        ${levels.length > 1 ? `<fieldset id="levels" style="border:1px solid var(--divider-color,#888);border-radius:6px"><legend>Floors shown</legend>
+          ${levels.map(l => `<label style="display:block"><input type="checkbox" data-l="${esc(l.id)}"${picked.has(l.id) ? ' checked' : ''}> ${esc(l.name)}</label>`).join('')}
+          <div style="opacity:.7;font-size:.9em;margin-top:4px">None ticked: all floors, with a floor picker. One: only that floor. Several: shown together (or one at a time with a slideshow), no picker.</div></fieldset>
+        <label>Slideshow: seconds per floor (empty = off)<br><input id="cycle" type="number" min="2" max="3600" value="${esc(c.cycle ?? '')}"></label>` : ''}
+        <label>Opens in<br><select id="view"><option value="2d"${c.view === '3d' ? '' : ' selected'}>2D plan</option><option value="3d"${c.view === '3d' ? ' selected' : ''}>3D view</option></select></label>
+        <label>Background<br><select id="background">${[['dark', "Dark (the plan's own)"], ['card', 'Card colour (follows the theme)'], ['transparent', 'Transparent (the dashboard shows through)']].map(([v, n]) => `<option value="${v}"${(c.background || 'dark') === v ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+        <label>Least height in pixels (optional; the card fills the space it is given)<br><input id="height" type="number" min="120" max="2000" value="${esc(c.height ?? '')}"></label>
       </div>`;
-    const changed = () => {
+    const changed = ev => {
       const next = { ...this._config, location: (this.querySelector('#house') || this.querySelector('#loc'))?.value || '' };
-      for (const [k, id] of [['title', '#title'], ['height', '#height']]) {
-        const v = this.querySelector(id).value.trim();
-        if (v) next[k] = k === 'height' ? Number(v) : v; else delete next[k];
+      if (ev?.target?.id === 'house') { delete next.levels; delete next.level; delete next.cycle; }   // another house has other floors
+      for (const [k, id] of [['title', '#title'], ['height', '#height'], ['cycle', '#cycle']]) {
+        const v = this.querySelector(id)?.value.trim();
+        if (v) next[k] = k === 'title' ? v : Number(v); else delete next[k];
+      }
+      for (const k of ['view', 'background']) {
+        const v = this.querySelector(`#${k}`).value;
+        if (v && v !== (k === 'view' ? '2d' : 'dark')) next[k] = v; else delete next[k];
+      }
+      if (this.querySelector('#levels') && ev?.target?.id !== 'house') {
+        const ids = [...this.querySelectorAll('#levels input:checked')].map(i => i.dataset.l);
+        if (ids.length) next.levels = ids; else delete next.levels;
       }
       this._config = next;
       this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: next }, bubbles: true, composed: true }));
+      if (ev?.target?.id === 'house') this._render();
     };
     this.querySelectorAll('select, input').forEach(i => i.addEventListener('change', changed));
   }

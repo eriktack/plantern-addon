@@ -44,6 +44,21 @@ export async function importClosure(entry, root) {
   return [...seen].sort();
 }
 
+/**
+ * The card's 3D view needs three.js, which the pages get from an import map (index.html). Home Assistant's pages
+ * have none, so the mirrored copies get relative imports instead: `from 'three'` and `from 'three/addons/…'` point
+ * at the vendored files, which are mirrored too (only what the view uses: the library and the orbit controls).
+ */
+export const THREE_FILES = ['vendor/three/three.module.js', 'vendor/three/addons/controls/OrbitControls.js'];
+
+export function rewriteThreeImports(rel, text) {
+  const dir = path.posix.dirname(rel);
+  const to = target => { const r = path.posix.relative(dir, target); return r.startsWith('.') ? r : `./${r}`; };
+  return text
+    .replace(/(\bfrom\s*|\bimport\s*\(?\s*)(['"])three\/addons\/([^'"]+)\2/g, (_, pre, q, p) => `${pre}${q}${to(`vendor/three/addons/${p}`)}${q}`)
+    .replace(/(\bfrom\s*|\bimport\s*\(?\s*)(['"])three\2/g, (_, pre, q) => `${pre}${q}${to('vendor/three/three.module.js')}${q}`);
+}
+
 /** The dashboard resource URL for a card version (the query makes browsers fetch a changed card). */
 export const resourceUrl = hash => `/local/plantern/${CARD_ENTRY}?v=${hash}`;
 
@@ -97,13 +112,17 @@ export function createPublisher({ registry, hub = null, root, target, connection
     const summary = { files: 0, houses: [], skipped: [], resource: 'none' };
     // 1. the card's modules
     const closure = await importClosure(CARD_ENTRY, root), hash = crypto.createHash('sha1');
-    for (const rel of closure) {
-      const data = await fs.readFile(path.join(root, ...rel.split('/')));
+    const files = [...closure, ...THREE_FILES];
+    for (const rel of files) {
+      let data = await fs.readFile(path.join(root, ...rel.split('/')));
       hash.update(rel).update(data);
+      if (rel.endsWith('.js')) data = Buffer.from(rewriteThreeImports(rel, data.toString('utf8')));
       await writeIfChanged(path.join(target, ...rel.split('/')), data);
     }
-    summary.files = closure.length;
-    for (const rel of await listFiles(path.join(target, 'src'))) if (!closure.includes(`src/${rel}`)) await fs.rm(path.join(target, 'src', ...rel.split('/')), { force: true });
+    summary.files = files.length;
+    for (const dir of ['src', 'vendor']) {
+      for (const rel of await listFiles(path.join(target, dir))) if (!files.includes(`${dir}/${rel}`)) await fs.rm(path.join(target, dir, ...rel.split('/')), { force: true });
+    }
     // 2. the houses
     await registry.ready;
     const houses = registry.houses(), listed = [], keep = new Set();

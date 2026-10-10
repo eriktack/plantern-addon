@@ -12,7 +12,7 @@ import { pickShadowLamps, SHADOW_COUNT } from '../model/shadows.js';
  * hooks: { onFixtureClick(fx) }
  */
 export function createView3d(container, hooks = {}) {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -40,6 +40,7 @@ export function createView3d(container, hooks = {}) {
   const persp = new THREE.PerspectiveCamera(40, 1, 0.05, 500);
   let camera = ortho, controls = null, bounds = new THREE.Box3(), daylight = false, fixtures = new Map(), pickables = [];
   let settings = {};
+  let transparent = false;   // setBackground: nothing behind the house (the page shows through), only its shadows on the ground
   let shadowBudget = SHADOW_COUNT.average;   // lamps that may cast shadows (setShadows)
 
   const render = () => renderer.render(scene, camera);
@@ -324,9 +325,17 @@ export function createView3d(container, hooks = {}) {
     daylight = on;
     hemi.intensity = on ? 1.1 : 0.3;
     sun.intensity = on ? 2.2 : 0;
-    scene.background = new THREE.Color(on ? 0xb9cde0 : 0x14161a);
+    scene.background = transparent ? null : new THREE.Color(on ? 0xb9cde0 : 0x14161a);
     render();
     return daylight;
+  }
+
+  /** 'dark' (the default: sky or night behind, a dark ground) or 'transparent' (the page behind shows through; the ground only catches shadows). */
+  function setBackground(kind) {
+    transparent = kind === 'transparent';
+    ground.material = transparent ? new THREE.ShadowMaterial({ opacity: 0.3 }) : new THREE.MeshStandardMaterial({ color: 0x24272c, roughness: 1 });
+    renderer.setClearAlpha(transparent ? 0 : 1);
+    return setDaylight(daylight);
   }
 
   function setProjection(kind) {
@@ -360,5 +369,5 @@ export function createView3d(container, hooks = {}) {
   });
 
   setDaylight(false);
-  return { build, setFixture, setShadows, setDaylight, setProjection, resetView, getCamera, setCamera, render, root, isDaylight: () => daylight };
+  return { build, setFixture, setShadows, setDaylight, setBackground, setProjection, resetView, getCamera, setCamera, render, root, isDaylight: () => daylight };
 }
