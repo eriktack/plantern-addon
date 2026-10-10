@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5
+
+- Fix: the card's version now also changes when only the way its files are published changes. 0.1.4 kept the same version as 0.1.3, so browsers kept running the old cached card and it stayed missing.
+
 ## 0.1.4
 
 - Fix: after an update the dashboard card could fail with "Custom element doesn't exist: plantern-card", because the browser mixed the new card with old cached files. Every file of the card now carries the card's version.

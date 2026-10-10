@@ -49,6 +49,13 @@ export async function importClosure(entry, root) {
  * have none, so the mirrored copies get relative imports instead: `from 'three'` and `from 'three/addons/…'` point
  * at the vendored files, which are mirrored too (only what the view uses: the library and the orbit controls).
  */
+/**
+ * Bump this whenever the way the files are mirrored changes (the rewrites above). The card's version hash covers the
+ * source files and this number, so a change in the mirroring alone still makes every URL new; without it, a release that
+ * only changed the mirroring left the entry URL as it was and browsers kept running the cached entry.
+ */
+export const MIRROR_FORMAT = 2;
+
 export const THREE_FILES = ['vendor/three/three.module.js', 'vendor/three/addons/controls/OrbitControls.js'];
 
 export function rewriteThreeImports(rel, text) {
@@ -120,7 +127,7 @@ export function createPublisher({ registry, hub = null, root, target, connection
   async function publish() {
     const summary = { files: 0, houses: [], skipped: [], resource: 'none' };
     // 1. the card's modules
-    const closure = await importClosure(CARD_ENTRY, root), hash = crypto.createHash('sha1');
+    const closure = await importClosure(CARD_ENTRY, root), hash = crypto.createHash('sha1').update(`mirror-format-${MIRROR_FORMAT}`);
     const files = [...closure, ...THREE_FILES], sources = new Map();
     for (const rel of files) {
       const data = await fs.readFile(path.join(root, ...rel.split('/')));
