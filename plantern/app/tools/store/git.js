@@ -189,9 +189,16 @@ export class GitStore extends FolderStore {
   }
 
   async refresh() {
-    const state = this.status;
-    await super.refresh();
-    if (this.status.state === 'ok') this.status = state;               // keep the sync state; the folder is there
+    // FolderStore.refresh() leaves { state: 'ok' } in place while it looks for houses; the sync state is what stays. Refreshes
+    // can overlap (a file watcher, a save, a fetch arriving), so the state to go back to is the one from before the first of
+    // them: a refresh that starts while another one's "ok" is in place must not take that "ok" for the real state.
+    if (!this._refreshing) this._syncState = this.status;
+    this._refreshing = (this._refreshing || 0) + 1;
+    try { await super.refresh(); }
+    finally {
+      this._refreshing--;
+      if (!this._refreshing && this.status.state === 'ok') this.status = this._syncState;   // keep the sync state; the folder is there
+    }
     return this.houses;
   }
 
