@@ -16,6 +16,7 @@ import { levelStack } from '../geometry/stack.js';
 import { buildModelGeometry } from '../geometry/level.js';
 import { resolveSettings } from '../model/settings.js';
 import { createPlanView } from '../render2d/plan.js';
+import { createAssetCache } from '../render3d/assets.js';
 import { HassHA } from '../ha/hass.js';
 import { boundEntities } from '../ha/client.js';
 import { fixtureAppearance, toggleCalls } from '../ha/fixture.js';
@@ -153,7 +154,10 @@ class PlanternCard extends HTMLElement {
       },
     };
     let view3d = null;
-    const looks = { materials: model.materials || {}, baseUrl };
+    // asset models of the house (its own assets/ folder; the card has no shared one), decision 146
+    const assets = createAssetCache({ houseBase: baseUrl, sharedBase: null, onChange: () => renderPlans() });
+    for (const lv of model.levels) for (const o of lv.objects || []) if (o.kind === 'asset') assets.load(o.asset);
+    const looks = { materials: model.materials || {}, baseUrl, assets, assetStatus: n => assets.status(n) };
     const refresh = () => shown().forEach(l => l.fixtures?.forEach(fx => {
       const a = fixtureAppearance(bindings, getState, fx);
       this._plans.find(p => p.level === l)?.view.setFixture(fx.id, a);

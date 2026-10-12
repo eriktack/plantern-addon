@@ -819,8 +819,9 @@ export function addObject(model, levelId, spec = {}, options = {}) {
   if (!lv) return refuse(model, `no level "${levelId}"`);
   const wall = !!spec.attach, d = wall ? OBJECT_DEFAULTS.wall : OBJECT_DEFAULTS.free;
   const used = new Set(model.levels.flatMap(l => (l.objects || []).map(o => o.id)));
-  let n = 1; while (used.has(`ob_box_${n}`) || allIds(model).has(`ob_box_${n}`)) n++;
-  const o = { id: `ob_box_${n}`, kind: 'box', ...(spec.name ? { name: spec.name } : {}) };
+  const prefix = spec.asset ? `ob_${String(spec.asset).replace(/-/g, '_')}` : 'ob_box';
+  let n = 1; while (used.has(`${prefix}_${n}`) || allIds(model).has(`${prefix}_${n}`)) n++;
+  const o = { id: `${prefix}_${n}`, kind: spec.asset ? 'asset' : 'box', ...(spec.asset ? { asset: String(spec.asset) } : {}), ...(spec.name ? { name: spec.name } : {}) };
   if (wall) o.attach = { side: 'right', offset: 0, ...spec.attach };
   else if (spec.pos) { o.pos = spec.pos.map(Number); o.rotationDeg = Number(spec.rotationDeg ?? 0); }
   o.size = (spec.size ?? d.size).map(Number);
