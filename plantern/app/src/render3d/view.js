@@ -4,6 +4,7 @@ import { levelPrisms } from '../geometry/prisms.js';
 import { MM, toThree, dirToThree, prismGeometry, cylinderGeometry } from './coords.js';
 import { pointAlong, polylineLength } from '../geometry/strip.js';
 import { pickShadowLamps, SHADOW_COUNT } from '../model/shadows.js';
+import { assetPlacement } from '../model/assets.js';
 
 /**
  * three.js view of one level. Geometry comes only from levelPrisms() (pure, tested);
@@ -42,6 +43,7 @@ export function createView3d(container, hooks = {}) {
   let settings = {};
   let transparent = false;   // setBackground: nothing behind the house (the page shows through), only its shadows on the ground
   let shadowBudget = SHADOW_COUNT.average;   // lamps that may cast shadows (setShadows)
+  let buildGen = 0;
 
   const render = () => renderer.render(scene, camera);
   function makeControls() {
@@ -173,13 +175,45 @@ export function createView3d(container, hooks = {}) {
    * a level up, shift [dx, dy] sideways in the plan, for the exploded view). Lamps and switches of every shown level are live; the number of lamps casting
    * shadows is shared between them.
    */
-  function build({ level, geo, levels, settings: s, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', ceilings = false }) {
+  function build({ level, geo, levels, settings: s, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', ceilings = false, assets = null }) {
+    const gen = ++buildGen;     // asset models that finish loading after a newer build are dropped
     clear();
     settings = s;
     const shown = levels ?? (level ? [{ level, geo, lift: 0 }] : []);
     if (!shown.length) { bounds.set(new THREE.Vector3(-2, 0, -2), new THREE.Vector3(2, 1, 2)); resetView(); return; }
     for (const sh of shown) buildLevel(sh.level, sh.geo, sh.lift || 0, sh.shift || [0, 0]);
     finishBuild();
+
+    // An asset object: its model replaces the object's box once loaded, at its footprint's centre and heading (the
+    // model's own x axis is the object's width). A missing model leaves the box, in red with a red outline.
+    function placeAsset(o, geo, g, box) {
+      const fp = geo.objectFootprint(o);
+      if (!fp) return;
+      const { centre, z, heading } = assetPlacement(o, fp);
+      const entry = assets.load(o.asset);
+      entry.ready.then(() => {
+        if (gen !== buildGen) return;
+        if (entry.scene) {
+          const m = entry.scene.clone(true);
+          m.name = `${o.id}:asset`;
+          m.userData = { id: o.id, kind: 'asset' };
+          m.position.set(...toThree(centre, z));
+          m.rotation.y = heading;
+          m.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+          g.add(m);
+          if (box) box.visible = false;
+        } else {
+          if (box) box.material.color.set(0xb00020);
+          const [w, d, h] = o.size;
+          const outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w * MM, h * MM, d * MM)), new THREE.LineBasicMaterial({ color: 0xff2a2a }));
+          outline.name = `${o.id}:missing`;
+          outline.position.set(...toThree(centre, z + h / 2));
+          outline.rotation.y = heading;
+          g.add(outline);
+        }
+        render();
+      });
+    }
 
     function buildLevel(level, geo, lift, shift) {
     const g = new THREE.Group();
@@ -188,6 +222,7 @@ export function createView3d(container, hooks = {}) {
     g.position.x = shift[0] * MM; g.position.z = -shift[1] * MM;      // plan (x, y) → three (x, -y)
     root.add(g);
 
+    const objectMeshes = new Map();
     for (const p of levelPrisms(level, geo, materials, { ceilings })) {
       let geom = p.circle ? cylinderGeometry(THREE, p.circle.center, p.circle.diameter / 2, p.z0, p.z1) : prismGeometry(THREE, p.poly, p.z0, p.z1, p.slope, p.holes), mat;
       if (p.sides) paintSides(geom, p.sides);
@@ -199,7 +234,10 @@ export function createView3d(container, hooks = {}) {
       m.castShadow = !['glass', 'railing', 'floor'].includes(p.kind);
       m.receiveShadow = p.kind !== 'glass';
       g.add(m);
+      if (p.kind === 'object') objectMeshes.set(p.id, m);
     }
+    if (assets) for (const o of level.objects || []) if (o.kind === 'asset') placeAsset(o, geo, g, objectMeshes.get(o.id));
+
 
     for (const fx of level.fixtures || []) {
       const pos = geo.fixturePos(fx);

@@ -54,9 +54,12 @@ export async function importClosure(entry, root) {
  * source files and this number, so a change in the mirroring alone still makes every URL new; without it, a release that
  * only changed the mirroring left the entry URL as it was and browsers kept running the cached entry.
  */
-export const MIRROR_FORMAT = 2;
+export const MIRROR_FORMAT = 3;
 
-export const THREE_FILES = ['vendor/three/three.module.js', 'vendor/three/addons/controls/OrbitControls.js'];
+export const THREE_FILES = [
+  'vendor/three/three.module.js', 'vendor/three/addons/controls/OrbitControls.js',
+  'vendor/three/addons/loaders/GLTFLoader.js', 'vendor/three/addons/utils/BufferGeometryUtils.js',   // asset models (decision 146)
+];
 
 export function rewriteThreeImports(rel, text) {
   const dir = path.posix.dirname(rel);

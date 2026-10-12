@@ -8,6 +8,15 @@
 <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="stylesheet" href="src/styles.css">
+<!-- three.js for the asset models in the plan's objects (decision 146); the same import map as index.html -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
 <script type="module" src="src/capture/ui.js"></script>
 </head>
 <body>
@@ -58,7 +67,7 @@
   <div id="browse">
   <p class="help">Click something in the plan or the list to select it; double-click it, press Enter or use ✎ to edit it. Esc lets go.</p>
 
-  <h2>House <span><button id="importBtn" title="Paste a room measured with the phone wizard">Import</button> <button id="newSolid" title="A solid: chimney, pillar, boxed-in pipe (a lintel or a wall inside a room: + Wall). Measured like a room; its sides bound the rooms around it, walls can give way to it">+ Solid</button> <button id="newObject" title="A box: furniture, a cabinet. Drag it on the plan to place it (a wall object slides along its wall)">+ Object</button> <button id="newStairs" title="Stairs from this level up to the next: where they start, how wide, how many risers; the opening in the floor above follows">+ Stairs</button> <button id="newWall" title="Draw a wall by hand: a room divider, a half wall, a wall beside stairs, a lintel. Click its start and its end on the plan">+ Wall</button> <button id="newRoom" title="Measure a new room">+ Room</button></span></h2>
+  <h2>House <span><button id="importBtn" title="Paste a room measured with the phone wizard">Import</button> <button id="newSolid" title="A solid: chimney, pillar, boxed-in pipe (a lintel or a wall inside a room: + Wall). Measured like a room; its sides bound the rooms around it, walls can give way to it">+ Solid</button> <button id="newObject" title="A box: furniture, a cabinet. Drag it on the plan to place it (a wall object slides along its wall)">+ Object</button> <select id="assetPick" title="A model from assets/ (made with object-designs, or copied into this house's assets/)" aria-label="Model"></select> <button id="newAsset" title="Place the chosen model (a red marker if it is not found). Its size is the model's; drag it where it belongs">+ Asset</button> <button id="newStairs" title="Stairs from this level up to the next: where they start, how wide, how many risers; the opening in the floor above follows">+ Stairs</button> <button id="newWall" title="Draw a wall by hand: a room divider, a half wall, a wall beside stairs, a lintel. Click its start and its end on the plan">+ Wall</button> <button id="newRoom" title="Measure a new room">+ Room</button></span></h2>
   <div id="tree" class="tree"></div>
   <div id="importBox" hidden>
     <textarea id="importText" rows="4" spellcheck="false" placeholder="Paste the JSON from the wizard"></textarea>
@@ -407,6 +416,9 @@
     <div class="grid2">
       <label>Name<input id="obName" autocomplete="off"></label>
       <label>Colour<input type="color" id="obColor"></label>
+      <label>Model <small>a folder in assets/ (empty: a box)</small><input id="obAsset" list="assetNames" autocomplete="off" placeholder="none: a box"></label>
+      <div id="obAssetNote" class="help"></div>
+      <datalist id="assetNames"></datalist>
       <label>Width <small>mm, along the wall</small><input id="obW" inputmode="numeric" autocomplete="off"></label>
       <label>Depth <small>mm, out from the wall</small><input id="obD" inputmode="numeric" autocomplete="off"></label>
       <label>Height <small>mm</small><input id="obH" inputmode="numeric" autocomplete="off"></label>

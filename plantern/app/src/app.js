@@ -8,6 +8,7 @@ import { collectSnapPoints } from './tools/snap.js';
 import { createMeasureTool } from './tools/measure.js';
 import { addCheck, deleteCheck } from './edit/ops.js';
 import { createPlanView } from './render2d/plan.js';
+import { createAssetCache } from './render3d/assets.js';
 import { createHaClient, resolveConnection, boundEntities } from './ha/client.js';
 import { appearance } from './ha/appearance.js';
 import { fixtureAppearance as fixtureAppearanceOf, toggleCalls } from './ha/fixture.js';
@@ -37,7 +38,11 @@ async function main() {
   const { location: loc, model, baseUrl } = house, localConfig = await loadLocalConfig();
   // saved elsewhere (the Editor, a phone, a git pull): show the new version (the camera and choices are remembered)
   house.watch(() => location.reload());
-  const looks = { materials: model.materials || {}, baseUrl };     // wall sides: colours, materials, textures
+  // asset models (decision 146): the house's own copy first, then the repo's shared assets/; a model that has loaded
+  // (or failed) redraws the plan, and the 3D view places it itself
+  const assets = createAssetCache({ houseBase: baseUrl, sharedBase: '', onChange: () => showLevel() });
+  for (const lv of model.levels) for (const o of lv.objects || []) if (o.kind === 'asset') assets.load(o.asset);
+  const looks = { materials: model.materials || {}, baseUrl, assets, assetStatus: n => assets.status(n) };     // wall sides: colours, materials, textures; asset models
   document.title = `Plantern · ${loc.name}`;
   $('compass').innerHTML = compassSvg(northAngleOf(model));
   const bindings = loc.bindings || {};

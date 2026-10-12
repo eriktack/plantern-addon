@@ -2,7 +2,8 @@
 //   GET  /api/houses                     → { houses: [...], showDemo }
 //   GET  /api/houses/:id                 → { id, name, store, readOnly, sync, location: { text, version }, model: { text, version } }
 //   GET  /api/houses/:id/versions        → { location, model } (for pages that cannot keep an event stream open)
-//   GET  /api/houses/:id/assets/<path>   → a file inside the house folder (textures)
+//   GET  /api/houses/:id/assets/<path>   → a file inside the house folder (textures, asset models)
+//   GET  /api/houses/:id/asset-list      → { assets: [names] }: the models in the house's assets/ folder (assets/<name>/model.glb)
 //   POST /api/houses/:id/save            { file: 'location' | 'model', value, base } → { version, text, merged? } | 409 { conflict }
 //   GET  /api/events                     → server-sent events: changed { house, file, version, source }, houses {}
 // Everything here is for your own network only, like saving (decision 106).
@@ -11,6 +12,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { inside } from './folder.js';
 import { storeRoutes } from './manage.js';
+import { ASSET_NAME } from '../../src/model/assets.js';
 
 const MAX_BODY = 8 * 1024 * 1024;
 
@@ -58,6 +60,7 @@ export async function houseApi(registry, req, res, url, { ha } = {}) {
     if (m) {
       const id = decodeURIComponent(m[1]), rest = m[2] || '';
       if (!rest && req.method === 'GET') return json(res, 200, await registry.load(id)), true;
+      if (rest === 'asset-list' && req.method === 'GET') return json(res, 200, { assets: await houseAssetNames(registry.find(id)?.house.dir) }), true;
       if (rest === 'versions' && req.method === 'GET') { const h = await registry.load(id); return json(res, 200, { location: h.location.version, model: h.model.version }), true; }
       if (rest === 'save' && req.method === 'POST') {
         const b = await readJsonBody(req);
@@ -79,6 +82,16 @@ export async function houseApi(registry, req, res, url, { ha } = {}) {
     json(res, e.status || 500, { error: e.status ? e.message : `${e.message}` });
     return true;
   }
+}
+
+/** Names of the asset folders of a house that hold a model (assets/<name>/model.glb). */
+async function houseAssetNames(dir) {
+  if (!dir) return [];
+  const names = [];
+  for (const d of await fs.readdir(path.join(dir, 'assets'), { withFileTypes: true }).catch(() => [])) {
+    if (d.isDirectory() && ASSET_NAME.test(d.name) && await fs.access(path.join(dir, 'assets', d.name, 'model.glb')).then(() => true, () => false)) names.push(d.name);
+  }
+  return names.sort();
 }
 
 /** Server-sent events: every change the registry announces, for the pages to react to. */

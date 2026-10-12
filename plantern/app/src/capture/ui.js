@@ -8,6 +8,8 @@ import { formatJson } from '../model/format.js';
 import { buildLevelGeometry, buildModelGeometry, labelObstacles } from '../geometry/level.js';
 import { listHouses, openHouse, houseOptions } from '../model/house.js';
 import { askConflict } from './conflict-ui.js';
+import { createAssetCache, listAssetNames } from '../render3d/assets.js';
+import { ASSET_NAME, assetWarnings } from '../model/assets.js';
 import { download } from '../export/download.js';
 import { toSvg } from '../render2d/coords.js';
 import { solveCapture } from './solve.js';
@@ -358,6 +360,7 @@ async function init() {
   $('loc').onchange = () => { if (!dirty || confirm('Discard unsaved changes?')) { remember($('loc').value); params.set('loc', $('loc').value); params.delete('level'); location.search = params; } else $('loc').value = locId; };
 
   loc = house.location; model = house.model;
+  assetCache();                              // the models of this house: the + Asset picker lists them
   house.watch(changedElsewhere);
   document.title = `Plantern · Editor · ${loc.name}`;
   savedModel = model;
@@ -497,8 +500,19 @@ async function init() {
     if (!at) { setStatus('Add a room first'); return; }
     placeObject({ pos: labelPoint(at.polygon).pos.map(v => Math.round(v)) }, 'in the middle of the room: drag it where it belongs');
   };
+  $('newAsset').onclick = async () => {
+    const name = $('assetPick').value.trim();
+    if (!name) { setStatus('No model to place: put one in assets/ (object-designs exports them there), then pick it'); return; }
+    const entry = assetCache().load(name);
+    await entry.ready;                        // its size comes from its meta.json
+    const rm = shape === 'room' ? room() : null, at = rm || level().rooms?.[0];
+    if (!at) { setStatus('Add a room first'); return; }
+    const missing = ['missing', 'broken'].includes(entry.status) ? ` (${entry.status === 'missing' ? 'not found' : 'cannot be shown'}: a red marker until it is)` : '';
+    placeObject({ asset: name, size: entry.meta?.size, pos: labelPoint(at.polygon).pos.map(v => Math.round(v)) }, `a model of "${name}"${missing} in the middle of the room: drag it where it belongs`);
+  };
   $('wAddObject').onclick = () => { const w = wall(); placeObject({ attach: { wall: w.id, side: wallInfo(level(), w.id)?.sides?.right?.length ? 'right' : 'left', offset: Math.max(0, Math.round((Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) - 900) / 2)) } }, 'on the wall: drag it along, or set its position'); };
   $('obApply').onclick = applyObjectForm;
+  $('obAsset').addEventListener('input', () => { $('obAssetNote').textContent = assetNote($('obAsset').value.trim()); });
   $('obDelete').onclick = () => {
     if (!confirm(`Delete ${objectId}?`)) return;
     const r = deleteObject(model, levelId, objectId, opts());
@@ -1754,6 +1768,35 @@ function placeObject(spec, what) {
   setStatus(`${r.object.id} is a new object ${what}. Name it and Apply to create it`);
 }
 
+// The asset models of this house (decision 146). Made when first used, read through the house's own assets/ and the
+// repo's shared ones; a model that loads or fails redraws the plan, and the object panel's list offers the names found.
+let assets = null, assetNameList = [];
+function assetCache() {
+  if (!assets) {
+    const houseBase = house?.baseUrl ?? null;
+    assets = createAssetCache({ houseBase, sharedBase: '', onChange: () => { draw(); showIssues(); } });
+    listAssetNames({ houseBase, sharedBase: '' }).then(names => { assetNameList = names; fillAssetNames(); });
+  }
+  return assets;
+}
+function fillAssetNames() {
+  const used = (model?.levels || []).flatMap(l => (l.objects || []).filter(o => o.kind === 'asset').map(o => o.asset));
+  const names = [...new Set([...assetNameList, ...used])].sort();
+  $('assetNames').innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
+  $('assetPick').innerHTML = names.length ? names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') : '<option value="">no models yet</option>';
+}
+/** A line for the object panel: where the model of an asset is, or that the field is a box. */
+function assetNote(name) {
+  if (!name) return 'A box. Name a model (a folder in assets/) to draw it instead.';
+  if (!ASSET_NAME.test(name)) return 'A model name is lower-case letters, digits and -.';
+  const st = assetCache().status(name), meta = assetCache().meta(name);
+  if (st === 'missing') return `Model "${name}" is not in this house's assets/ or the shared assets/ (a red marker until it is).`;
+  if (st === 'broken') return `Model "${name}" is there but cannot be shown.`;
+  if (st === 'ok' && meta) return `Model "${name}": ${meta.size.join(' × ')} mm, taken as the object's size on Apply.`;
+  if (st === 'ok') return `Model "${name}" is there (no meta.json, so the size stays as it is).`;
+  return `Model "${name}" is loading.`;
+}
+
 function showObject() {
   const o = object();
   if (!o) { objectId = null; $('objectPanel').hidden = true; return; }
@@ -1764,11 +1807,11 @@ function showObject() {
   for (const [id, show] of [['obOffsetRow', !!o.attach], ['obSideRow', !!o.attach], ['obGapRow', !!o.attach], ['obXRow', !o.attach], ['obYRow', !o.attach], ['obRotRow', !o.attach]]) $(id).hidden = !show;
   if (w) { const start = cornerAt(lv, w.a); $('obOffsetNote').textContent = start ? `mm from corner ${start.index} of ${start.name}` : "mm from the wall's start"; }
   if (objectFormFor !== o) {
-    $('obName').value = o.name ?? ''; $('obColor').value = o.color || '#888888';
+    $('obName').value = o.name ?? ''; $('obColor').value = o.color || '#888888'; $('obAsset').value = o.asset ?? '';
     [$('obW').value, $('obD').value, $('obH').value] = o.size; $('obZ').value = o.z;
     if (o.attach) { $('obOffset').value = o.attach.offset; $('obSide').value = o.attach.side; $('obGap').value = o.attach.gap ?? ''; }
     else { $('obX').value = o.pos[0]; $('obY').value = o.pos[1]; $('obRot').value = o.rotationDeg ?? ''; }
-    $('obErr').textContent = ''; objectFormFor = o;
+    $('obErr').textContent = ''; $('obAssetNote').textContent = assetNote(o.asset ?? ''); objectFormFor = o;
     fillCopyInto('object', o);
   }
 }
@@ -1781,6 +1824,15 @@ function applyObjectForm() {
   const name = $('obName').value.trim();
   if (name !== (o.name ?? '')) props.name = name || null;
   if ($('obColor').value !== (o.color || '#888888')) props.color = $('obColor').value;
+  // the model: a name makes an asset object (its size is the model's, when its meta.json is there); empty makes a box
+  const asset = $('obAsset').value.trim();
+  if (asset !== (o.asset ?? '')) {
+    if (asset && !ASSET_NAME.test(asset)) { $('obErr').textContent = 'A model name is lower-case letters, digits and -.'; return; }
+    props.kind = asset ? 'asset' : 'box';
+    props.asset = asset || null;
+    const meta = asset ? assetCache().meta(asset) : null;
+    if (meta && Array.isArray(meta.size)) props.size = [...meta.size];
+  }
   if (o.attach) {
     const gap = $('obGap').value.trim() === '' ? undefined : num('obGap');
     if (num('obOffset') !== o.attach.offset || $('obSide').value !== o.attach.side || gap !== o.attach.gap) props.attach = { ...o.attach, offset: num('obOffset'), side: $('obSide').value, ...(gap === undefined ? { gap: undefined } : { gap }) };
@@ -2580,8 +2632,13 @@ function draw() {
   for (const o of lv.objects || []) {
     const fp = curGeo?.objectFootprint(o);
     if (!fp) continue;
-    const sel = o.id === objectId, above = (o.z ?? 0) >= resolveSettings(loc, lv).cutPlane, col = sel ? '#ffb454' : o.assumed?.length ? '#e5a93a' : (o.color || '#888');
-    out += `<g data-kind="object" data-id="${esc(o.id)}" style="cursor:grab"><title>${esc(o.name || o.id)} (${esc(o.id)})</title>${poly(fp, `fill="${col}" fill-opacity="0.25" stroke="${col}" stroke-width="${fs / (sel ? 5 : 9)}"${above ? ` stroke-dasharray="${fs / 2} ${fs / 3}"` : ''}`)}</g>`;
+    if (o.kind === 'asset') assetCache().load(o.asset);
+    const sel = o.id === objectId, above = (o.z ?? 0) >= resolveSettings(loc, lv).cutPlane;
+    // an asset whose model is missing is red and dashed, so it is seen and fixed (decision 146)
+    const missing = o.kind === 'asset' && ['missing', 'broken'].includes(assetCache().status(o.asset));
+    const col = sel ? '#ffb454' : missing ? '#b00020' : o.assumed?.length ? '#e5a93a' : (o.color || '#888');
+    const what = o.kind === 'asset' ? (missing ? ` · model "${o.asset}" is missing` : ` · model "${o.asset}"`) : '';
+    out += `<g data-kind="object" data-id="${esc(o.id)}" style="cursor:grab"><title>${esc(o.name || o.id)} (${esc(o.id)})${esc(what)}</title>${poly(fp, `fill="${col}" fill-opacity="0.25" stroke="${col}" stroke-width="${fs / (sel ? 5 : 9)}"${above || missing ? ` stroke-dasharray="${fs / 2} ${fs / 3}"` : ''}`)}</g>`;
     if (sel && !o.attach && o.pos) {
       // a handle in front of it: drag it round to turn the object about its middle (15° steps snap; Alt: free)
       const a = (o.rotationDeg || 0) * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a), hw = o.size[0] / 2, hd = o.size[1] / 2;
@@ -2841,8 +2898,10 @@ async function saveNow() {
 
 /** Read the house again (what is stored now); the undo history starts over. */
 async function reloadHouse(note) {
+  assets = null;   // the house's asset models are read again with it
   await house.load();
   loc = house.location; model = savedModel = house.model; dirty = false;
+  assetCache();
   history = createHistory(model);
   if (!model.levels.some(l => l.id === levelId)) levelId = model.levels[0]?.id ?? null;
   $('elsewhere').hidden = true;
@@ -2882,9 +2941,30 @@ function changedElsewhere(ev) {
  * Validation in the save bar, only when there is something to say: a count line, errors listed,
  * warnings folded away. Clicking an issue selects what it is about.
  */
+/**
+ * Warnings about the asset models (missing, or a size that is not the model's), listed with the validator's. They wait
+ * until every model of the house has settled, so a model still loading is never reported missing. A model that is
+ * broken is not reported here: its red marker says so.
+ */
+function assetIssues() {
+  const objs = (model?.levels || []).flatMap(l => (l.objects || []).filter(o => o.kind === 'asset').map(o => ({ o, level: l.id })));
+  const names = [...new Set(objs.map(x => x.o.asset))];
+  if (!names.length || names.some(n => ['loading', 'unknown'].includes(assetCache().status(n)))) return [];
+  // a missing model is left out of the map (assetWarnings reads that as missing); one that is there but has no
+  // meta.json, or is broken, has nothing to compare, so it gets an empty meta
+  const metas = new Map();
+  for (const n of names) {
+    const st = assetCache().status(n), meta = assetCache().meta(n);
+    if (meta && st === 'ok') metas.set(n, meta);
+    else if (st === 'broken' || st === 'ok') metas.set(n, {});
+  }
+  // the list prints the object's name and id already, so the message keeps only what is wrong
+  return assetWarnings(model, metas).map(w => ({ id: w.id, severity: 'warning', msg: w.msg.replace(`${w.id}: `, ''), level: objs.find(x => x.o.id === w.id)?.level }));
+}
+
 function showIssues() {
   modelGeos = buildModelGeometry(model);
-  const issues = issuesNow = validateModel(model, modelGeos);
+  const issues = issuesNow = [...validateModel(model, modelGeos), ...assetIssues()];
   const errs = issues.filter(i => i.severity === 'error'), warns = issues.filter(i => i.severity !== 'error');
   $('valBox').hidden = !issues.length;
   if (!issues.length) return;

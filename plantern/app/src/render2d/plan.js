@@ -56,7 +56,7 @@ export function createPlanView(svg, hooks = {}) {
     return fromSvg([q.x, q.y]);
   }
 
-  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {} }) {
+  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {}, assetStatus = () => 'unknown' }) {
     svg.replaceChildren();
     fixEls = {}; lightEls = {};
     const defs = el('defs', {}, svg), layer = id => el('g', { id }, svg);
@@ -147,7 +147,11 @@ export function createPlanView(svg, hooks = {}) {
       const fp = geo.objectFootprint(o);
       if (!fp) continue;
       const above = (o.z ?? 0) >= settings.cutPlane;
-      el('polygon', { points: svgPoints(fp), fill: o.color || '#888', 'fill-opacity': 0.25, stroke: o.color || '#888', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': above ? '6 4' : '' }, gObj);
+      // an asset whose model is missing is drawn in red, dashed, so it is seen and fixed (decision 146)
+      const missing = o.kind === 'asset' && ['missing', 'broken'].includes(assetStatus(o.asset));
+      const colour = missing ? '#b00020' : o.color || '#888';
+      const shape = el('polygon', { points: svgPoints(fp), fill: colour, 'fill-opacity': missing ? 0.2 : 0.25, stroke: colour, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': above || missing ? '6 4' : '' }, gObj);
+      if (o.kind === 'asset') el('title', {}, shape).textContent = missing ? `${o.name || o.id}: model "${o.asset}" is missing` : `${o.name || o.id}: model "${o.asset}"`;
     }
 
     const occ = occluders(geo, { cutPlane: settings.cutPlane });

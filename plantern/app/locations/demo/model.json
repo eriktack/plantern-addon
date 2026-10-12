@@ -377,7 +377,16 @@
           "color": "#e8e0d0"
         },
         { "id": "ob_sofa", "kind": "box", "pos": [6000,600], "rotationDeg": 0, "size": [2200,900,800], "z": 0, "color": "#5b6b8c" },
-        { "id": "ob_table", "kind": "box", "pos": [1700,1500], "rotationDeg": 0, "size": [1600,900,750], "z": 0, "color": "#8b6b4a" }
+        {
+          "id": "ob_table",
+          "kind": "asset",
+          "asset": "table",
+          "pos": [1700,1500],
+          "rotationDeg": 0,
+          "size": [1600,900,750],
+          "z": 0,
+          "color": "#8b6b4a"
+        }
       ],
       "fixtures": [
         { "id": "f_k_lamp", "kind": "lamp", "pos": [2500,2000], "z": 2400, "radius": 3600 },
