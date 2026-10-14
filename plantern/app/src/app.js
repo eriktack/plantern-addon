@@ -17,8 +17,10 @@ import { exportSvg } from './export/svg.js';
 const $ = id => document.getElementById(id);
 import { chooseLocation, chooseLevel, remember, linkPages } from './model/current.js';
 import { compassSvg } from './render2d/compass.js';
+import { wirePanelResize } from './panel-resize.js';
 import { readPrefs, writePrefs, cameraKey } from './model/prefs.js';
 import { shadowLevel, SHADOW_LEVELS, SHADOW_LABEL, SHADOW_COUNT } from './model/shadows.js';
+import { nightLight } from './model/night.js';
 import { northAngleOf } from './model/orientation.js';
 
 const params = new URLSearchParams(location.search);
@@ -26,6 +28,7 @@ const status = t => ($('status').textContent = t);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 async function main() {
+  wirePanelResize($('resizer'), document.querySelector('aside'), 'plantern.viewer.aside', () => window.dispatchEvent(new Event('resize')));
   // ---- location ----
   const index = await listHouses();
   const locId = chooseLocation(index, params.get('loc'));
@@ -40,8 +43,8 @@ async function main() {
   house.watch(() => location.reload());
   // asset models (decision 146): the house's own copy first, then the repo's shared assets/; a model that has loaded
   // (or failed) redraws the plan, and the 3D view places it itself
-  const assets = createAssetCache({ houseBase: baseUrl, sharedBase: '', onChange: () => showLevel() });
-  for (const lv of model.levels) for (const o of lv.objects || []) if (o.kind === 'asset') assets.load(o.asset);
+  const assets = createAssetCache({ houseBase: baseUrl, sharedBase: '', house: house.id, onChange: () => showLevel() });
+  for (const lv of model.levels) for (const o of lv.objects || []) if (o.kind === 'asset') assets.loadFor(o);
   const looks = { materials: model.materials || {}, baseUrl, assets, assetStatus: n => assets.status(n) };     // wall sides: colours, materials, textures; asset models
   document.title = `Plantern · ${loc.name}`;
   $('compass').innerHTML = compassSvg(northAngleOf(model));
@@ -165,6 +168,7 @@ async function main() {
       const p = readPrefs();
       if (p.daylight) $('daylight').classList.toggle('on', view3d.setDaylight(true));
       applyShadows();
+      applyNight();
       $('proj').classList.toggle('on', p.projection === 'persp');
       restoreCamera();
       refreshFixtures();
@@ -218,6 +222,16 @@ async function main() {
     applyShadows();
   };
   applyShadows();
+  // night light: the ambient light with daylight off, a slider remembered in this browser (night.js)
+  function applyNight() {
+    const pct = Math.round(nightLight(state().settings?.render3d, readPrefs().night) * 100);
+    $('nightLvl').value = pct; $('nightTxt').textContent = `${pct} %`;
+    view3d?.setNightLight(pct / 100);
+  }
+  $('nightLvl').oninput = () => { writePrefs({ night: Number($('nightLvl').value) / 100 }); applyNight(); };
+  $('nightReset').onclick = () => { writePrefs({ night: null }); applyNight(); };
+  $('shadowReset').onclick = () => { writePrefs({ shadows: { ...(readPrefs().shadows || {}), [device]: null } }); applyShadows(); };
+  applyNight();
   $('daylight').onclick = () => { if (!view3d) return; const on = view3d.setDaylight(!view3d.isDaylight()); $('daylight').classList.toggle('on', on); writePrefs({ daylight: on }); };
   $('proj').onclick = () => { if (!view3d) return; const p = $('proj').classList.toggle('on') ? 'persp' : 'ortho'; view3d.setProjection(p); keepCamera(view3d.getCamera()); };
   $('resetView').onclick = () => { if (!view3d) return; view3d.setProjection('ortho'); view3d.resetView(); $('proj').classList.remove('on'); keepCamera(view3d.getCamera()); };

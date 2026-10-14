@@ -1,5 +1,5 @@
 // Geography (pure): latitude/longitude <-> SWEREF 99 TM (EPSG:3006), the grid Swedish maps and elevation data use,
-// PLANTERN.md §14.4-§14.5, docs/plans/work-items.md plan 1: the projection (A1), the grid convergence and reading a
+// PLANTERN.md §3 and docs/archive/place-the-house-slice-a.md: the projection (A1), the grid convergence and reading a
 // position from text (A2, A3), and the transform between a house's plan and the world (A4, at the end of the file).
 //
 // SWEREF 99 TM is a transverse Mercator projection on the GRS80 ellipsoid: central meridian 15° E, scale factor 0.9996,

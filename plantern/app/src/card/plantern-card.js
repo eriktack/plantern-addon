@@ -1,4 +1,4 @@
-// The Plantern Lovelace card (docs/plans/ha-11-12.md S14): the plan of a house with its lamps and switches
+// The Plantern Lovelace card (docs/archive/ha-11-12.md S14): the plan of a house with its lamps and switches
 // live, in 2D or 3D. Home Assistant hands the card `hass`, so there is no URL and no token (HassHA). The house files
 // are the ones the add-on mirrors to /local/plantern/ (S15). Config:
 //   type: custom:plantern-card
@@ -227,6 +227,7 @@ class PlanternCard extends HTMLElement {
     // ---- 2D / 3D; three.js loads only when 3D is first asked for (the add-on mirrors it next to the card, with plain relative imports) ----
     const ensure3d = () => this._loading3d ??= import('../render3d/view.js').then(m => {
       view3d = this._view3d = m.createView3d(this._v3dEl, hooks);
+      view3d.setProjection('persp');                                // the card opens in perspective (issue #3)
       view3d.setBackground(cfg.background && cfg.background !== 'dark' ? 'transparent' : 'dark');
       build3d(); refresh();
       return view3d;

@@ -13,6 +13,7 @@
 // further wedge is one riser higher, so n winders add n − 1 risers.
 
 import { add, mul } from './vec.js';
+import { pointInPolygon, distToSegment, signedArea } from './polygon.js';
 
 const r1 = v => Math.round(v * 100) / 100;
 const pt = p => [r1(p[0]), r1(p[1])];
@@ -65,54 +66,61 @@ export function stairLayout(st, pos, rise) {
   const riser = rise / N, steps = [], depths = [], treadDepths = [], flights = [], turns = [];
   const quad = (o, u, r, s0, s1, w0, w1) => [add(o, add(mul(u, s0), mul(r, w0))), add(o, add(mul(u, s1), mul(r, w0))), add(o, add(mul(u, s1), mul(r, w1))), add(o, add(mul(u, s0), mul(r, w1)))].map(pt);
   const { u, r } = stairFrame(st.heading ?? 0);
-  const arrow = [pt(add(pos, mul(r, W / 2)))];
+  // a flight may have its own width (fixes list 3); without one it is the stair's width
+  const wOf = f => (Number(f.width) > 0 ? Number(f.width) : W);
+  const arrow = [pt(add(pos, mul(r, wOf(fl[0]) / 2)))];
 
   // one flight: r − 1 treads from `o` (the left corner of its front edge) along u, width along r; h0 = height it starts at
   const flight = (o, fu, fr, f, h0, index) => {
-    const n = Number(f.risers), run = n > 1 ? flightRun(f) : 0, d = n > 1 ? run / (n - 1) : 0;
+    const n = Number(f.risers), run = n > 1 ? flightRun(f) : 0, d = n > 1 ? run / (n - 1) : 0, Wk = wOf(f);
     const ds = n > 1 ? (Array.isArray(f.treads) && f.treads.length ? f.treads.map(Number) : Array(n - 1).fill(d)) : [];
     if (n > 1) depths.push(d);
     treadDepths.push(...ds);
-    flights.push({ o, u: fu, r: fr, run, d, n, h0 });
+    flights.push({ o, u: fu, r: fr, run, d, n, h0, w: Wk });
     let s0 = 0;
     for (let j = 1; j < n; j++) {
       const s1 = s0 + ds[j - 1];
-      steps.push({ poly: quad(o, fu, fr, s0, s1, 0, W), top: r1(h0 + j * riser), kind: 'tread', flight: index, fi: index, s0, s1, n: steps.length + 1 });
+      steps.push({ poly: quad(o, fu, fr, s0, s1, 0, Wk), top: r1(h0 + j * riser), kind: 'tread', flight: index, fi: index, s0, s1, n: steps.length + 1 });
       s0 = s1;
     }
-    return { run, topAt: h0 + n * riser };
+    return { run, topAt: h0 + n * riser, w: Wk };
   };
 
   let o = pos, fu = u, fr = r, h = 0, arrival;
   for (let k = 0; k < fl.length; k++) {
     const f = flight(o, fu, fr, fl[k], h, k);
     if (k === fl.length - 1) {
-      const end = add(o, add(mul(fu, f.run), mul(fr, W / 2)));
+      const end = add(o, add(mul(fu, f.run), mul(fr, f.w / 2)));
       arrow.push(pt(end));
       arrival = { pos: pt(end), dir: fu };
       break;
     }
-    // a turn after this flight: a square landing (width × width) or winders, then the next flight
+    // a turn after this flight: a landing, or winders, then the next flight. The landing is as wide across as this
+    // flight (Wp) and as deep along the walk as the next one (Wn); winders are fanned on a square of the wider of the two
+    const Wp = f.w, Wn = wOf(fl[k + 1]);
     const L = f.run, left = st.turn === 'L', H1 = f.topAt;
     const A = add(o, mul(fu, L));                                     // landing's near-left corner
     const u2 = left ? [-fu[1], fu[0]] : [fu[1], -fu[0]], r2 = [u2[1], -u2[0]];
-    const o2 = left ? A : add(o, add(mul(fr, W), mul(fu, L + W)));   // left corner of the next flight's front edge
-    const turn = { poly: quad(o, fu, fr, L, L + W, 0, W), top: r1(H1), entry: pt(add(o, add(mul(fu, L), mul(fr, W / 2)))), exit: pt(add(o2, mul(r2, W / 2))) };
+    const o2 = left ? A : add(o, add(mul(fr, Wp), mul(fu, L + Wn)));  // left corner of the next flight's front edge
+    const turn = { poly: quad(o, fu, fr, L, L + Wn, 0, Wp), top: r1(H1), entry: pt(add(o, add(mul(fu, L), mul(fr, Wp / 2)))), exit: pt(add(o2, mul(r2, Wn / 2))) };
     if (winders) {
       // wedges around the inside corner of the turn, from the arrival edge of this flight to the front edge of the next
-      const piv = left ? A : add(A, mul(fr, W)), e1 = left ? fr : mul(fr, -1);
-      const bnd = th => { const t = Math.tan(th); return th <= Math.PI / 4 + 1e-9 ? [W, W * t] : [W / t, W]; };
+      const piv = left ? A : add(A, mul(fr, Wp)), e1 = left ? fr : mul(fr, -1);
+      // the fan covers the landing's rectangle exactly: Wp across (e1) by Wn along the walk (fu), so no wedge reaches past the
+      // landing's outer edge when the flights differ in width (BBV28: 863 and 850 gave 13 mm over the outer length)
+      const thc = Math.atan2(Wn, Wp);                                    // the landing's corner, as an angle from e1
+      const bnd = th => { const c = Math.cos(th), s = Math.sin(th), t = Math.min(c > 1e-12 ? Wp / c : Infinity, s > 1e-12 ? Wn / s : Infinity); return [c * t, s * t]; };
       const at = ([a, b]) => add(piv, add(mul(e1, a), mul(fu, b)));
       for (let j = 0; j < winders; j++) {
-        const t0 = (j * Math.PI / 2) / winders, t1 = ((j + 1) * Math.PI / 2) / winders, poly = [piv, at(j === 0 ? [W, 0] : bnd(t0))];
-        if (t0 < Math.PI / 4 - 1e-9 && t1 > Math.PI / 4 + 1e-9) poly.push(at([W, W]));
-        poly.push(at(j === winders - 1 ? [0, W] : bnd(t1)));
+        const t0 = (j * Math.PI / 2) / winders, t1 = ((j + 1) * Math.PI / 2) / winders, poly = [piv, at(j === 0 ? [Wp, 0] : bnd(t0))];
+        if (t0 < thc - 1e-9 && t1 > thc + 1e-9) poly.push(at([Wp, Wn]));
+        poly.push(at(j === winders - 1 ? [0, Wn] : bnd(t1)));
         steps.push({ poly: poly.map(pt), top: r1(H1 + j * riser), kind: 'winder', flight: k, n: steps.length + 1 });
       }
       turn.top = r1(H1 + (winders - 1) * riser);
-    } else steps.push({ poly: quad(o, fu, fr, L, L + W, 0, W), top: r1(H1), kind: 'landing', flight: k, n: steps.length + 1 });
+    } else steps.push({ poly: quad(o, fu, fr, L, L + Wn, 0, Wp), top: r1(H1), kind: 'landing', flight: k, n: steps.length + 1 });
     turns.push(turn);
-    arrow.push(pt(add(o, add(mul(fu, L + W / 2), mul(fr, W / 2)))));
+    arrow.push(pt(add(o, add(mul(fu, L + Wn / 2), mul(fr, Wp / 2)))));
     h = H1 + (winders ? (winders - 1) * riser : 0);
     o = o2; fu = u2; fr = r2;
   }
@@ -170,21 +178,91 @@ export function stairOpening(layout, under, headroom) {
   return { steps, hole: loops };
 }
 
-/** Like outlineOf, but one outline per connected group of pieces. */
-function outlineLoops(polys) {
-  const groups = [];
-  for (const poly of polys) {
-    const touching = groups.filter(g => g.some(q => shareEdge(q, poly)));
-    const merged = [poly, ...touching.flat()];
-    for (const t of touching) groups.splice(groups.indexOf(t), 1);
-    groups.push(merged);
+/**
+ * The outline of the union of polygons that may touch at corners or only along part of an edge (the L stair's steps).
+ * Every edge is split where the other polygons meet it; the parts inside another polygon, or on one, are dropped; what
+ * is left is chained into closed loops. Returns the loops, largest first (one for a connected stair, fixes the L stair
+ * coming out as several boxes).
+ */
+export function unionOutlines(polys) {
+  const EPS = 0.5;
+  const edges = polys.flatMap((poly, i) => poly.map((a, k) => [a, poly[(k + 1) % poly.length], i]));
+  const verts = polys.flat();
+  const tOf = (p, a, b) => ((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2);
+  const crossT = (a, b, c, d) => {                              // where segment ab crosses cd (strictly inside ab), or null
+    const r = [b[0] - a[0], b[1] - a[1]], s = [d[0] - c[0], d[1] - c[1]], den = r[0] * s[1] - r[1] * s[0];
+    if (Math.abs(den) < 1e-12) return null;
+    const qp = [c[0] - a[0], c[1] - a[1]], t = (qp[0] * s[1] - qp[1] * s[0]) / den, u = (qp[0] * r[1] - qp[1] * r[0]) / den;
+    return t > 1e-9 && t < 1 - 1e-9 && u > -1e-9 && u < 1 + 1e-9 ? t : null;
+  };
+  const onEdgeOf = (p, poly) => poly.some((a, k) => distToSegment(p, a, poly[(k + 1) % poly.length]) < EPS);
+  const segs = [];
+  for (const [a, b, i] of edges) {
+    if (Math.hypot(b[0] - a[0], b[1] - a[1]) < EPS) continue;
+    const ts = [0, 1];
+    for (const v of verts) if (distToSegment(v, a, b) < EPS) ts.push(tOf(v, a, b));
+    for (const [c, d] of edges) { const t = crossT(a, b, c, d); if (t !== null) ts.push(t); }
+    ts.sort((x, y) => x - y);
+    for (let j = 0; j + 1 < ts.length; j++) {
+      const t0 = ts[j], t1 = ts[j + 1];
+      if (t1 - t0 < 1e-6) continue;
+      const mid = [a[0] + (b[0] - a[0]) * (t0 + t1) / 2, a[1] + (b[1] - a[1]) * (t0 + t1) / 2];
+      if (polys.some((poly, pi) => pi !== i && (pointInPolygon(mid, poly) || onEdgeOf(mid, poly)))) continue;
+      segs.push([[a[0] + (b[0] - a[0]) * t0, a[1] + (b[1] - a[1]) * t0], [a[0] + (b[0] - a[0]) * t1, a[1] + (b[1] - a[1]) * t1]]);
+    }
   }
-  return groups.map(g => outlineOf(g));
+  const key = p => `${Math.round(p[0] * 10)},${Math.round(p[1] * 10)}`;     // tenths of a mm
+  const adj = new Map();
+  segs.forEach((s, idx) => { for (const p of s) { const k = key(p); if (!adj.has(k)) adj.set(k, []); adj.get(k).push(idx); } });
+  const used = segs.map(() => false), loops = [];
+  for (let s0 = 0; s0 < segs.length; s0++) {
+    if (used[s0]) continue;
+    used[s0] = true;
+    const start = segs[s0][0], loop = [start, segs[s0][1]];
+    let pt = segs[s0][1];
+    for (;;) {
+      // where several edges meet, take the one turning most to the left: the loop then goes round its own region, never
+      // across it (taking any edge made a figure-eight, which triangulates as a wrong, curved shape in 3D)
+      const din = [pt[0] - loop[loop.length - 2][0], pt[1] - loop[loop.length - 2][1]];
+      let next = undefined, best = -Infinity;
+      for (const i of adj.get(key(pt)) || []) {
+        if (used[i]) continue;
+        const o = key(segs[i][0]) === key(pt) ? segs[i][1] : segs[i][0];
+        const dout = [o[0] - pt[0], o[1] - pt[1]];
+        const turn = Math.atan2(din[0] * dout[1] - din[1] * dout[0], din[0] * dout[0] + din[1] * dout[1]);
+        if (turn > best) { best = turn; next = i; }
+      }
+      if (next === undefined) break;
+      used[next] = true;
+      const other = key(segs[next][0]) === key(pt) ? segs[next][1] : segs[next][0];
+      if (key(other) === key(start)) break;
+      loop.push(other);
+      pt = other;
+    }
+    const clean = dropStraight(loop);
+    if (clean.length >= 3) loops.push(clean);
+  }
+  return loops.sort((x, y) => Math.abs(signedArea(y)) - Math.abs(signedArea(x)));
+}
+
+/** The outline(s) of the steps that reach the slab (the opening in the floor above): one per connected region. */
+function outlineLoops(polys) {
+  return unionOutlines(polys);
 }
 
 function shareEdge(a, b) {
   const near = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 0.5;
   return a.some((p, i) => { const q = a[(i + 1) % a.length]; return b.some((s, j) => { const t = b[(j + 1) % b.length]; return near(p, t) && near(q, s); }); });
+}
+
+/**
+ * The opening in the floor above given as a rectangle (fixes list 8): `rect.from` and `rect.to` are opposite corners
+ * in plan mm, relative to the stair's start point `start`. Used instead of the steps' own hole, so the part of the
+ * stairs that should not open (a small section under a wall, say) stays closed.
+ */
+export function openingRectPoly(rect, start) {
+  const [x0, y0] = rect.from, [x1, y1] = rect.to;
+  return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([x, y]) => [start[0] + x, start[1] + y]);
 }
 
 /** Start point of a stair: `start: { ref, offset }` against `snapPos(ref)`, or `start: { pos }` / `pos`. */
@@ -237,7 +315,7 @@ export const STAIR_SOLID = Object.freeze({ waist: 150, tread: 60, side: 50 });  
  * `steps` limits it to some steps (the ones seen through the opening in the floor above), without side panels.
  */
 export function stairSolids(layout, st, { steps = layout.steps, dz = 0, withSides = true } = {}) {
-  const out = [], under = st.underside ?? 'closed', waist = st.waist ?? STAIR_SOLID.waist, W = layout.width, riser = layout.riser, floor = dz;
+  const out = [], under = st.underside ?? 'closed', waist = st.waist ?? STAIR_SOLID.waist, riser = layout.riser, floor = dz;
   const quadAt = (f, s0, s1, w0, w1) => [[s0, w0], [s1, w0], [s1, w1], [s0, w1]].map(([s, w]) => pt(add(f.o, add(mul(f.u, s), mul(f.r, w)))));
   // soffit B(s) (under the steps) and nose line N(s) of a flight, from its front edge
   const slopeOf = f => riser / f.d;
@@ -257,9 +335,11 @@ export function stairSolids(layout, st, { steps = layout.steps, dz = 0, withSide
     const top = s.top + dz;
     if (s.kind === 'tread') {
       const f = layout.flights[s.fi];
-      if (under === 'sloped') out.push(...soffitPieces(f, s.s0, s.s1, 0, W, top));
+      if (under === 'sloped') out.push(...soffitPieces(f, s.s0, s.s1, 0, f.w, top));
       else out.push({ poly: s.poly, z0: under === 'open' ? Math.max(top - STAIR_SOLID.tread, floor) : floor, z1: top });
     } else {
+      // a winder's underside reaches down a riser deeper than a tread's: the riser face below it is then solid, with no gap
+      // between the winder and the step under it (a thinner winder left holes in the BBV28 stair)
       const low = under === 'closed' ? floor : Math.max(top - waist - (s.kind === 'winder' ? riser : 0), floor);
       out.push({ poly: s.poly, z0: under === 'open' ? Math.max(top - STAIR_SOLID.tread, floor) : low, z1: top });
     }
@@ -268,7 +348,7 @@ export function stairSolids(layout, st, { steps = layout.steps, dz = 0, withSide
     const T = STAIR_SOLID.side;
     layout.flights.forEach(f => {
       if (!(f.run > 0)) return;
-      for (const [w0, w1] of [[0, T], [W - T, W]]) {
+      for (const [w0, w1] of [[0, T], [f.w - T, f.w]]) {
         const topLine = line(f, N(f, 0), N(f, f.run)), z1 = Math.max(N(f, 0), N(f, f.run));
         if (under === 'closed') out.push({ poly: quadAt(f, 0, f.run, w0, w1), z0: floor, z1, slope: { top: topLine }, side: true });
         else out.push(...soffitPieces(f, 0, f.run, w0, w1, z1, { topLine, side: true }));
@@ -283,8 +363,35 @@ export function stairSolids(layout, st, { steps = layout.steps, dz = 0, withSide
         const L = Math.hypot(q[0] - p[0], q[1] - p[1]), u = [(q[0] - p[0]) / L, (q[1] - p[1]) / L];
         let n = [-u[1], u[0]];
         if ((cen[0] - m[0]) * n[0] + (cen[1] - m[1]) * n[1] < 0) n = [-n[0], -n[1]];
-        const top = tn.top + dz, a2 = add(p, mul(n, T)), b2 = add(q, mul(n, T));
-        out.push({ poly: [p, q, b2, a2].map(pt), z0: under === 'closed' ? floor : Math.max(top - waist - riser, floor), z1: top, side: true });
+        // a square landing: one flat top per panel
+        if (!(layout.winders > 0)) {
+          const top = tn.top + dz, a2 = add(p, mul(n, T)), b2 = add(q, mul(n, T));
+          out.push({ poly: [p, q, b2, a2].map(pt), z0: under === 'closed' ? floor : Math.max(top - waist - riser, floor), z1: top, side: true });
+          return;
+        }
+        // winders: each winder is a sector of the turn (an equal angle round the inside corner). Its side rises by one riser
+        // from the step below to its own step, so the side reaches the first step of the next flight at the exit (the turn's
+        // top plus one riser), not the last winder's top. The panel is cut at each sector and every piece slopes on its own
+        const W = layout.winders, H1 = tn.top + dz - (W - 1) * riser, delta = Math.PI / (2 * W);
+        const piv = layout.steps.find(st => st.kind === 'winder').poly[0];
+        const e1 = layout.steps.find(st => st.kind === 'winder').poly[1], lastW = layout.steps.filter(st => st.kind === 'winder').pop().poly;
+        const ue = [e1[0] - piv[0], e1[1] - piv[1]], uf = [lastW[lastW.length - 1][0] - piv[0], lastW[lastW.length - 1][1] - piv[1]];
+        const angleOf = x => { const d = [x[0] - piv[0], x[1] - piv[1]]; return Math.atan2(d[0] * uf[0] + d[1] * uf[1], d[0] * ue[0] + d[1] * ue[1]); };
+        const zOf = x => H1 + Math.min(Math.max(angleOf(x) / delta, 0), W) * riser;   // linear in the angle: one riser per sector
+        const th0 = angleOf(p), th1 = angleOf(q), ts = [0, 1];
+        for (let j = 1; j < W; j++) { const edgeAt = j * delta; if ((th0 - edgeAt) * (th1 - edgeAt) < 0) ts.push((edgeAt - th0) / (th1 - th0)); }
+        ts.sort((x, y) => x - y);
+        for (let k = 0; k + 1 < ts.length; k++) {
+          const t0 = ts[k], t1 = ts[k + 1];
+          if (t1 - t0 < 1e-6) continue;
+          const s0 = [p[0] + (q[0] - p[0]) * t0, p[1] + (q[1] - p[1]) * t0], s1 = [p[0] + (q[0] - p[0]) * t1, p[1] + (q[1] - p[1]) * t1];
+          const z0s = zOf(s0) + 0, z1s = zOf(s1), Ls = Math.hypot(s1[0] - s0[0], s1[1] - s0[1]) || 1, us = [(s1[0] - s0[0]) / Ls, (s1[1] - s0[1]) / Ls];
+          const lineOf = (za, zb, shift) => ({ origin: s0, u: us, L: Ls, a: r1(za - shift), b: r1(zb - shift) });
+          const slope = { top: lineOf(z0s, z1s, 0) };
+          if (under !== 'closed') slope.bottom = lineOf(z0s, z1s, waist + riser);
+          const a0 = add(s0, mul(n, T)), a1 = add(s1, mul(n, T));
+          out.push({ poly: [s0, s1, a1, a0].map(pt), z0: under === 'closed' ? floor : Math.max(Math.min(z0s, z1s) - waist - riser, floor), z1: Math.max(z0s, z1s), side: true, slope });
+        }
       });
     }
   }
@@ -306,7 +413,7 @@ export const STAIR_RAIL = Object.freeze({ height: 900, rail: 45, depth: 40, post
 export function stairRails(layout, st, { dz = 0 } = {}) {
   const mode = st.handrail;
   if (mode !== 'left' && mode !== 'right' && mode !== 'both') return [];
-  const H = Number(st.handrailHeight) > 0 ? Number(st.handrailHeight) : STAIR_RAIL.height, W = layout.width, riser = layout.riser, { rail: RW, depth: RD, post: PW } = STAIR_RAIL;
+  const H = Number(st.handrailHeight) > 0 ? Number(st.handrailHeight) : STAIR_RAIL.height, riser = layout.riser, { rail: RW, depth: RD, post: PW } = STAIR_RAIL;
   const out = [], posts = new Map();
   const nose = (f, s) => f.h0 + riser + (riser / f.d) * s + dz;                      // the line through the noses of a flight, at s from its front edge
   const thin = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, n = [-(b[1] - a[1]) / L * RW / 2, (b[0] - a[0]) / L * RW / 2]; return [[a[0] - n[0], a[1] - n[1]], [b[0] - n[0], b[1] - n[1]], [b[0] + n[0], b[1] + n[1]], [a[0] + n[0], a[1] + n[1]]].map(pt); };
@@ -322,9 +429,10 @@ export function stairRails(layout, st, { dz = 0 } = {}) {
     out.push({ poly: thin(a, b), z0: Math.min(za, zb) - RD, z1: Math.max(za, zb), ...(Math.abs(za - zb) > 0.5 ? { slope: { bottom: line(za - RD, zb - RD), top: line(za, zb) } } : {}), rail: true });
   };
   for (const side of mode === 'both' ? ['left', 'right'] : [mode]) {
-    const w = side === 'left' ? 0 : W, outer = side === (st.turn === 'L' ? 'right' : 'left');   // the side the landing's free edges are on
+    const outer = side === (st.turn === 'L' ? 'right' : 'left');   // the side the landing's free edges are on
     layout.flights.forEach((f, k) => {
       if (!(f.run > 0) || !(f.d > 0)) return;                                       // a flight of one riser has no treads to follow
+      const w = side === 'left' ? 0 : f.w;                                          // its own width (fixes list 3)
       const a = add(f.o, mul(f.r, w)), b = add(a, mul(f.u, f.run)), zA = nose(f, 0) + H, zB = nose(f, f.run) + H;
       member(a, b, zA, zB);
       const n = Math.max(1, Math.ceil(f.run / STAIR_RAIL.gap));

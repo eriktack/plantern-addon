@@ -272,6 +272,17 @@ export function browser(el, { start = '', onChange = () => {} } = {}) {
 $('addBtn').onclick = () => openWizard({ step: 'type' });
 initHa();
 $('newHouseBtn').onclick = () => openWizard({ step: 'newhouse' });
+// Clearing the object cache: nothing is lost, the files are built again on demand (no confirmation needed).
+$('glbClear').onclick = async () => {
+  const button = $('glbClear');
+  button.disabled = true;
+  try {
+    const r = await api('api/glb-cache', undefined, 'DELETE');
+    $('glbMsg').innerHTML = `<div class="msg">Cleared ${r.objects} placed ${r.objects === 1 ? 'object' : 'objects'} (${(r.bytes / 1048576).toFixed(1)} MB).</div>`;
+  } catch (e) {
+    $('glbMsg').innerHTML = `<div class="msg bad">${esc(e.message)}</div>`;
+  } finally { button.disabled = false; }
+};
 load();
 // another tab (or another device) may connect a storage or add a house meanwhile
 try { const es = new EventSource('api/events'); for (const ev of ['houses', 'sync']) es.addEventListener(ev, () => { if (!w) load(); }); } catch { /* no live updates */ }

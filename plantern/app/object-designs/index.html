@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Objects</title>
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../src/styles.css">
+<style>
+  /* Catalog-only additions; colours come from src/styles.css, the parameter controls from .pform there. */
+  main { flex: 1; position: relative; min-width: 0; min-height: 0; }
+  #view { position: absolute; inset: 0; }
+  aside { display: flex; flex-direction: column; }
+  aside > * { flex-shrink: 0; }
+  .actions { display: flex; gap: 6px; margin-top: 14px; }
+  .actions button { flex: 1; }
+  .info { margin-top: 12px; }
+
+  /* the house panel (house-context.js): shown only with Plantern's server and a house */
+  .housebox { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 4px; }
+  .housebox label { display: block; margin-top: 10px; font-size: 13px; }
+  .housebox label small { color: var(--mut); }
+  .housebox input:not([type=checkbox]), .housebox select { display: block; width: 100%; box-sizing: border-box; margin-top: 3px; background: #14161a; color: var(--fg); border: 1px solid #3a404b; border-radius: 6px; padding: 5px 8px; font: inherit; }
+  .housebox .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .housebox [hidden] { display: none; }
+  #hMsg { margin-top: 10px; min-height: 1.4em; }
+  #hMsg.bad { color: var(--bad); }
+  #hRefused { white-space: pre-wrap; color: var(--warn); margin: 8px 0 0; }
+
+  @media (max-width: 700px) {
+    body { flex-direction: column; }
+    main { flex: none; height: 52vh; }
+    aside { width: auto; flex: 1; border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "../vendor/three/three.module.js",
+    "three/addons/": "../vendor/three/addons/"
+  }
+}
+</script>
+<!-- Sets window.jscadModeling before the modules run (see lib/jscad.js). -->
+<script src="vendor/jscad/jscad-modeling.min.js"></script>
+</head>
+<body>
+
+<main><div id="view"></div></main>
+<div id="resizer" title="Drag to resize the panel (double-click: default width)"></div>
+
+<aside>
+  <nav class="nav" aria-label="Pages" data-page="objects" data-base="../"></nav>
+  <div id="summary" class="psummary" role="alert" hidden></div>
+  <div class="row"><select id="picker" aria-label="Model"></select></div>
+  <p id="desc" class="help"></p>
+  <div id="form" class="pform"></div>
+  <div class="actions">
+    <button id="download" type="button">Download .gltf</button>
+    <button id="downloadGlb" class="primary" type="button">Download .glb</button>
+  </div>
+  <div id="info" class="help info"></div>
+
+  <section id="houseBox" class="housebox" hidden>
+    <h2>In a house</h2>
+    <div class="row sel"><select id="hLoc" aria-label="House"></select></div>
+    <pre id="hRefused" class="help" hidden></pre>
+    <div id="hPlaceBox">
+      <label>Level <select id="hLevel"></select></label>
+      <label>It stands
+        <select id="hKind"><option value="room">in a room</option><option value="wall">on a wall</option></select>
+      </label>
+      <div id="hRoomRows">
+        <label>Room <select id="hRoom"></select></label>
+        <div class="two">
+          <label>x <small>mm</small><input id="hX" inputmode="numeric" autocomplete="off"></label>
+          <label>y <small>mm</small><input id="hY" inputmode="numeric" autocomplete="off"></label>
+        </div>
+        <label>Turn <small>degrees (0: its width runs east)</small><input id="hTurn" value="0" inputmode="numeric" autocomplete="off"></label>
+      </div>
+      <div id="hWallRows" hidden>
+        <label>Wall <select id="hWall"></select></label>
+        <label>On the side of <select id="hSide"><option value="right">right</option><option value="left">left</option></select></label>
+        <div class="two">
+          <label>From the wall's start <small>mm</small><input id="hOffset" value="0" inputmode="numeric" autocomplete="off"></label>
+          <label>Gap to the wall <small>mm</small><input id="hGap" value="0" inputmode="numeric" autocomplete="off"></label>
+        </div>
+      </div>
+      <label>Bottom <small>mm above the floor</small><input id="hZ" value="0" inputmode="numeric" autocomplete="off"></label>
+      <label>Name <small>optional</small><input id="hName" autocomplete="off"></label>
+      <div class="actions"><button id="hPlace" class="primary" type="button">Place in house</button></div>
+    </div>
+    <div id="hEditBox" hidden>
+      <p class="help">Changing the options of <b id="hEditing"></b>.</p>
+      <div class="actions"><button id="hApply" class="primary" type="button">Apply to the object</button></div>
+      <p class="help"><a href="index.html">Back to the catalog</a></p>
+    </div>
+    <div id="hMsg" class="help" role="status"></div>
+  </section>
+</aside>
+
+<script type="module" src="../src/nav.js"></script>
+<script type="module" src="catalog.js"></script>
+</body>
+</html>

@@ -35,7 +35,8 @@ export function chooseLevel(model, locId, urlLevel, mem = remembered()) {
 /** Point the links to the other pages at the current house and level. */
 export function linkPages(locId, levelId) {
   const q = new URLSearchParams({ loc: locId, ...(levelId ? { level: levelId } : {}) });
-  for (const a of document.querySelectorAll('a[href^="index.html"], a[href^="room-editor.html"], a[href^="wizard.html"], a[href^="openings.html"], a[href^="storage.html"]')) {
+  // $= so the links of a page in a subfolder ('../index.html') and the Objects page itself ('object-designs/index.html') count too
+  for (const a of document.querySelectorAll('a[href$="index.html"], a[href$="room-editor.html"], a[href$="wizard.html"], a[href$="openings.html"], a[href$="storage.html"]')) {
     a.href = `${a.getAttribute('href').split('?')[0]}?${q}`;
   }
 }

@@ -1,4 +1,4 @@
-// The house and storage API of the local server (docs/proposals/2026-10-09-house-storage.md §3.4).
+// The house and storage API of the local server (docs/archive/2026-10-09-house-storage.md §3.4).
 //   GET  /api/houses                     → { houses: [...], showDemo }
 //   GET  /api/houses/:id                 → { id, name, store, readOnly, sync, location: { text, version }, model: { text, version } }
 //   GET  /api/houses/:id/versions        → { location, model } (for pages that cannot keep an event stream open)

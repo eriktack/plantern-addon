@@ -13,7 +13,9 @@
     "f_studio_lamp": { "entity": "light.studio" },
     "f_cellar_lamp": { "entity": "light.cellar" },
     "f_bed_lamp": { "entity": "light.bedroom" },
-    "f_land_lamp": { "entity": "light.landing" }
+    "f_land_lamp": { "entity": "light.landing" },
+    "f_boiler_strip_h": { "entity": "light.boiler_strips" },
+    "f_boiler_strip_v": { "entity": "light.boiler_strips" }
   },
   "settings": { "cutPlane": 1200, "checkTolerance": { "ok": 5, "warn": 15 } }
 }

@@ -1,4 +1,4 @@
-// The Storage page's Home Assistant section (roadmap 11, docs/plans/ha-11-12.md S5): connections kept by
+// The Storage page's Home Assistant section (roadmap 11, docs/archive/ha-11-12.md S5): connections kept by
 // Plantern's server (tools/ha/api.js; the token stays there) and, per house, which connection it uses
 // (location.json → integrations.ha.connection). This file only wires the DOM.
 

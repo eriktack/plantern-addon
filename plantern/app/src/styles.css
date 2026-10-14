@@ -39,7 +39,7 @@ svg.measure .fix{cursor:crosshair}
 .ztools button{background:#1c1f25e6;min-width:30px}
 .ztools button[hidden]{display:none}
 #status{position:absolute;left:10px;bottom:calc(8px + env(safe-area-inset-bottom,0px));color:var(--mut);font-size:12px;pointer-events:none}
-aside{width:320px;overflow-y:auto;overflow-x:hidden;flex:none;padding:12px;padding-top:calc(12px + env(safe-area-inset-top,0px));background:var(--panel);border-left:1px solid var(--line)}
+aside{width:380px;overflow-y:auto;overflow-x:hidden;flex:none;padding:12px;padding-top:calc(12px + env(safe-area-inset-top,0px));background:var(--panel);border-left:1px solid var(--line)}
 #resizer{flex:none;width:6px;cursor:col-resize;background:var(--line);touch-action:none}
 #resizer:hover,#resizer.drag{background:var(--acc)}
 @media(max-width:760px){body{flex-direction:column}aside{width:auto!important;max-height:46%;border-left:0;border-top:1px solid var(--line)}#resizer{display:none}}
@@ -103,10 +103,26 @@ svg[hidden],#view3d[hidden],section[hidden]{display:none}
 .swatches button.sw.on{outline:2px solid var(--acc);outline-offset:1px}
 .swatches .nm{font-size:11px;padding:1px 6px;margin-left:2px}
 .swatch{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid #3a404b;vertical-align:middle}
-.nav{display:flex;gap:2px;padding:2px;margin:0 0 10px;background:#14161a;border:1px solid var(--line);border-radius:8px}
-.nav a{flex:1;text-align:center;padding:5px 4px;border-radius:6px;font-size:12px;color:var(--mut);text-decoration:none;white-space:nowrap}
-.nav a:hover{color:var(--fg);background:#20242b}
-.nav a.on{background:#2a2f38;color:var(--fg);font-weight:600}
+.nav{position:relative;margin:0 0 10px}
+.navbtn{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;background:#14161a;border:1px solid var(--line);border-radius:8px;font-weight:600;text-align:left}
+.navbtn:hover,.navbtn[aria-expanded=true]{background:#20242b;border-color:#3a404b}
+.nav svg{width:16px;height:16px;flex:none}
+.navbtn>span{flex:1}
+.navbtn>svg:first-child{color:var(--acc)}
+.navbtn>svg:last-child{color:var(--mut);transition:transform .15s}
+.navbtn[aria-expanded=true]>svg:last-child{transform:rotate(180deg)}
+.navmenu{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:20;padding:6px;background:#181b21;border:1px solid #3a404b;border-radius:10px;box-shadow:0 10px 30px #000a}
+.navmenu[hidden]{display:none}
+.navgroup{padding:8px 8px 3px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+.navgroup:first-child{padding-top:2px}
+.navmenu a{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:7px;color:var(--fg);text-decoration:none}
+.navmenu a:hover,.navmenu a:focus-visible{background:#262b34;outline:0}
+.navmenu a.on{background:#2a2f38}
+.navmenu a>svg:first-child{flex:none;color:var(--acc)}
+.navmenu a>svg:last-child:not(:first-child){flex:none;color:var(--ok)}
+.navmenu .nt{flex:1;min-width:0;display:flex;flex-direction:column}
+.navmenu .nt b{font-weight:600}
+.navmenu .nt small{color:var(--mut);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 button.primary{background:var(--acc);color:#14161a;border-color:var(--acc);font-weight:600}
 .savebar{position:sticky;top:0;z-index:3;background:var(--panel);margin:0 -12px 8px;padding:8px 12px;border-bottom:1px solid var(--line)}
 .sb-row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
@@ -163,3 +179,42 @@ aside a,.help a,#app a:not(.nav a):not(.big){color:var(--acc)}
 .entpick .pick small{color:var(--dim,#8b93a1);font:11px ui-monospace,Consolas,monospace}
 #xEntityNow b{font-weight:600}
 #xEntityNow small{font:11px ui-monospace,Consolas,monospace}
+
+/* dialogs (src/capture/dialog.js): the unsaved-changes question, the id of a thing */
+dialog.pdialog{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:18px;width:min(92vw,420px);box-shadow:0 12px 40px rgba(0,0,0,.5)}
+dialog.pdialog::backdrop{background:rgba(0,0,0,.55)}
+dialog.pdialog h2{margin:0 0 8px;font-size:17px}
+dialog.pdialog .pmsg{margin:0 0 12px;color:var(--mut)}
+dialog.pdialog .pfields{display:grid;gap:8px;margin-bottom:6px}
+dialog.pdialog .pfields label{display:grid;gap:4px}
+dialog.pdialog .perr{min-height:1.2em;color:var(--bad);font-size:13px;margin-bottom:6px}
+dialog.pdialog .pbtns{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+#edId{font-weight:600;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* parameter controls (src/controls.js, src/param-form.js): the catalog and the Objects page */
+.pform{margin-top:4px}
+.pform fieldset{border:1px solid var(--line);border-radius:8px;margin:14px 0 0;padding:6px 10px 10px}
+.pform legend{font-size:12px;color:var(--mut)}
+.pform .field{margin-top:12px}
+.pform .flabel{display:flex;justify-content:space-between;align-items:baseline;font-size:13px}
+.pform .unit{color:var(--mut);font-size:12px;margin-left:4px}
+.pform .pair{display:grid;grid-template-columns:92px 1fr;gap:10px;align-items:center;margin-top:4px}
+.pform .pair input[type=number]{width:100%;box-sizing:border-box;background:#14161a;color:var(--fg);border:1px solid #3a404b;border-radius:6px;padding:4px 6px;font:inherit}
+.pform .pair input[type=range]{width:100%;accent-color:var(--acc)}
+.pform .field.bad input[type=number],.pform .field.bad select{border-color:var(--bad)}
+.pform .ferr{color:var(--bad);font-size:12px;margin-top:3px}
+.pform .ferr:empty{display:none}
+.pform .check{display:flex;align-items:center;gap:8px;margin-top:4px}
+.pform .check input{accent-color:var(--acc);width:16px;height:16px}
+.pform .seg{display:flex;margin-top:4px}
+.pform .seg button{flex:1;border-radius:0;padding:5px 4px}
+.pform .seg button:first-child{border-radius:6px 0 0 6px}
+.pform .seg button:last-child{border-radius:0 6px 6px 0}
+.pform .seg button+button{border-left:0}
+.pform .mat{display:flex;gap:6px;align-items:center;margin-top:4px}
+.pform .mat select{flex:1;min-width:0}
+.pform .mat input[type=color]{width:34px;height:28px;padding:0;border:1px solid #3a404b;border-radius:6px;background:none}
+.pform .swatch{width:18px;height:18px;border-radius:4px;border:1px solid #3a404b;flex:none}
+.psummary{position:sticky;top:-12px;margin:-12px -12px 8px;padding:10px 12px;background:#3a1d20;border-bottom:1px solid var(--bad);color:#ffd7d3;font-size:13px;z-index:3}
+.psummary[hidden]{display:none}
+.psummary ul{margin:4px 0 0;padding-left:18px}
+.psummary button{background:none;border:0;color:inherit;text-decoration:underline;padding:0;font:inherit;cursor:pointer;text-align:left}

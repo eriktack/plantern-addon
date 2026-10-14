@@ -1,8 +1,8 @@
 // Stairs (PLANTERN.md §6.4), the rules for what may be stored. What a stair looks like and where its
 // opening is comes from geometry/stairs.js; whether it fits the house is reported by validate.js.
 //   { id: "st_main", to: "upper", start: { ref, offset: [dx, dy] } | { pos: [x, y] }, heading, width,
-//     flights: [{ risers, length?, treads?: [mm, …] }, …] (1 straight, 2 an L, 3 a U), turn?: "L" | "R", landing?: "square" | "winders",
-//     winders?: n, underside?: "closed" | "open" | "sloped", waist?: mm, sides?: "stepped" | "sloped", handrail?: "none" | "left" | "right" | "both" (walking up), handrailHeight?: mm, opening?: [[x, y], …], assumed?: [...] }
+//     flights: [{ risers, length?, treads?: [mm, …], width?: mm }, …] (1 straight, 2 an L, 3 a U), turn?: "L" | "R", landing?: "square" | "winders",
+//     winders?: n, underside?: "closed" | "open" | "sloped", waist?: mm, sides?: "stepped" | "sloped", handrail?: "none" | "left" | "right" | "both" (walking up), handrailHeight?: mm, opening?: [[x, y], …], ignoreDepthWarning?: true, assumed?: [...] }
 // Pure.
 
 export const STAIR_UNDERSIDES = ['closed', 'open', 'sloped'];
@@ -29,6 +29,7 @@ export function checkStairs(st, model, level) {
   else {
     fl.forEach((f, i) => {
       if (!Number.isInteger(f?.risers) || f.risers < 1) errors.push(`flight ${i + 1}: risers must be a whole number, 1 or more`);
+      if (f?.width !== undefined && !(f.width > 0)) errors.push(`flight ${i + 1}: width must be more than 0 (or left out to use the stair's width)`);
       if (f?.treads !== undefined) {
         // measured one by one: a depth per tread (risers − 1), in walking order
         if (!Array.isArray(f.treads) || f.treads.length !== f.risers - 1 || f.treads.some(d => !(d > 0))) errors.push(`flight ${i + 1}: treads must be ${Math.max((f?.risers ?? 1) - 1, 0)} depths in mm (one per tread)`);
@@ -47,5 +48,7 @@ export function checkStairs(st, model, level) {
   if (st?.handrailHeight !== undefined && !(st.handrailHeight >= 300 && st.handrailHeight <= 1500)) errors.push('handrailHeight (above the nose line) must be 300 to 1500 mm');
   if (st?.waist !== undefined && !(st.waist > 0)) errors.push('waist (thickness under a sloped underside) must be more than 0');
   if (st?.opening !== undefined && !(Array.isArray(st.opening) && st.opening.length >= 3 && st.opening.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)))) errors.push('opening must be a polygon of 3 or more points');
+  const pt2 = p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite);
+  if (st?.openingRect !== undefined && !(pt2(st.openingRect?.from) && pt2(st.openingRect?.to))) errors.push('openingRect must be { from: [x, y], to: [x, y] } in mm from the start point (two opposite corners)');
   return { errors };
 }

@@ -38,6 +38,14 @@ export function collectSnapPoints(model, level, geo) {
   }
   // stairs: the corners of what they cover (when the level's geometry has them worked out, buildModelGeometry)
   for (const s of geo.stairs || []) (s.layout?.outline || []).forEach((p, i) => P(`${s.id}#p${i}`, p, 'stairs corner', 2));
+  // and the corners of each flight (its front and its end, both sides: outer and inner) and of each landing or winders: the points a measurement runs to (fixes list, stair snapping)
+  for (const s of geo.stairs || []) {
+    (s.layout?.flights || []).forEach((f, k) => {
+      const end = add(f.o, mul(f.u, f.run)), across = mul(f.r, f.w);
+      [[f.o, 'a'], [add(f.o, across), 'b'], [add(end, across), 'c'], [end, 'd']].forEach(([p, c]) => P(`${s.id}#f${k + 1}${c}`, p, 'stairs corner', 2));
+    });
+    (s.layout?.turns || []).forEach((t, k) => (t.poly || []).forEach((p, i) => P(`${s.id}#t${k + 1}${i}`, p, 'stairs corner', 2)));
+  }
   for (const an of model.anchors || []) {
     if (an.level === level.id) P(`${an.id}#${level.id}`, an.pos, 'anchor', 1);
     if (Array.isArray(an.points?.[level.id])) P(`${an.id}#${level.id}`, an.points[level.id], 'anchor', 1);   // a point given as a position (a ref is already a point)
@@ -58,6 +66,11 @@ export function collectSnapLines(model, level, geo) {
     for (const side of ['left', 'right']) out.push({ ref: `${w.id}#${side}`, a: facePoint(w, f, side, cap.a[side]), b: facePoint(w, f, side, cap.b[side]), kind: 'wall face' });
   }
   for (const s of level.solids || []) (s.polygon || []).forEach((p, i) => out.push({ ref: `${s.id}#f${i}`, a: p, b: s.polygon[(i + 1) % s.polygon.length], kind: 'solid face' }));
+  // stairs: the outer edges of what they cover (fixes list 36), the same outline the corners come from
+  for (const s of geo.stairs || []) {
+    const o = s.layout?.outline || [];
+    o.forEach((p, i) => out.push({ ref: `${s.id}#e${i}`, a: p, b: o[(i + 1) % o.length], kind: 'stairs edge' }));
+  }
   return out.filter(l => Math.hypot(l.b[0] - l.a[0], l.b[1] - l.a[1]) > 1);
 }
 

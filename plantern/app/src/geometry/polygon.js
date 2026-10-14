@@ -183,3 +183,47 @@ function roomNameFit(poly, name, maxSize, minSize) {
   const lines = two && fit(two) > fit(one) * 1.15 ? two : one;
   return { pos, lines, size: Math.max(minSize, fit(lines)) };
 }
+
+/** True when the polygon is convex (every turn goes the same way; collinear corners allowed). */
+export function isConvex(poly) {
+  const n = poly.length;
+  if (n < 3) return false;
+  let sign = 0;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i + 1) % n], c = poly[(i + 2) % n];
+    const cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+    if (Math.abs(cross) < 1e-9) continue;
+    const s = Math.sign(cross);
+    if (sign && s !== sign) return false;
+    sign = s;
+  }
+  return true;
+}
+
+/**
+ * A simple polygon cut into triangles (ear clipping), so that each part is convex and the parts do not overlap. Used to
+ * cut a stair's opening to an L-shaped room (fixes the cellar stair's opening vanishing in farstu, BBV28).
+ */
+export function triangulate(poly) {
+  const ccw = signedArea(poly) >= 0 ? poly.slice() : poly.slice().reverse();
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const inTri = (p, a, b, c) => { const d1 = cross(a, b, p), d2 = cross(b, c, p), d3 = cross(c, a, p); return d1 >= -1e-9 && d2 >= -1e-9 && d3 >= -1e-9; };
+  const idx = ccw.map((_, i) => i), tris = [];
+  let guard = 0;
+  while (idx.length > 3 && guard++ < 10000) {
+    let cut = false;
+    for (let k = 0; k < idx.length; k++) {
+      const i0 = idx[(k + idx.length - 1) % idx.length], i1 = idx[k], i2 = idx[(k + 1) % idx.length];
+      const a = ccw[i0], b = ccw[i1], c = ccw[i2];
+      if (cross(a, b, c) <= 1e-9) continue;                       // a reflex or flat corner is no ear
+      if (idx.some(j => j !== i0 && j !== i1 && j !== i2 && inTri(ccw[j], a, b, c))) continue;
+      tris.push([a, b, c]);
+      idx.splice(k, 1);
+      cut = true;
+      break;
+    }
+    if (!cut) break;
+  }
+  if (idx.length === 3) tris.push(idx.map(i => ccw[i]));
+  return tris;
+}

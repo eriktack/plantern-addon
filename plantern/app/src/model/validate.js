@@ -9,7 +9,7 @@ import { boundEdges } from '../geometry/bound.js';
 import { solidCover } from '../geometry/solids.js';
 import { wallFaceRooms } from '../geometry/paint.js';
 import { collectSnapPoints, collectSnapPointsAround } from '../tools/snap.js';
-import { STAIR_LIMITS, stairOpening, stairSolids } from '../geometry/stairs.js';
+import { STAIR_LIMITS, stairOpening, stairSolids, openingRectPoly } from '../geometry/stairs.js';
 import { checkOpening } from './openings.js';
 import { checkFixture } from './fixtures.js';
 import { checkSolid } from './solids.js';
@@ -91,7 +91,7 @@ function checkBound(w, rooms, out) {
   const { along, missing } = boundEdges(w, rooms);
   if (missing.length) { out.push({ severity: 'error', id: w.id, msg: `bound to room edge ${missing[0]}, which does not exist (orphaned wall: delete it or keep it as a hand-drawn wall)` }); return; }
   const first = along.find(e => e.ref === w.from[0]);
-  const bad = () => out.push({ severity: 'error', id: w.id, msg: `no longer follows room edge ${w.from[0]} (orphaned wall: re-run reconcile, delete it or keep it as a hand-drawn wall)` });
+  const bad = () => out.push({ severity: 'error', id: w.id, msg: `no longer follows room edge ${w.from[0]} (orphaned wall: open it in the Editor and choose Keep as hand-drawn, or Delete it)` });
   if (!first) return bad();
   const off = (e, pt) => Math.abs(cross(e.u, sub(pt, e.p))), t = pt => dot(sub(pt, first.p), first.u);
   if (along.some(e => Math.abs(cross(e.u, first.u)) > SIN2) || off(first, w.a) > TOL || off(first, w.b) > TOL) return bad();
@@ -101,7 +101,7 @@ function checkBound(w, rooms, out) {
 }
 
 /** Validate one level using its derived geometry (from buildLevelGeometry). */
-export function validateLevel(level, geo, below = true, checks = []) {
+export function validateLevel(level, geo, below = true, checks = [], blueprints) {
   const out = [...geo.issues];
   for (const r of level.rooms || []) {
     const opt = checkRoomOptions(r, level, below);
@@ -217,7 +217,7 @@ export function validateLevel(level, geo, below = true, checks = []) {
     }
   }
   for (const o of level.objects || []) {
-    const { errors, warnings } = checkObject(o, level);
+    const { errors, warnings } = checkObject(o, level, blueprints);
     for (const m of errors) out.push({ severity: 'error', id: o.id, msg: m });
     for (const m of warnings) out.push({ severity: 'warn', id: o.id, msg: m });
   }
@@ -252,19 +252,20 @@ function validateStairs(model, geos) {
         // measured treads and a measured run: the run is a check on them
         if (Array.isArray(f.treads) && f.length > 0) { const sum = f.treads.reduce((a, b) => a + b, 0); if (Math.abs(sum - f.length) > 5) warn(`flight ${i + 1}: its treads add up to ${Math.round(sum)} mm, its measured run is ${f.length} mm`); }
       });
-      if (bad.length) warn(`step depth ${bad.map(d => Math.round(d)).join(', ')} mm (usual ${STAIR_LIMITS.tread.join('–')})`);
+      // ignoreDepthWarning: the person checked the steps and they are right (fixes list 28); only this warning is silenced
+      if (bad.length && s.stairs.ignoreDepthWarning !== true) warn(`step depth ${bad.map(d => Math.round(d)).join(', ')} mm (usual ${STAIR_LIMITS.tread.join('–')})`);
       const here = geos.get(lv.id);
       // the first step stands on the floor; further ones may run over an opening or past the floor's edge when the steps are carried by a sloped underside, otherwise they would hang in the air
       const off = L.steps.filter((st, i) => (i === 0 || s.stairs.underside !== 'sloped') && !floorAt(lv, here.holes, centroid(st.poly)));
-      if (off.length) warn(`${off.length === 1 ? 'a step stands' : off.length + ' steps stand'} where there is no floor on ${lv.id} (outside the rooms, or over the opening of stairs arriving from below${s.stairs.underside === 'sloped' ? '' : '; a sloped underside can carry steps over an opening'})`);
+      // named, and says what to do (fixes list 8): move the stairs, give the floor, or open only part of the hole
+      const label = s.stairs.name ? `"${s.stairs.name}" (${s.id})` : s.id;
+      if (off.length) warn(`${label}: ${off.length === 1 ? 'a step stands' : off.length + ' steps stand'} where there is no floor on ${lv.id} (outside the rooms, or over the opening of stairs arriving from below${s.stairs.underside === 'sloped' ? '' : '; a sloped underside can carry steps over an opening'}). Move the stairs, or give ${lv.id} a floor there, or open only the part of the hole that has one (a rectangle, openingRect)`);
       const beyond = [L.arrival.pos[0] + L.arrival.dir[0] * 200, L.arrival.pos[1] + L.arrival.dir[1] * 200], up = geos.get(to.id);
       if (!floorAt(to, up?.holes?.filter(h => h.id !== s.id), beyond)) warn(`its top step does not meet a floor on ${to.id}: nothing to step onto past the arrival edge`);
       // headroom: with an opening given by hand, every step that would hit the slab must lie inside it
-      if (Array.isArray(s.stairs.opening)) {
-        const need = stairOpening(L, s.under, s.headroom).steps.filter(st => !pointInPolygon(centroid(st.poly), s.stairs.opening));
-        if (need.length) err(`its opening in the floor of ${to.id} is too small: ${need.length} step(s) would hit the slab`);
-      }
-      for (const poly of s.opening) if (!floorAt(to, [], centroid(poly))) warn(`its opening lies outside the floor of ${to.id}`);
+      // an opening that does not clear every step is the person's choice: steps may touch the slab (a bottom step does not), so no error (BBV28)
+      // the opening is cut at the edge of the floor above (geometry); where it was cut, the stair does not fit this floor plan: a warning, which the stair can switch off (fixes list 8, BBV28)
+      if (s.trimmed && s.stairs.ignoreEdgeWarning !== true) warn(`${label}: its opening in the floor of ${to.id} reaches past the edge of the rooms there, so it is cut at that edge. Move the stairs, change the rooms above, or tick "opening past the edge is fine" for this stair`);
     }
   }
   out.push(...stairsHeadroom(model, geos));
@@ -342,12 +343,16 @@ function validateLevels(model, geos) {
   return out;
 }
 
-export function validateModel(model, geos) {
+/**
+ * `options.blueprints`: optional Map of blueprint id to its meta (from src/blueprints/load.js). Without it, the
+ * blueprint rules of objects are skipped, so the card and a plain static server validate the same model.
+ */
+export function validateModel(model, geos, { blueprints } = {}) {
   const out = [];
   if (model.units && model.units !== 'mm') out.push({ severity: 'error', id: 'model', msg: `units must be "mm" (got "${model.units}")` });
   checkIds(model, out);
   out.push(...checkMaterials(model), ...checkPalette(model), ...checkSite(model.site));
-  for (const lv of model.levels) out.push(...validateLevel(lv, geos.get(lv.id), model.levels.some(l => l.id !== lv.id && l.elevation < lv.elevation && (l.building ?? null) === (lv.building ?? null)), model.checks).map(x => ({ ...x, level: lv.id })));
+  for (const lv of model.levels) out.push(...validateLevel(lv, geos.get(lv.id), model.levels.some(l => l.id !== lv.id && l.elevation < lv.elevation && (l.building ?? null) === (lv.building ?? null)), model.checks, blueprints).map(x => ({ ...x, level: lv.id })));
   out.push(...validateLevels(model, geos), ...validateStairs(model, geos), ...checkAnchors(model, geos));
   const rooms = model.levels.flatMap(l => l.rooms || []);
   for (const c of model.checks || []) {

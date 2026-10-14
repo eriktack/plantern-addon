@@ -1,0 +1,19 @@
+{
+  "oak": { "color": "#b08040", "roughness": 0.6 },
+  "white-paint": { "color": "#f2efe8", "roughness": 0.5 },
+  "black-metal": { "color": "#2a2a2a", "roughness": 0.4, "metallic": 0.8 },
+  "pine": { "color": "#d9b77e" },
+  "birch": { "color": "#e3d3b0" },
+  "walnut": { "color": "#5c4033" },
+  "ash": { "color": "#c9bfa5" },
+  "fabric": { "color": "#8c8a84" },
+  "leather": { "color": "#6b4a32" },
+  "metal": { "color": "#9ea3a8", "metallic": 0.6, "roughness": 0.35 },
+  "glass": { "color": "#bfe3e8", "roughness": 0.1, "alphaMode": "blend", "opacity": 0.3 },
+  "ceramic": { "color": "#f4f1ea" },
+  "laminate": { "color": "#d8d0c0" },
+  "stone": { "color": "#a8a39a" },
+  "charcoal": { "color": "#3a3d42" },
+  "sage": { "color": "#8a9a7b" },
+  "navy": { "color": "#2f3b52" }
+}

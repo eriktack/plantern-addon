@@ -12,8 +12,13 @@ import { merge3 } from './merge.js';
 /** This page's own id: its saves come back as events, which are not "changes made elsewhere". */
 export const CLIENT = (globalThis.crypto?.randomUUID?.() || String(Math.random()).slice(2));
 
+// A page in a subfolder (the Objects page) reaches the server's API with a base like '../'; the API paths below are
+// relative to the app's root.
+let apiBase = '';
+export const setApiBase = base => { apiBase = base; };
+
 const getJson = async (url, init) => {
-  const r = await fetch(url, { cache: 'no-store', ...init });
+  const r = await fetch(apiBase + url, { cache: 'no-store', ...init });
   const j = await r.json().catch(() => ({}));
   if (!r.ok && r.status !== 409) throw Object.assign(new Error(j.error || `${url}: HTTP ${r.status}`), { status: r.status });
   return { status: r.status, body: j };
@@ -25,7 +30,7 @@ const getJson = async (url, init) => {
  */
 export async function listHouses() {
   let info = null;
-  try { const r = await fetch('api/info', { cache: 'no-store' }); if (r.ok) info = await r.json(); } catch { /* static hosting */ }
+  try { const r = await fetch(`${apiBase}api/info`, { cache: 'no-store' }); if (r.ok) info = await r.json(); } catch { /* static hosting */ }
   if (info?.stores) {
     const { body } = await getJson('api/houses');
     return { server: true, locations: body.houses, default: undefined, showDemo: body.showDemo };
@@ -152,7 +157,7 @@ export class House {
       }, 15000);
     };
     try {
-      es = new EventSource('api/events');
+      es = new EventSource(`${apiBase}api/events`);
       es.addEventListener('changed', e => { const d = JSON.parse(e.data); if (d.house === this.id && d.client !== CLIENT) cb(d); });
       es.onerror = () => { if (es.readyState === EventSource.CLOSED) startPolling(); };
     } catch { startPolling(); }

@@ -18,6 +18,8 @@ const MULLION = 45;     // mm: the bar between two sashes
 const CASING = 40;      // mm: a door's frame (jambs and head)
 const SILL_BOARD = 30;  // mm: thickness of the sill board
 const SILL_OVER = 20;   // mm: how far it reaches past each side of the opening
+// a door's leaf is drawn see-through for now (not a closed wall in 3D, so the room behind it stays visible): its frame shows that it is a door
+const LEAF = { opacity: 0.22 };
 const GAP = 25;         // mm: a sliding door's leaf in front of the face
 
 /** { t0, t1, depth }: the unit's extent across the wall (offsets along the wall's left normal from its reference line). */
@@ -68,7 +70,7 @@ export function openingFittings(w, f, o) {
     [l0, l1] = toLeft ? [face + GAP, face + GAP + u.depth] : [face - GAP - u.depth, face - GAP];
   }
   const a = s0 + CASING, b = s1 - CASING, top = head - CASING;
-  if (o.leaves === 2) { const m = (a + b) / 2; bar('leaf', a, m - 2, l0, l1, sill, top, color); bar('leaf', m + 2, b, l0, l1, sill, top, color); }
-  else bar('leaf', a, b, l0, l1, sill, top, color);
+  if (o.leaves === 2) { const m = (a + b) / 2; bar('leaf', a, m - 2, l0, l1, sill, top, color, LEAF); bar('leaf', m + 2, b, l0, l1, sill, top, color, LEAF); }
+  else bar('leaf', a, b, l0, l1, sill, top, color, LEAF);
   return out;
 }

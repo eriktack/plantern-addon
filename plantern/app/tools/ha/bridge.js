@@ -1,4 +1,4 @@
-// Plantern's server talking to Home Assistant (roadmap 11, docs/plans/ha-11-12.md): one WebSocket API
+// Plantern's server talking to Home Assistant (roadmap 11, docs/archive/ha-11-12.md): one WebSocket API
 // connection per configured connection, kept open, with all states in memory. The token stays here
 // (secrets.json, or the add-on's SUPERVISOR_TOKEN) and never goes to a page; pages get states and
 // call services through the server (tools/ha/api.js). The protocol is the browser client's

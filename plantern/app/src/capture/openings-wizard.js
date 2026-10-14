@@ -3,6 +3,7 @@
 
 import { listHouses, openHouse, houseOptions } from '../model/house.js';
 import { askConflict } from './conflict-ui.js';
+import { askConfirm } from './dialog.js';
 import { roomNameLayout } from '../geometry/polygon.js';
 import { resolveSettings } from '../model/settings.js';
 import { toSvg } from '../render2d/coords.js';
@@ -202,7 +203,7 @@ async function saveOpening() {
 }
 
 async function removeOpening() {
-  if (!f?.id || !confirm(`Delete ${f.id}?`)) return;
+  if (!f?.id || !(await askConfirm(`Delete ${f.id}?`, { ok: 'Delete' }))) return;
   const r = deleteOpening(model, levelId, f.id, opts());
   try {
     const stored = await store(r.model);
@@ -534,7 +535,7 @@ async function saveFixture() {
 }
 
 async function removeFixture() {
-  if (!g?.id || !confirm(`Delete ${g.id}?`)) return;
+  if (!g?.id || !(await askConfirm(`Delete ${g.id}?`, { ok: 'Delete' }))) return;
   const r = deleteFixture(model, levelId, g.id, opts());
   try {
     const stored = await store(r.model);

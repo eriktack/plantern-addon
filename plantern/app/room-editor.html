@@ -17,6 +17,7 @@
   }
 }
 </script>
+<script type="module" src="src/nav.js"></script>
 <script type="module" src="src/capture/ui.js"></script>
 </head>
 <body>
@@ -39,13 +40,38 @@
 <div id="resizer" title="Drag to resize the panel"></div>
 <aside id="cap">
   <div id="top">
-  <nav class="nav" aria-label="Pages"><a href="index.html" title="The plan with lights (2D / 3D)">Plan</a><a href="room-editor.html" class="on" aria-current="page" title="Edit rooms, walls, openings and lamps (desktop)">Editor</a><a href="wizard.html" title="Measure a room, wall by wall (phone)">Rooms</a><a href="openings.html" title="Doors, windows, switches and lamps (phone)">Doors &amp; lights</a><a href="storage.html" title="Where your houses are kept: folders, network shares, git">Storage</a></nav>
+  <nav class="nav" aria-label="Pages" data-page="editor" data-base=""></nav>
+  <div class="row sel house-row">
+    <select id="loc" aria-label="House"></select>
+    <button id="editHouse" title="Edit the house: where it is, which way is north, its ground height, and its settings" aria-label="Edit house">✎</button>
+  </div>
   <div class="row sel">
-    <select id="loc" aria-label="Location"></select>
     <select id="level" aria-label="Level"></select>
     <button id="editLevel" title="Edit this level: name, elevation, ceiling height, floor build-up, measured heights" aria-label="Edit level">✎</button>
   </div>
   <section id="levelBox" hidden></section>
+  <section id="houseBox" hidden>
+    <div class="edhead"><button id="houseClose" title="Back to the sidebar">‹ Close</button><span><b>House</b></span></div>
+    <details class="sect" id="settingsSect" open><summary>Settings <span class="help">· blank = the default</span></summary>
+      <p class="help">The house's settings (location.json). A blank box means the default; the 3D view's sliders start from these values.</p>
+      <div class="grid2">
+        <label>Cut plane <input id="hs_cutPlane" inputmode="decimal" placeholder="1200" autocomplete="off"> mm <small>Objects and walls above it are drawn dashed in the plan.</small></label>
+        <label>Stair headroom <input id="hs_stairHeadroom" inputmode="decimal" placeholder="2000" autocomplete="off"> mm</label>
+        <label>Outer wall thickness <input id="hs_wallOuter" inputmode="decimal" placeholder="300" autocomplete="off"> mm</label>
+        <label>Inner wall thickness <input id="hs_wallInner" inputmode="decimal" placeholder="200" autocomplete="off"> mm</label>
+        <label>Check tolerance, green <input id="hs_tolOk" inputmode="decimal" placeholder="5" autocomplete="off"> mm</label>
+        <label>Check tolerance, amber <input id="hs_tolWarn" inputmode="decimal" placeholder="15" autocomplete="off"> mm</label>
+      </div>
+      <h3>3D view</h3>
+      <div class="grid2">
+        <label>Lamp intensity <input id="hs_lampIntensity" inputmode="decimal" placeholder="80" autocomplete="off"> <small>light of a lamp at full brightness</small></label>
+        <label>Night light <input id="hs_nightLight" inputmode="decimal" placeholder="0.3" autocomplete="off"> <small>0 to 1, with daylight off</small></label>
+        <label>Shadows on this computer <select id="hs_shadowsDesktop"><option value="">default</option><option value="none">None</option><option value="few">Few</option><option value="average">Average</option><option value="lots">Lots</option><option value="all">All</option></select></label>
+        <label>Shadows on a phone or tablet <select id="hs_shadowsMobile"><option value="">default</option><option value="none">None</option><option value="few">Few</option><option value="average">Average</option><option value="lots">Lots</option><option value="all">All</option></select></label>
+      </div>
+      <div style="margin-top:6px"><button type="button" class="primary" id="hsApply">Apply</button> <button type="button" id="hsRevert">Revert</button> <span id="hsMsg" class="help"></span></div>
+    </details>
+  </section>
   <section id="savebar" class="savebar">
     <div class="sb-row">
       <span id="saveState" class="sb-state"><span class="dot"></span><span id="saveStateTxt">All saved</span></span>
@@ -129,7 +155,7 @@
   </details>
   </div>
   <div id="edit" hidden>
-    <div class="edhead"><button id="edBack" title="Back to the house (Esc)">‹ House</button><span id="edState"></span></div>
+    <div class="edhead"><button id="edBack" title="Back to the house (Esc)">‹ House</button><button id="edId" hidden title="The id: click to change it (every reference is updated)"></button><span id="edState"></span></div>
   <section id="editor" hidden>
     <h2 id="edTitle">Room</h2>
     <div class="grid2">
@@ -208,6 +234,7 @@
     </div>
     <label>Corner 0 is placed at <small>a point of the house, plus an offset</small>
       <select id="originRef"></select></label>
+    <button type="button" id="originPick" title="Show the points of the house on the plan and click one; the list above follows">Select from point</button>
     <div class="grid2">
       <label>Offset x <small>mm, east</small><input id="ox" placeholder="0" inputmode="numeric" autocomplete="off"></label>
       <label>Offset y <small>mm, north</small><input id="oy" placeholder="0" inputmode="numeric" autocomplete="off"></label>
@@ -325,7 +352,7 @@
     <div id="oInfo" class="help"></div>
     <label>Name <small>optional, e.g. “Bathroom window”; shown instead of the id</small><input id="oName" autocomplete="off"></label>
     <label>Copy from <small>type and sizes of another opening (stays where it is)</small><select id="oCopy" class="copyFrom"></select></label>
-    <label>Measured from <small>the corner the position counts from (marked “from here” on the plan)</small><select id="oFrom"></select></label>
+    <label>Measured from <small>the corner the position counts from (marked “from here” on the plan)</small><select id="oFrom"></select> <button type="button" id="oFromPick" title="Click the corner on the plan instead (every corner along the wall is marked)">On the plan</button></label>
     <div class="grid2">
       <label>Type
         <select id="oType"><option value="door">door</option><option value="window">window</option><option value="passage">passage (no door)</option></select></label>
@@ -371,12 +398,13 @@
     <div id="xInfo" class="help"></div>
     <label>Name <small>optional, e.g. “Kitchen ceiling lamp”; shown instead of the id</small><input id="xName" autocomplete="off"></label>
     <label>Copy from <small>height and reach of another one (stays where it is)</small><select id="xCopy" class="copyFrom"></select></label>
-    <label id="xFromRow">Measured from <small>the corner the position counts from (marked “from here” on the plan)</small><select id="xFrom"></select></label>
+    <label id="xFromRow">Measured from <small>the corner the position counts from (marked “from here” on the plan)</small><select id="xFrom"></select> <button type="button" id="xFromPick" title="Click the corner on the plan instead (every corner along the wall is marked)">On the plan</button></label>
     <div class="grid2">
       <label>Height <small id="xZNote">mm above the floor</small><input id="xZ" inputmode="numeric" autocomplete="off"></label>
       <label id="xRadiusRow">Light reaches <small>mm (plan glow)</small><input id="xRadius" inputmode="numeric" autocomplete="off"></label>
       <label id="xOffsetRow">Position <small id="xOffsetNote">mm along the wall</small><input id="xOffset" inputmode="numeric" autocomplete="off"></label>
       <label id="xLenRow">Length <small id="xLenNote">mm along the wall</small><input id="xLen" inputmode="numeric" autocomplete="off"></label>
+      <label id="xVertRow" class="check"><input type="checkbox" id="xVertical"> Runs up the wall <small>then the length is its height, from the z above</small></label>
       <label id="xTargetRow">On <small id="xTargetNote">what the strip follows</small><select id="xTarget"></select></label>
       <label id="xEdgeRow">Side <small>of the object it runs along</small><select id="xEdge"></select></label>
       <label id="xStartRow">Starts <small>mm along that side from its first corner (empty = at the corner)</small><input id="xStart" inputmode="numeric" autocomplete="off"></label>
@@ -388,7 +416,7 @@
       <label id="xYRow">y <small>mm, north</small><input id="xY" inputmode="numeric" autocomplete="off"></label>
     </div>
     <div id="xBindBox">
-      <label>Home Assistant entity <small id="xEntityNote">the light or switch it is in Home Assistant; picking one links it at once</small><input id="xEntity" autocomplete="off" spellcheck="false" placeholder="type to search: name or entity id"></label>
+      <label>Home Assistant entity <small id="xEntityNote">the light or switch it is in Home Assistant; picking one links it when you Apply</small><input id="xEntity" autocomplete="off" spellcheck="false" placeholder="type to search: name or entity id"></label>
       <div id="xEntityPick" class="entpick" hidden></div>
       <div id="xEntityNow" class="help"></div>
       <div id="xLookRow">
@@ -401,7 +429,7 @@
         </div>
       </div>
       <div id="xControlsRow"><label style="margin-bottom:2px">Controls <small>lamps this switch turns on and off (a click on it toggles them)</small></label><div id="xControls" class="help"></div></div>
-      <div class="row btns"><button id="xBind">Save link</button> <span id="xBindOut" class="help"></span></div>
+      <div class="row btns"><span id="xBindOut" class="help"></span></div>
     </div>
     <div id="xErr" class="help" style="color:var(--bad)"></div>
     <div class="row btns">
@@ -412,11 +440,12 @@
   <section id="objectPanel" hidden>
     <h2>Object <span id="obTitle"></span></h2>
     <div id="obInfo" class="help"></div>
+    <div id="obBlueprint" class="help" hidden></div>
     <label>Copy from <small>size, height and colour of another object (stays where it is)</small><select id="obCopy" class="copyFrom"></select></label>
     <div class="grid2">
       <label>Name<input id="obName" autocomplete="off"></label>
       <label>Colour<input type="color" id="obColor"></label>
-      <label>Model <small>a folder in assets/ (empty: a box)</small><input id="obAsset" list="assetNames" autocomplete="off" placeholder="none: a box"></label>
+      <label id="obAssetRow">Model <small>a folder in assets/ (empty: a box)</small><input id="obAsset" list="assetNames" autocomplete="off" placeholder="none: a box"></label>
       <div id="obAssetNote" class="help"></div>
       <datalist id="assetNames"></datalist>
       <label>Width <small>mm, along the wall</small><input id="obW" inputmode="numeric" autocomplete="off"></label>
@@ -449,19 +478,22 @@
       <label>Walking direction <small>degrees: 0 east, 90 north</small><input id="stHead" inputmode="numeric" autocomplete="off"></label>
       <label><span id="stOxLbl">x offset</span> <small>mm</small><input id="stOx" inputmode="numeric" autocomplete="off"></label>
       <label><span id="stOyLbl">y offset</span> <small>mm</small><input id="stOy" inputmode="numeric" autocomplete="off"></label>
-      <label>Risers <small>flight 1</small><input id="stR1" inputmode="numeric" autocomplete="off"></label>
-      <label>Run <small>mm, first riser to the end of the flight</small><input id="stL1" inputmode="numeric" autocomplete="off"></label>
+      <label>Risers <small>flight 1 · steps + 1: <span id="stSteps1">–</span></small><input id="stR1" inputmode="numeric" autocomplete="off"></label>
+      <label>Outer length <small>mm, along the walk: from the front of the first step (or the landing before it) to the outer edge of the landing after it, or the top step</small><input id="stL1" inputmode="numeric" autocomplete="off"></label>
+      <label>Width <small>mm, flight 1; empty = the stair's width</small><input id="stW1" inputmode="numeric" placeholder="stair" autocomplete="off"></label>
     </div>
     <label>Treads one by one <small>flight 1, optional: each tread's depth in mm, in walking order (<code>250, 262, 248</code>); then the run is their sum and a measured run is a check</small><input id="stT1" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
     <label>Shape <select id="stShape"><option value="1">straight</option><option value="2">L: two flights, one turn</option><option value="3">U: three flights, two turns the same way</option></select></label>
     <div class="grid2" id="stTwoRows">
-      <label>Risers <small>flight 2</small><input id="stR2" inputmode="numeric" autocomplete="off"></label>
-      <label>Run <small>mm</small><input id="stL2" inputmode="numeric" autocomplete="off"></label>
+      <label>Risers <small>flight 2 · steps + 1: <span id="stSteps2">–</span></small><input id="stR2" inputmode="numeric" autocomplete="off"></label>
+      <label>Outer length <small>mm</small><input id="stL2" inputmode="numeric" autocomplete="off"></label>
+      <label>Width <small>mm, flight 2; empty = the stair's width</small><input id="stW2" inputmode="numeric" placeholder="stair" autocomplete="off"></label>
     </div>
     <label id="stT2Row">Treads one by one <small>flight 2, optional</small><input id="stT2" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
     <div class="grid2" id="stThreeRows">
-      <label>Risers <small>flight 3</small><input id="stR3" inputmode="numeric" autocomplete="off"></label>
-      <label>Run <small>mm</small><input id="stL3" inputmode="numeric" autocomplete="off"></label>
+      <label>Risers <small>flight 3 · steps + 1: <span id="stSteps3">–</span></small><input id="stR3" inputmode="numeric" autocomplete="off"></label>
+      <label>Outer length <small>mm</small><input id="stL3" inputmode="numeric" autocomplete="off"></label>
+      <label>Width <small>mm, flight 3; empty = the stair's width</small><input id="stW3" inputmode="numeric" placeholder="stair" autocomplete="off"></label>
     </div>
     <label id="stT3Row">Treads one by one <small>flight 3, optional</small><input id="stT3" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
     <div class="grid2" id="stTurnRows">
@@ -476,7 +508,17 @@
       <label id="stRailHRow">Rail height <small>mm above the steps' noses, empty = 900</small><input id="stRailH" inputmode="numeric" placeholder="900" autocomplete="off"></label>
       <label id="stWaistRow">Thickness under the steps <small>mm, sloped underside</small><input id="stWaist" inputmode="numeric" placeholder="150" autocomplete="off"></label>
     </div>
+    <label class="check"><input type="checkbox" id="stIgnore"> Steps checked: no warning for their depth <small>tick when the steps are right although they are outside 220–300 mm</small></label>
+    <label class="check"><input type="checkbox" id="stEdgeOk"> Opening past the edge is fine <small>an opening that reaches past the rooms above is cut at their edge; no warning for it</small></label>
+    <label class="check"><input type="checkbox" id="stOpenOn"> Open only a rectangle in the floor above <small>two opposite corners in mm from the start point; the rest of the hole stays closed</small></label>
+    <div class="grid2" id="stOpenRow">
+      <label>From x <input id="stRx1" inputmode="numeric" autocomplete="off"></label>
+      <label>From y <input id="stRy1" inputmode="numeric" autocomplete="off"></label>
+      <label>To x <input id="stRx2" inputmode="numeric" autocomplete="off"></label>
+      <label>To y <input id="stRy2" inputmode="numeric" autocomplete="off"></label>
+    </div>
     <div id="stErr" class="help" style="color:var(--bad)"></div>
+    <div id="stSketch" class="stsketch" hidden></div>
     <div class="row btns">
       <button class="moved" id="stApply">Apply stairs changes</button>
       <button class="moved" id="stDelete">Delete stairs</button>
@@ -499,7 +541,7 @@
   <div id="wallsOut" class="help report"></div>
   <div id="edBar" class="edbar" hidden>
     <button id="edDelete" class="danger" title="Delete it (confirmed first)">Delete</button>
-    <button id="edDup" hidden title="A copy beside it, with the same sizes (then opened)">Duplicate</button><span class="sp"></span>
+    <button id="edDup" hidden title="A copy beside it, with the same sizes (then opened)">Duplicate</button>
     <button id="edRevert" title="Back to what is stored">Revert</button>
     <button id="edClose" title="Leave the editor (Esc)">Close</button>
     <button id="edApply" class="primary" title="Write the changes into the model (Save stores the file)">Apply</button>

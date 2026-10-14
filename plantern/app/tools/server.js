@@ -1,6 +1,7 @@
 // Local dev server: static files plus ONE write endpoint, so the capture editor and the phone wizard
 // can save the house (locations/**/*.json) without a browser folder picker. No dependencies.
 //
+//   POST /api/glb · GET /api/glb/<hash>   the GLB of a placed blueprint, built and cached here (tools/blueprints/)
 //   GET  /api/info            → { plantern: true, save: true }          (pages use this to detect saving)
 //   POST /api/save            { path, value, expectedBefore? } → { ok, path }
 //        path: relative, below locations/, .json only (same rules as src/model/save.js)
@@ -20,6 +21,8 @@ import { defaultDataDir, renameRetry } from './store/settings.js';
 import { houseApi, readJsonBody, sameOrigin, writeGuard } from './store/api.js';
 import { createHaHub, haApi, supervisorFromEnv } from './ha/api.js';
 import { createPublisher, publishDir } from './ha/publish.js';
+import { createGlbCache, readCacheLimit } from './blueprints/cache.js';
+import { glbApi } from './blueprints/api.js';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
@@ -102,6 +105,7 @@ async function handleStatic(root, req, res) {
 export function createPlanternServer(root, { env = process.env, dataDir = defaultDataDir(env), WebSocketImpl, publishTo = publishDir(env), publishDebounce } = {}) {
   const registry = new Registry({ appRoot: root, dataDir });
   const ha = createHaHub({ dataDir, supervisor: supervisorFromEnv(env), ...(WebSocketImpl ? { WebSocketImpl } : {}) });       // Home Assistant connections (tools/ha/)
+  const glb = createGlbCache({ dir: path.join(dataDir, 'glb-cache'), limitBytes: () => readCacheLimit(dataDir) });   // built GLBs of placed objects, in the settings folder; limit in settings.json
   registry.ready.catch(e => console.error(`Plantern settings (${dataDir}): ${e.message}`));
   const server = http.createServer(async (req, res) => {
     try {
@@ -110,6 +114,7 @@ export function createPlanternServer(root, { env = process.env, dataDir = defaul
       // houses, storages and the folder browser: your own network only (like saving)
       if (url.pathname.startsWith('/api/') && !isLocalAddress(req.socket.remoteAddress)) return send(res, 403, { error: 'only from your own network' });
       if (await haApi(ha, req, res, url, { json: send, readJsonBody, writeGuard })) return;
+      if (await glbApi(glb, registry, req, res, url)) return;
       if (await houseApi(registry, req, res, url, { ha })) return;
       if (url.pathname === '/api/save') return req.method === 'POST' ? await handleSave(root, req, res) : send(res, 405, { error: 'POST only' });
       if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'method not allowed');
@@ -125,7 +130,7 @@ export function createPlanternServer(root, { env = process.env, dataDir = defaul
     const mapped = explicit ? Promise.resolve() : fs.access(path.dirname(path.dirname(publishTo)));
     server.published = mapped.then(() => publisher.start(), () => { console.log('Plantern card: the add-on has no access to the Home Assistant config folder (/homeassistant or /config), so the card is not published. Check the add-on is up to date.'); publisher = null; });
   }
-  server.registry = registry; server.ha = ha; server.publisher = () => publisher;
+  server.registry = registry; server.glb = glb; server.ha = ha; server.publisher = () => publisher;
   server.on('close', () => { publisher?.stop(); registry.close(); ha.close(); });
   return server;
 }
