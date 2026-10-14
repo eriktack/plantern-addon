@@ -11,12 +11,16 @@ import { buildLevelGeometry, buildModelGeometry, labelObstacles } from '../geome
 import { listHouses, openHouse, houseOptions } from '../model/house.js';
 import { askConflict } from './conflict-ui.js';
 import { createAssetCache, listAssetNames } from '../render3d/assets.js';
-import { ASSET_NAME, assetWarnings, assetKey, builtSizeWarning } from '../model/assets.js';
-import { blueprintMap } from '../blueprints/place.js';
+import { ASSET_NAME, assetWarnings, assetKey, builtSizeStatus } from '../model/assets.js';
+import { blueprintMap, placeSpec } from '../blueprints/place.js';
+import { defaultsFor } from '../../object-designs/lib/params.js';
+import { createMenu } from '../menu.js';
+import { addEntries } from './add-menu.js';
+import { sizeFields, sizeEdit, optionsChanged } from '../blueprints/size.js';
+import { createParamForm } from '../param-form.js';
 import { download } from '../export/download.js';
 import { toSvg } from '../render2d/coords.js';
 import { solveCapture } from './solve.js';
-import { importResult } from './wizard-state.js';
 import { collectSnapPoints, collectSnapLines, collectSnapPointsAround, adjacentOutlines } from '../tools/snap.js';
 import { createEditorMeasure } from './editor-measure.js';
 import { nearestPoint, nearestLine, pointToLine } from '../tools/measure-core.js';
@@ -33,7 +37,7 @@ import { solveExtra, checkRows, checkCorners } from '../model/checks.js';
 import { suggestEntities, setBinding, sameBinding } from '../ha/suggest.js';
 import { serialRunner } from './save-queue.js';
 import { stripForm } from '../model/fixtures.js';
-import { renameId, idFromName, entityName } from '../edit/rename.js';
+import { renameId, renameBinding, idFromName, entityName } from '../edit/rename.js';
 import { openDialog, askConfirm } from './dialog.js';
 import { FITTING_DEFAULTS } from '../geometry/fittings.js';
 import { checkLook } from '../ha/appearance.js';
@@ -66,7 +70,7 @@ import { levelTree, pathsTo } from '../edit/tree.js';
 import { showLevelForm, showLevelEditForm } from './level-form.js';
 import { chooseLocation, chooseLevel, remember, linkPages } from '../model/current.js';
 import { describeReconcile } from '../edit/reconcile.js';
-import { copySources, shapeDraftFrom, objectSpecFrom, openingSpecFrom, fixtureSpecFrom, stairsWithShapeOf, duplicate, findIn } from '../edit/copy.js';
+import { copySources, shapeDraftFrom, objectCopyProps, canCopyObject, openingSpecFrom, fixtureSpecFrom, stairsWithShapeOf, duplicate, findIn } from '../edit/copy.js';
 import { peekInfo } from '../edit/inspect.js';
 import { adjacentLevels } from '../tools/snap.js';
 import { readPrefs, writePrefs } from '../model/prefs.js';
@@ -355,9 +359,20 @@ async function renameEditing() {
   if (to === from) return;
   const res = renameId(model, from, to);
   if (res.report.errors.length) { setStatus(res.report.errors.join('; ')); return; }
+  // a fixture's link in location.json moves with it (saved with Save, undone with the rename)
+  let moved = { location: loc, moved: false };
+  if (res.report.fixture) {
+    moved = renameBinding(loc, from, to);
+    if (moved.conflict) {
+      const linkOf = b => b?.entity ?? 'no entity';
+      const useOld = await askConfirm(`${to} already has a link (${linkOf(moved.conflict.existing)}). Use the link of ${from} (${linkOf(moved.conflict.old)}) instead? Cancel keeps the existing link and drops the one of ${from}.`, { title: 'Two links', ok: `Use ${from}'s link` });
+      moved = renameBinding(loc, from, to, { resolve: useOld ? 'use-old' : 'keep-existing' });
+    }
+  }
   leaveEdit({ ask: false, noBack: true });
+  loc = moved.location;
   commit(res.model);
-  setStatus(`${from} is ${to} now: ${res.report.changed} references updated${res.report.fixture ? '; its binding in location.json needs the same name' : ''} (not saved yet)`);
+  setStatus(`${from} is ${to} now: ${res.report.changed} references updated${moved.moved ? '; its link in location.json moved too' : ''} (not saved yet)`);
   enterEdit(kind, to, { ask: false });
 }
 
@@ -524,9 +539,11 @@ async function init() {
     if (draft?.solid && !draft.name) $('rid').value = newSolidId(model, $('sKind').value);
   });
   // the edit bar: Apply / Revert / Close (Cancel with unapplied changes) / Delete
-  $('edApply').onclick = () => {
+  $('edApply').onclick = async () => {
     const f = isFresh() ? fresh : null, before = model;
-    $(BAR[editing.kind][0]).click();
+    // an Apply that builds on the server (a blueprint object's options or size) is asked to finish before the model is looked at
+    const apply = $(BAR[editing.kind][0]);
+    if (typeof apply.onclick === 'function') await apply.onclick(new MouseEvent('click')); else apply.click();
     // the first Apply creates a new thing, also when the defaults are fine as they are ("Nothing changed")
     if (f && fresh === f && (model !== before || $(FRESH_ERR[f.kind]).textContent === 'Nothing changed.')) settleFresh();
   };
@@ -537,13 +554,11 @@ async function init() {
   $('edBack').onclick = closeEdit;
   for (const ev of ['input', 'change']) $('edit').addEventListener(ev, () => queueMicrotask(showEditBar));
   $('exterior').addEventListener('change', () => { if (draft) draft.exterior = $('exterior').checked; recompute(); });
-  $('newSolid').onclick = afterLeave(() => { if (editDraft({ name: '', solid: true })) $('name').focus(); });
+  act.solid = afterLeave(() => { if (editDraft({ name: '', solid: true })) $('name').focus(); });
   $('copyFrom').onchange = () => { const v = $('copyFrom').value; if (v) useShapeOf(v); };
   for (const [sel, kind] of [['obCopy', 'object'], ['oCopy', 'opening'], ['xCopy', 'fixture'], ['stCopy', 'stairs']]) $(sel).onchange = () => copyInto(kind, $(sel).value);
   $('edDup').onclick = duplicateEdited;
-  $('newRoom').onclick = afterLeave(() => { if (editDraft({ name: '', exterior: false })) $('name').focus(); });
-  $('importBtn').onclick = () => { $('importBox').hidden = !$('importBox').hidden; $('importText').focus(); };
-  $('importUse').onclick = () => importRoom($('importText').value);
+  act.room = afterLeave(() => { if (editDraft({ name: '', exterior: false })) $('name').focus(); });
   $('ntEdge').onchange = () => ntPickEdge($('ntEdge').value);
   $('ntOwn').onchange = ntPreview;
   $('nextTo').addEventListener('toggle', () => { if ($('nextTo').open) { ntFillOwn(); ntPreview(); } else draw(); });
@@ -585,7 +600,7 @@ async function init() {
     if (r.report.errors.length) { $('mErr').textContent = r.report.errors.join('; '); return; }
     matId = null; $('matForm').hidden = true; commit(r.model);
   };
-  for (const [btn, type] of [['wAddDoor', 'door'], ['wAddWindow', 'window'], ['wAddPassage', 'passage']]) $(btn).onclick = async () => {
+  for (const type of ['door', 'window', 'passage']) act[type] = async () => {
     if (!(await mayLeave())) return;
     if (!dropFresh([wallId])) return;
     const base = model, r = addOpening(model, levelId, wallId, type, {}, opts());
@@ -602,7 +617,7 @@ async function init() {
     commit(r.model); enterEdit('fixture', r.fixture.id, { ask: false }); startFresh('fixture', r.fixture.id, base, spec.kind === 'switch' ? 'switch' : spec.kind === 'strip' ? 'LED strip' : 'lamp');
     setStatus(`${r.fixture.id} is new: ${what}. Name it and Apply to create it`);
   };
-  $('newStairs').onclick = newStairs;
+  act.stairs = newStairs;
   $('editLevel').onclick = editLevel;
   $('sBaseDown').onclick = e => {
     e.preventDefault();
@@ -610,22 +625,20 @@ async function init() {
     if (!ft) { setStatus('This level has no floor build-up to go down through'); return; }
     $('sBase').value = -ft; $('sBase').dispatchEvent(new Event('input', { bubbles: true }));
   };
-  $('newObject').onclick = () => {
-    const rm = shape === 'room' ? room() : null, at = rm || level().rooms?.[0];
+  act.box = () => {
+    const at = placeRoom();
     if (!at) { setStatus('Add a room first'); return; }
     placeObject({ pos: labelPoint(at.polygon).pos.map(v => Math.round(v)) }, 'in the middle of the room: drag it where it belongs');
   };
-  $('newAsset').onclick = async () => {
-    const name = $('assetPick').value.trim();
-    if (!name) { setStatus('No model to place: put one in assets/ (object-designs exports them there), then pick it'); return; }
+  act.model = async name => {
     const entry = assetCache().load(name);
     await entry.ready;                        // its size comes from its meta.json
-    const rm = shape === 'room' ? room() : null, at = rm || level().rooms?.[0];
+    const at = placeRoom();
     if (!at) { setStatus('Add a room first'); return; }
     const missing = ['missing', 'broken'].includes(entry.status) ? ` (${entry.status === 'missing' ? 'not found' : 'cannot be shown'}: a red marker until it is)` : '';
     placeObject({ asset: name, size: entry.meta?.size, pos: labelPoint(at.polygon).pos.map(v => Math.round(v)) }, `a model of "${name}"${missing} in the middle of the room: drag it where it belongs`);
   };
-  $('wAddObject').onclick = () => { const w = wall(); placeObject({ attach: { wall: w.id, side: wallInfo(level(), w.id)?.sides?.right?.length ? 'right' : 'left', offset: Math.max(0, Math.round((Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) - 900) / 2)) } }, 'on the wall: drag it along, or set its position'); };
+  act.wallBox = () => { const w = wall(); placeObject({ attach: { wall: w.id, side: wallInfo(level(), w.id)?.sides?.right?.length ? 'right' : 'left', offset: Math.max(0, Math.round((Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) - 900) / 2)) } }, 'on the wall: drag it along, or set its position'); };
   $('obApply').onclick = applyObjectForm;
   $('obAsset').addEventListener('input', () => { $('obAssetNote').textContent = assetNote($('obAsset').value.trim()); });
   $('obDelete').onclick = async () => {
@@ -665,20 +678,20 @@ async function init() {
     if (a) { let far = -Infinity; fp.forEach((_, i) => { const d = (mid(i)[0] - a.p[0]) * a.dir[0] + (mid(i)[1] - a.p[1]) * a.dir[1]; if (d > far) { far = d; edge = i; } }); }
     placeFixture({ kind: 'strip', attach: { object: o.id, edge, at: 'bottom' } }, `under the ${a ? 'front' : 'first side'} of the object; choose the side and whether it is under or on top`);
   };
-  $('oAddStrip').onclick = () => {                                // along the window (its sill) or door (its top), on the room side
+  act.openingStrip = () => {                                // along the window (its sill) or door (its top), on the room side
     const o = opening(), w = o && level().walls.find(v => v.id === o.wall);
     if (!w) return;
     placeFixture({ kind: 'strip', attach: { opening: o.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', at: o.type === 'window' ? 'sill' : 'head' } }, `along the ${o.type === 'window' ? 'sill' : 'top'} of the ${o.type}; choose which edge and which side of the wall`);
   };
-  $('wAddStrip').onclick = () => {
+  act.strip = () => {
     const w = wall(), L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), length = Math.min(1200, Math.round(L / 2));
     placeFixture({ kind: 'strip', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: Math.round((L - length) / 2), length } }, 'along the middle of the wall; set where it starts and how long it is');
   };
-  $('addCeilingLamp').onclick = () => placeFixture({ kind: 'lamp', pos: labelPoint(room().polygon).pos }, 'in the middle of the room; set its position and height');
-  $('wAddSwitch').onclick = () => { const w = wall(), L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]); placeFixture({ kind: 'switch', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: Math.round(L / 2) } }, 'in the middle of the wall'); };
-  $('wAddWallLamp').onclick = () => { const w = wall(), L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]); placeFixture({ kind: 'lamp', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: Math.round(L / 2) } }, 'in the middle of the wall'); };
+  act.ceilingLamp = () => placeFixture({ kind: 'lamp', pos: labelPoint(room().polygon).pos }, 'in the middle of the room; set its position and height');
+  act.switch = () => { const w = wall(), L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]); placeFixture({ kind: 'switch', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: Math.round(L / 2) } }, 'in the middle of the wall'); };
+  act.wallLamp = () => { const w = wall(), L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]); placeFixture({ kind: 'lamp', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: Math.round(L / 2) } }, 'in the middle of the wall'); };
   $('xApply').onclick = applyFixture;
-  $('oAddLamp').onclick = () => {                                 // a lamp that stands in this opening (window star, lamp on the sill)
+  act.openingLamp = () => {                                 // a lamp that stands in this opening (window star, lamp on the sill)
     const o = opening(), w = o && level().walls.find(v => v.id === o.wall);
     if (!w) return;
     placeFixture({ kind: 'lamp', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: Math.round(o.offset + o.width / 2), opening: o.id }, z: Math.round((o.sill + o.head) / 2), assumed: ['z'] }, 'in the middle of the opening; set its position and height');
@@ -706,6 +719,7 @@ async function init() {
   $('xFromPick').onclick = () => startFromPick('xFrom');
   $('xFrom').addEventListener('change', () => switchFrom('fixture'));    // the chosen point is ringed on the plan
   $('anchorCount').closest('details').addEventListener('toggle', draw);   // the distance on the plan follows the typing
+  wireAddMenus();
   $('undo').onclick = () => undoRedo('undo');
   $('redo').onclick = () => undoRedo('redo');
   measure = createEditorMeasure({
@@ -720,7 +734,7 @@ async function init() {
     },
   });
   $('preview').addEventListener('mousemove', e => { if (drawing) { drawing.hover = wallPoint(e); drawing.shift = e.shiftKey; drawWallOverlay(); } else measure.hover(e); });
-  $('newWall').onclick = startDrawing;
+  act.wall = startDrawing;
   // a different corner for the start: the wall stays where it is, its start is now counted from that corner
   $('wAnchA').addEventListener('change', () => {
     const prev = snapPos($('wAnchA').dataset.was) || [0, 0], v = ['wSx', 'wSy', 'wLx', 'wLy'].map(id => Number($(id).value));
@@ -843,9 +857,6 @@ async function init() {
   loadFormForSelection();
   refresh();
   if (!level().rooms?.length) editDraft({ name: '', exterior: false });   // an empty level: the new-room form (nothing unapplied: the level was just changed)
-  let pending = null;
-  try { pending = localStorage.getItem('plantern.import'); localStorage.removeItem('plantern.import'); } catch { /* no storage */ }
-  if (pending) importRoom(pending);
 }
 
 const NEW_LEVEL = '+new';
@@ -1342,20 +1353,6 @@ function selectWall(id) { wallId = id; openingId = null; fixtureId = null; stair
 function selectOpening(id) { openingId = id; wallId = null; fixtureId = null; stairsId = null; objectId = null; roomId = null; draft = null; openingFormFor = null; refresh(); }
 function selectFixture(id) { fixtureId = id; openingId = null; wallId = null; stairsId = null; objectId = null; roomId = null; draft = null; fixtureFormFor = null; refresh(); }
 
-/** Phone-wizard result → a new room draft in the form (nothing is stored until "Apply"). */
-async function importRoom(text) {
-  if (!(await mayLeave())) return;
-  const r = importResult(text);
-  if (r.error) { $('importBox').hidden = false; $('importErr').textContent = r.error; return; }
-  const { room: info, capture, level: lvl } = r.value;
-  if (lvl && lvl !== levelId && model.levels.some(l => l.id === lvl)) { levelId = lvl; $('level').value = lvl; }
-  if (!editDraft({ name: info?.name || '', exterior: !!info?.exterior })) return;
-  loadForm(capture);
-  $('importBox').hidden = true; $('importText').value = ''; $('importErr').textContent = '';
-  refresh();
-  setStatus('imported from the phone wizard: check the result, then Apply');
-}
-
 function loadForm(capture) {
   const round = capture?.mode === 'circle';
   if (shape === 'solid') { $('sShape').value = round ? 'round' : 'outline'; loadRound(round ? capture : null); } else syncRound();
@@ -1378,7 +1375,7 @@ function loadFormForSelection() {
   $('rCeilNote').textContent = `(${level().ceilingHeight ?? 2400})`;
   $('roomOptions').hidden = solid;
   // a solid is measured like a room (walking round it, the solid on your right) and has a kind, colour and height
-  $('exteriorRow').hidden = solid; $('solidFields').hidden = !solid; $('addCeilingLamp').hidden = solid || !roomId;
+  $('exteriorRow').hidden = solid; $('solidFields').hidden = !solid; $('addRoom').hidden = solid || !roomId;
   $('edTitle').textContent = solid ? 'Solid' : 'Room';
   $('walkHelp').innerHTML = solid
     ? 'Walk round it <b>clockwise</b>, keeping it on your <b>right</b>; a face hidden in a wall is measured or estimated from the rooms. Corner 0 is where you start; side A runs from corner 0 to 1, and so on. Its faces bound the rooms around it: they need no wall there. All lengths in mm.'
@@ -1448,7 +1445,10 @@ async function copyInto(kind, srcId) {
   if (!(await mayRefill())) { $(sel).value = ''; return; }
   const src = findIn(model, COLL[kind], srcId)?.item, id = editing?.id;
   let r;
-  if (kind === 'object') r = setObject(model, levelId, id, { ...objectSpecFrom(src), color: src.color ?? null }, opts());
+  if (kind === 'object') {
+    const props = objectCopyProps(src, findIn(model, 'objects', id)?.item);
+    r = props ? setObject(model, levelId, id, props, opts()) : { report: { errors: [`${nameOf(srcId)} cannot be copied onto ${nameOf(id)}: they are not the same kind of object`] } };
+  }
   else if (kind === 'opening') { const spec = openingSpecFrom(src); for (const k of ['hinge', 'swing', 'opens', 'leaves', 'thickness']) spec[k] ??= null; r = setOpening(model, levelId, id, spec, opts()); }
   else if (kind === 'fixture') { const { kind: _k, ...spec } = fixtureSpecFrom(src); r = setFixture(model, levelId, id, spec, opts()); }
   else r = applyStairs(model, levelId, stairsWithShapeOf(stairs(), src), opts());
@@ -1462,7 +1462,7 @@ async function copyInto(kind, srcId) {
 function fillCopyInto(kind, self) {
   const sel = { object: 'obCopy', opening: 'oCopy', fixture: 'xCopy', stairs: 'stCopy' }[kind];
   const label = kind === 'opening' ? x => `${displayName(x)} (${x.type} ${x.width} × ${x.head - x.sill})` : kind === 'object' ? x => `${displayName(x)} (${x.size.join(' × ')})` : kind === 'fixture' ? x => `${displayName(x)} (${x.z} mm)` : x => displayName(x);
-  const opts2 = copyOptions(COLL[kind], x => x.id !== self.id && (kind !== 'fixture' || x.kind === self.kind), label);
+  const opts2 = copyOptions(COLL[kind], x => x.id !== self.id && (kind !== 'fixture' || x.kind === self.kind) && (kind !== 'object' || canCopyObject(x, self)), label);
   $(sel).innerHTML = `<option value="">—</option>${opts2}`;
   $(sel).closest('label').hidden = !opts2;
 }
@@ -1564,7 +1564,7 @@ function refresh() {
   $('stairsPanel').hidden = k !== 'stairs';
   $('objectPanel').hidden = k !== 'object';
   $('matForm').hidden = k !== 'material';
-  $('addCeilingLamp').hidden = !roomId || shape === 'solid';
+  $('addRoom').hidden = !roomId || shape === 'solid';
   showIssues();
   $('compass').innerHTML = compassSvg(northAngleOf(model));
   if (wallId) showWall();
@@ -2009,20 +2009,85 @@ function assetCache() {
 
 // The blueprints this house can use (the built-in library and its own blueprints/), for the validator (decision 24): it then
 // checks a blueprint object's values against its blueprint. Only with Plantern's server; without it those checks are skipped.
-let blueprints = null;
+let blueprints = null, blueprintList = null;       // id → meta; and the list itself ({ id, source, meta }), for the Add menus
 function loadBlueprintList() {
-  blueprints = null;
+  blueprints = blueprintList = null;
   if (!house?.server) return;
   fetch(`api/houses/${encodeURIComponent(house.id)}/blueprints`, { cache: 'no-store' })
     .then(r => (r.ok ? r.json() : null))
-    .then(list => { if (list) { blueprints = blueprintMap(list); showIssues(); } })
+    .then(list => { if (list) { blueprints = blueprintMap(list); blueprintList = list.blueprints; showIssues(); } })
     .catch(() => {});
+}
+
+// ---- the Add menus (src/menu.js; the entries are src/capture/add-menu.js): the actions the buttons used to have ----
+const act = {};        // id of an Add entry → what it does; filled in by init() where the panels are wired
+
+/** The room an object is placed in the middle of: the selected one, else the first of the level. */
+const placeRoom = () => (shape === 'room' ? room() : null) || level().rooms?.[0];
+
+function addContext(where) {
+  const lv = level();
+  return {
+    where,
+    roomSelected: shape === 'room' && !!roomId,
+    hasRooms: !!lv.rooms?.length,
+    levelAbove: model.levels.some(l => l.elevation > lv.elevation && (l.building ?? null) === (lv.building ?? null)),
+    blueprints: blueprintList?.map(b => ({ id: b.id, name: b.meta.name, source: b.source, description: b.meta.description })) ?? null,
+    models: assetNameList,
+  };
+}
+
+/** Does what an Add entry says, in the panel `where` it was picked. */
+function addPick(where, entry) {
+  const id = entry.id;
+  if (id.startsWith('blueprint:')) return placeBlueprint(id.slice('blueprint:'.length), where);
+  if (id.startsWith('model:')) return act.model(id.slice('model:'.length));
+  if (id === 'box') return where === 'wall' ? act.wallBox() : act.box();
+  return act[id]?.();
+}
+
+/**
+ * Places an object made from a blueprint with its default options: the server builds it (that gives its size), it stands in
+ * the middle of the room or on the selected wall, and it opens as a new object like a box does (Apply creates it; one undo step).
+ */
+async function placeBlueprint(id, where) {
+  const meta = blueprints?.get(id);
+  if (!meta) { setStatus(`The blueprint "${id}" is not available (Plantern's server must be running)`); return; }
+  const params = {};
+  for (const d of meta.params) if (d.type !== 'material') params[d.key] = defaultsFor(meta)[d.key];
+  setStatus(`Building ${meta.name}…`);
+  let built;
+  try { built = await assetCache().rebuild({ blueprint: id, params, partMaterials: {} }); }
+  catch (e) { setStatus(`${meta.name} cannot be built: ${e.message}`); return; }
+  let place, what;
+  if (where === 'wall') {
+    const w = wall();
+    if (!w) return;
+    const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]);
+    place = { kind: 'wall', wall: w.id, side: wallInfo(level(), w.id)?.sides?.right?.length ? 'right' : 'left', offset: Math.max(0, Math.round((L - built.size[0]) / 2)) };
+    what = 'on the wall: drag it along, or set its position';
+  } else {
+    const at = placeRoom();
+    if (!at) { setStatus('Add a room first'); return; }
+    const [cx, cy] = labelPoint(at.polygon).pos;
+    place = { kind: 'room', x: cx - built.size[0] / 2, y: cy - built.size[1] / 2, rotationDeg: 0 };
+    what = 'in the middle of the room: drag it where it belongs';
+  }
+  const r = placeSpec({ blueprint: id, params, partMaterials: {}, size: built.size, z: 0, place });
+  if (r.error) { setStatus(r.error); return; }
+  placeObject(r.spec, `a ${meta.name} ${what}`);
+}
+
+/** The Add menus of the house view and of the room, wall and opening panels. */
+function wireAddMenus() {
+  for (const [id, where] of [['addHouse', 'house'], ['addRoom', 'room'], ['wAdd', 'wall'], ['oAdd', 'opening']]) {
+    createMenu($(id), { label: 'Add', icon: 'plus', align: 'right', entries: () => addEntries(addContext(where)), onPick: e => addPick(where, e) });
+  }
 }
 function fillAssetNames() {
   const used = (model?.levels || []).flatMap(l => (l.objects || []).filter(o => o.kind === 'asset' && o.asset).map(o => o.asset));
   const names = [...new Set([...assetNameList, ...used])].sort();
   $('assetNames').innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
-  $('assetPick').innerHTML = names.length ? names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') : '<option value="">no models yet</option>';
 }
 /** A line for the object panel: where the model of an asset is, or that the field is a box. */
 function assetNote(name) {
@@ -2038,25 +2103,101 @@ function assetNote(name) {
 
 // An object made from a blueprint: which one, a link to its options on the Objects page, and (when the server's build has
 // another size than the one stored) the built size with a button to take it (T7). Its model field is not used.
+// The server's build of each blueprint object this session, by its settings: asked for once, and again on Rebuild.
+const builds = new Map();
+
+/**
+ * Asks the server for the build of this object now (once per settings unless `force`), then shows the panel's note again.
+ * A check that is made again says whether the build changed since the last one.
+ */
+async function checkBuild(o, { force = false } = {}) {
+  const key = assetKey(o), before = builds.get(key);
+  if (!force && before) return;
+  builds.set(key, { state: 'checking' });
+  try {
+    const { size } = await assetCache().rebuild(o);
+    builds.set(key, { state: 'ok', size, checked: true, changedFrom: before?.state === 'ok' && before.size.join() !== size.join() ? before.size : null });
+  } catch (e) {
+    builds.set(key, { state: 'error', error: e.message });
+  }
+  const shown = object();
+  if (shown?.blueprint && assetKey(shown) === key) showBlueprintNote(shown);
+}
+
+// ---- the options of a blueprint object, edited here (src/param-form.js; the Objects page shows the same form) ----
+let optionsForm = null, optionsShownFor = null;
+const optionLibrary = {};            // the materials library (names and colours), read once for the material fields
+let optionLibraryLoaded = null;
+
+/** Shows the options form for a blueprint object (built again from its stored values when another object, or a changed one, is shown). */
+async function showOptions(o) {
+  const meta = o.blueprint && blueprints?.get(o.blueprint);
+  $('obOptionsBox').hidden = !meta;
+  if (!meta) { optionsShownFor = null; return; }
+  if (optionsShownFor === o) return;
+  optionsShownFor = o;
+  optionLibraryLoaded ??= fetch('object-designs/materials/library.json').then(r => (r.ok ? r.json() : {})).then(l => Object.assign(optionLibrary, l)).catch(() => {});
+  await optionLibraryLoaded;
+  if (optionsShownFor !== o) return;                           // another object was shown meanwhile
+  optionsForm ??= createParamForm({ container: $('obOptions'), summary: $('obOptionsSummary'), library: optionLibrary, onValid: previewOptions });
+  optionsForm.show(meta, { params: o.params, partMaterials: o.partMaterials });
+  $('obOptionsNote').textContent = '';
+}
+
+/** After a pause in the options form: what these options would build (the server's answer), until Apply takes them. */
+async function previewOptions() {
+  const o = object(), meta = o?.blueprint && blueprints?.get(o.blueprint);
+  if (!meta || optionsShownFor !== o) return;
+  const form = optionsForm.readForObject();
+  $('obOptionsNote').textContent = 'Building…';
+  try {
+    const built = await assetCache().rebuild({ ...o, params: form.params, partMaterials: form.partMaterials });
+    if (object()?.id !== o.id) return;
+    optionsForm.setBuildError(null);
+    $('obOptionsNote').textContent = optionsChanged(meta, o, form) ? `With these options it builds ${built.size.join(' × ')} mm. Apply to use them.` : '';
+  } catch (e) {
+    if (object()?.id !== o.id) return;
+    optionsForm.setBuildError(e.message);
+    $('obOptionsNote').textContent = '';
+  }
+}
+
 function showBlueprintNote(o) {
   const box = $('obBlueprint');
   $('obAssetRow').hidden = $('obAssetNote').hidden = !!o.blueprint;
   box.hidden = !o.blueprint;
-  if (!o.blueprint) return;
-  const key = assetKey(o), st = assetCache().status(key), built = assetCache().meta(key)?.size;
+  const sizeInputs = ['obW', 'obD', 'obH'];
+  if (!o.blueprint) { for (const id of sizeInputs) { $(id).readOnly = false; $(id).title = ''; } return; }
   const options = `object-designs/index.html?${new URLSearchParams({ loc: house?.id ?? '', object: o.id })}`;
   let html = `Made from blueprint <b>${esc(o.blueprint)}</b> · <a href="${esc(options)}">Edit options</a>`;
-  if (st === 'ok' && builtSizeWarning(o, built)) html += `<div><b class="warn">The build is ${esc(built.join(' × '))} mm.</b> <button type="button" id="obUseBuilt">Use the built size</button></div>`;
-  else if (st === 'broken') html += `<div><b class="warn">Cannot be built:</b> ${esc(assetCache().error(key) ?? 'it cannot be shown')}</div>`;
-  else if (st === 'missing') html += '<div class="help">Plantern\'s server cannot build it now, so the plan shows its box.</div>';
-  else if (st === 'loading') html += '<div class="help">Asking the server for its model…</div>';
+  const key = assetKey(o), b = builds.get(key);
+  if (!b) checkBuild(o);
+  if (!b || b.state === 'checking') html += '<div class="help">Checking the build with these options…</div>';
+  else if (b.state === 'error') html += `<div class="help">Plantern's server cannot build it now (${esc(b.error)}), so the size is not checked. The object keeps its size.</div>`;
+  else {
+    const st = builtSizeStatus(o, b.size);
+    if (st.matches) html += `<div class="help">The size is the build's: ${esc(b.size.join(' × '))} mm.</div>`;
+    else html += `<div><b class="warn">The build is ${esc(b.size.join(' × '))} mm.</b> ${esc(st.reason)} The 3D model is the build; the plan and what is attached to the object use the size here.</div>`;
+    if (b.checked) html += `<div class="help">${b.changedFrom ? `Checked now: the build changed from ${esc(b.changedFrom.join(' × '))} mm.` : 'Checked now: the build is unchanged.'}</div>`;
+  }
+  // the size is the outer box of the build, so a typed size changes the option that sets it (src/blueprints/size.js); an axis no option sets is read-only
+  const meta = blueprints?.get(o.blueprint);
+  if (meta) {
+    const fields = sizeFields(meta, o.params);
+    sizeInputs.forEach((id, i) => { $(id).readOnly = !fields[i].param; $(id).title = fields[i].param ? `Set by ${fields[i].param.label}` : 'Set by the build of the blueprint, not by an option'; });
+    const range = p => (p.max === undefined ? `from ${p.min}` : `${p.min}–${p.max}`);
+    html += `<div class="help">Typing a size changes the option that sets it, and the object is built again. ${fields.map(f => `${f.name}: ${f.param ? `${esc(f.param.label)} (${range(f.param)} ${esc(f.param.unit)})` : 'the build (read-only)'}`).join(' · ')}.</div>`;
+  }
+  html += '<div class="btns">' + (b?.state === 'ok' && builtSizeStatus(o, b.size)?.matches === false ? '<button type="button" id="obUseBuilt">Use the built size</button>' : '') + '<button type="button" id="obRebuild">Check the build</button></div>';
   box.innerHTML = html;
   $('obUseBuilt')?.addEventListener('click', () => {
-    const r = setObject(model, levelId, o.id, { size: [...built] }, opts());
+    const size = [...b.size];
+    const r = setObject(model, levelId, o.id, { size }, opts());
     if (r.report.errors.length) { $('obErr').textContent = r.report.errors.join('; '); return; }
     commit(r.model);
-    setStatus(`${o.id}: size is now the built ${built.join(' × ')} mm (not saved yet)`);
+    setStatus(`${o.id}: size is now the built ${size.join(' × ')} mm (not saved yet)`);
   });
+  $('obRebuild').addEventListener('click', () => checkBuild(o, { force: true }));
 }
 
 function showObject() {
@@ -2067,6 +2208,8 @@ function showObject() {
   $('obInfo').innerHTML = `${o.attach ? `on wall <a href="#" id="obWall">${esc(o.attach.wall)}</a>` : 'standing in the plan'}${o.assumed?.length ? ` · <b class="warn">still default: ${esc(o.assumed.join(', '))}</b>` : ''}`;
   $('obWall')?.addEventListener('click', e => { e.preventDefault(); afterLeave(() => enterEdit('wall', o.attach.wall))(); });
   showBlueprintNote(o);
+  showOptions(o);
+  $('obColorRow').hidden = o.kind === 'asset';      // a model has its own colours (the plan takes its main one)
   for (const [id, show] of [['obOffsetRow', !!o.attach], ['obSideRow', !!o.attach], ['obGapRow', !!o.attach], ['obXRow', !o.attach], ['obYRow', !o.attach], ['obRotRow', !o.attach]]) $(id).hidden = !show;
   if (w) { const start = cornerAt(lv, w.a); $('obOffsetNote').textContent = start ? `mm from corner ${start.index} of ${start.name}` : "mm from the wall's start"; }
   if (objectFormFor !== o) {
@@ -2079,14 +2222,14 @@ function showObject() {
   }
 }
 
-function applyObjectForm() {
+async function applyObjectForm() {
   const o = object(), num = numOf, props = {};
   const size = [num('obW'), num('obD'), num('obH')];
   if (size.some((v, i) => v !== o.size[i])) props.size = size;
   if (num('obZ') !== o.z) props.z = num('obZ');
   const name = $('obName').value.trim();
   if (name !== (o.name ?? '')) props.name = name || null;
-  if ($('obColor').value !== (o.color || '#888888')) props.color = $('obColor').value;
+  if (o.kind !== 'asset' && $('obColor').value !== (o.color || '#888888')) props.color = $('obColor').value;
   // the model: a name makes an asset object (its size is the model's, when its meta.json is there); empty makes a box
   const asset = $('obAsset').value.trim();
   if (asset !== (o.asset ?? '')) {
@@ -2105,7 +2248,42 @@ function applyObjectForm() {
     if (rot !== (o.rotationDeg ?? 0)) { props.rotationDeg = rot; props.pos ??= [...o.pos]; }
   }
   if (Object.values(props).some(v => Array.isArray(v) ? v.some(n => !Number.isFinite(n)) : typeof v === 'number' && !Number.isFinite(v))) { $('obErr').textContent = 'Sizes, heights and positions must be numbers of mm.'; return; }
-  if (!Object.keys(props).length) { $('obErr').textContent = 'Nothing changed.'; return; }
+  // the options form of a blueprint object (src/param-form.js): changed options are built again on the server, and the object
+  // takes the size of that build; options and a typed size cannot both be applied at once (the size follows the options)
+  const bpMeta = o.blueprint && blueprints?.get(o.blueprint);
+  let optionsEdit = null;
+  if (bpMeta && optionsForm && optionsShownFor === o) {
+    if (!optionsForm.valid) { $('obErr').textContent = 'Some options need a fix first (see Options above).'; return; }
+    const form = optionsForm.readForObject();
+    if (optionsChanged(bpMeta, o, form)) optionsEdit = form;
+  }
+  if (optionsEdit && props.size) { $('obErr').textContent = 'You changed the options and the size: Apply one, then the other (the size follows the options).'; return; }
+  if (!Object.keys(props).length && !optionsEdit) { $('obErr').textContent = 'Nothing changed.'; return; }
+  if (optionsEdit) {
+    $('obErr').textContent = 'Building…';
+    let built;
+    try { built = await assetCache().rebuild({ ...o, params: optionsEdit.params, partMaterials: optionsEdit.partMaterials }); }
+    catch (e) { $('obErr').textContent = `The build with these options failed: ${e.message}`; return; }
+    if (object()?.id !== o.id) return;                       // another object was picked meanwhile
+    props.params = optionsEdit.params;
+    props.partMaterials = Object.keys(optionsEdit.partMaterials).length ? optionsEdit.partMaterials : null;
+    props.size = built.size;
+  }
+  // a blueprint object's size is what its options build: a typed size changes the option that sets it, the server builds it again
+  // and the object takes the size of that build (src/blueprints/size.js); nothing is applied when that cannot be done
+  else if (o.blueprint && props.size) {
+    const meta = blueprints?.get(o.blueprint);
+    if (!meta) { $('obErr').textContent = `The size of a blueprint object follows its options, and the blueprint "${o.blueprint}" is not known here (Plantern's server must be running).`; return; }
+    const edit = sizeEdit(meta, o, props.size);
+    if (!edit.ok) { $('obErr').textContent = edit.error; return; }
+    $('obErr').textContent = 'Building…';
+    let built;
+    try { built = await assetCache().rebuild({ ...o, params: edit.params }); }
+    catch (e) { $('obErr').textContent = `The build with the new size failed: ${e.message}`; return; }
+    if (object()?.id !== o.id) return;                       // another object was picked meanwhile
+    props.params = edit.params;
+    props.size = built.size;                                  // setObject then counts the size as measured (no longer "assumed")
+  }
   const r = setObject(model, levelId, objectId, props, opts());
   if (r.report.errors.length) { $('obErr').textContent = r.report.errors.join('; '); return; }
   $('obErr').textContent = '';
@@ -2960,7 +3138,7 @@ function draw() {
     const sel = o.id === objectId, above = (o.z ?? 0) >= resolveSettings(loc, lv).cutPlane;
     // an asset whose model is missing is red and dashed, so it is seen and fixed (decision 146)
     const missing = o.kind === 'asset' && ['missing', 'broken'].includes(assetCache().status(assetKey(o)));
-    const col = sel ? '#ffb454' : missing ? '#b00020' : o.assumed?.length ? '#e5a93a' : (o.color || '#888');
+    const col = sel ? '#ffb454' : missing ? '#b00020' : o.assumed?.length ? '#e5a93a' : (o.color || (o.kind === 'asset' && assetCache().mainColour(assetKey(o))) || '#888');
     const made = o.blueprint ? `blueprint "${o.blueprint}"` : `model "${o.asset}"`;
     const what = o.kind === 'asset' ? (missing ? ` · ${made} is missing` : ` · ${made}`) : '';
     out += `<g data-kind="object" data-id="${esc(o.id)}" style="cursor:grab"><title>${esc(o.name || o.id)} (${esc(o.id)})${esc(what)}</title>${poly(fp, `fill="${col}" fill-opacity="0.25" stroke="${col}" stroke-width="${fs / (sel ? 5 : 9)}"${above || missing ? ` stroke-dasharray="${fs / 2} ${fs / 3}"` : ''}`)}</g>`;
@@ -3297,11 +3475,8 @@ function blueprintIssues() {
   const out = [];
   for (const { o, level: lvId } of objs) {
     const key = assetKey(o), st = assetCache().status(key);
+    // a size that differs from the build is shown in the object's panel, with the rebuild, not here (every edit of a size would list it)
     if (st === 'broken') out.push({ id: o.id, severity: 'warning', level: lvId, msg: `blueprint "${o.blueprint}" cannot be built: ${assetCache().error(key) ?? 'it cannot be shown'}` });
-    else if (st === 'ok') {
-      const msg = builtSizeWarning(o, assetCache().meta(key)?.size);
-      if (msg) out.push({ id: o.id, severity: 'warning', level: lvId, msg });
-    }
   }
   return out;
 }

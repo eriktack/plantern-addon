@@ -103,26 +103,32 @@ svg[hidden],#view3d[hidden],section[hidden]{display:none}
 .swatches button.sw.on{outline:2px solid var(--acc);outline-offset:1px}
 .swatches .nm{font-size:11px;padding:1px 6px;margin-left:2px}
 .swatch{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid #3a404b;vertical-align:middle}
-.nav{position:relative;margin:0 0 10px}
-.navbtn{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;background:#14161a;border:1px solid var(--line);border-radius:8px;font-weight:600;text-align:left}
-.navbtn:hover,.navbtn[aria-expanded=true]{background:#20242b;border-color:#3a404b}
-.nav svg{width:16px;height:16px;flex:none}
-.navbtn>span{flex:1}
-.navbtn>svg:first-child{color:var(--acc)}
-.navbtn>svg:last-child{color:var(--mut);transition:transform .15s}
-.navbtn[aria-expanded=true]>svg:last-child{transform:rotate(180deg)}
-.navmenu{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:20;padding:6px;background:#181b21;border:1px solid #3a404b;border-radius:10px;box-shadow:0 10px 30px #000a}
-.navmenu[hidden]{display:none}
-.navgroup{padding:8px 8px 3px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
-.navgroup:first-child{padding-top:2px}
-.navmenu a{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:7px;color:var(--fg);text-decoration:none}
-.navmenu a:hover,.navmenu a:focus-visible{background:#262b34;outline:0}
-.navmenu a.on{background:#2a2f38}
-.navmenu a>svg:first-child{flex:none;color:var(--acc)}
-.navmenu a>svg:last-child:not(:first-child){flex:none;color:var(--ok)}
-.navmenu .nt{flex:1;min-width:0;display:flex;flex-direction:column}
-.navmenu .nt b{font-weight:600}
-.navmenu .nt small{color:var(--mut);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav{margin:0 0 10px}
+.menu{position:relative}
+.menubtn{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;background:#14161a;border:1px solid var(--line);border-radius:8px;font-weight:600;text-align:left}
+.menubtn:hover,.menubtn[aria-expanded=true]{background:#20242b;border-color:#3a404b}
+.menubtn>span{flex:1}
+.menubtn>svg:first-child{color:var(--acc)}
+.menubtn>svg:last-child{color:var(--mut);transition:transform .15s}
+.menubtn[aria-expanded=true]>svg:last-child{transform:rotate(180deg)}
+.menu .menubtn svg{width:16px;height:16px;flex:none}
+.menulist{position:absolute;z-index:20;top:calc(100% + 4px);padding:6px;max-height:70vh;overflow-y:auto;background:#181b21;border:1px solid #3a404b;border-radius:10px;box-shadow:0 10px 30px #000a}
+.menu-full .menulist{left:0;right:0}
+.menu-right .menulist{right:0;width:min(330px,86vw)}
+.menulist[hidden]{display:none}
+.menugroup{padding:8px 8px 3px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+.menugroup:first-child{padding-top:2px}
+.menulist a,.menulist button[role=menuitem]{display:flex;align-items:center;gap:10px;width:100%;padding:6px 8px;border:0;border-radius:7px;background:none;color:var(--fg);text-align:left;font:inherit;text-decoration:none;cursor:pointer}
+.menulist a:hover,.menulist a:focus-visible,.menulist button[role=menuitem]:hover,.menulist button[role=menuitem]:focus-visible{background:#262b34;outline:0}
+.menulist .on{background:#2a2f38}
+.menulist .off{opacity:.55;cursor:default}
+.menulist .off:hover{background:none}
+.menulist svg{width:16px;height:16px;flex:none;color:var(--acc)}
+.menulist .on>svg:last-child:not(:first-child){color:var(--ok)}
+.menulist .nt{flex:1;min-width:0;display:flex;flex-direction:column}
+.menulist .nt b{font-weight:600}
+.menulist .nt small{color:var(--mut);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.menulist .nt small.why{color:var(--warn)}
 button.primary{background:var(--acc);color:#14161a;border-color:var(--acc);font-weight:600}
 .savebar{position:sticky;top:0;z-index:3;background:var(--panel);margin:0 -12px 8px;padding:8px 12px;border-bottom:1px solid var(--line)}
 .sb-row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
@@ -218,3 +224,7 @@ dialog.pdialog .pbtns{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-e
 .psummary[hidden]{display:none}
 .psummary ul{margin:4px 0 0;padding-left:18px}
 .psummary button{background:none;border:0;color:inherit;text-decoration:underline;padding:0;font:inherit;cursor:pointer;text-align:left}
+.menu.inline{display:inline-block}
+.menu.inline .menubtn{width:auto;padding:4px 10px;font-weight:500}
+h2 .menu.inline{text-transform:none;letter-spacing:0;font-size:13px}
+.psummary.inline{position:static;margin:8px 0 0;border:1px solid var(--bad);border-radius:6px}

@@ -45,7 +45,7 @@ async function main() {
   // (or failed) redraws the plan, and the 3D view places it itself
   const assets = createAssetCache({ houseBase: baseUrl, sharedBase: '', house: house.id, onChange: () => showLevel() });
   for (const lv of model.levels) for (const o of lv.objects || []) if (o.kind === 'asset') assets.loadFor(o);
-  const looks = { materials: model.materials || {}, baseUrl, assets, assetStatus: n => assets.status(n) };     // wall sides: colours, materials, textures; asset models
+  const looks = { materials: model.materials || {}, baseUrl, assets, assetStatus: n => assets.status(n), assetColour: n => assets.mainColour(n) };     // wall sides: colours, materials, textures; asset models
   document.title = `Plantern · ${loc.name}`;
   $('compass').innerHTML = compassSvg(northAngleOf(model));
   const bindings = loc.bindings || {};

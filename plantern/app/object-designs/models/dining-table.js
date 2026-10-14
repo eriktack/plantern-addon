@@ -36,6 +36,12 @@ export const meta = {
     { key: 'top', label: 'Tabletop' },
     { key: 'legs', label: 'Legs or base' },
   ],
+  // The options that ARE the outer size: the Editor turns a typed size into them. A round or pedestal table is as long as it is wide.
+  sizeParams: {
+    x: { default: 'length', round: 'width', pedestal: 'width' },
+    y: 'width',
+    z: 'height',
+  },
 };
 
 // The legs run this far into the tabletop, so the two parts overlap instead of touching face to face.

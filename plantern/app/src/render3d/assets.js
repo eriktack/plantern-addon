@@ -4,7 +4,7 @@
 // broken stays a marked box. The loader is imported only when a model is first needed, so a page without assets
 // never loads it. Browser only; the pure rules are in src/model/assets.js.
 
-import { assetSources, ASSET_NAME, assetKey, blueprintRequest } from '../model/assets.js';
+import { assetSources, ASSET_NAME, assetKey, blueprintRequest, mainColourOf } from '../model/assets.js';
 import { glbStore } from './glb-store.js';
 
 // A store call that fails counts as no answer: the page then asks the server, as it did before the store existed.
@@ -143,6 +143,47 @@ export function createAssetCache({
     return entry;
   }
 
+  /**
+   * The server's build of an object with its stored options now: { hash, size }. Unlike meta(), it is asked for again each time,
+   * so a changed blueprint or library gives the size of the new build. Throws with the server's reason, or the network error.
+   */
+  async function rebuild(o) {
+    const res = await doFetch(`${apiBase}api/glb`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...(house ? { house } : {}), ...blueprintRequest(o) }) });
+    const answer = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(answer.error || `the server answered ${res.status}`);
+    return answer;
+  }
+
+  // The area of a mesh seen from above (y is up in a glTF): its triangles that face up, projected on the ground.
+  function areaFromAbove(geometry) {
+    const pos = geometry.attributes.position, index = geometry.index;
+    const n = index ? index.count : pos.count;
+    let area = 0;
+    for (let t = 0; t < n; t += 3) {
+      const [a, b, c] = [0, 1, 2].map(k => (index ? index.getX(t + k) : t + k));
+      const ux = pos.getX(b) - pos.getX(a), uz = pos.getZ(b) - pos.getZ(a), vx = pos.getX(c) - pos.getX(a), vz = pos.getZ(c) - pos.getZ(a);
+      const up = uz * vx - ux * vz;                       // the y of the triangle's normal, twice its projected area
+      if (up > 0) area += up / 2;
+    }
+    return area;
+  }
+
+  /**
+   * The main colour ('#rrggbb') of a loaded model: the colour of the part that shows most from above (mainColourOf), for the footprint in the plan.
+   * Null until the model has loaded, and for a model with no colours. `key` is a model name or assetKey(object).
+   */
+  function mainColour(key) {
+    const scene = entries.get(key)?.scene;
+    if (!scene) return null;
+    const parts = [];
+    scene.traverse(m => {
+      if (!m.isMesh) return;
+      const mat = Array.isArray(m.material) ? m.material[0] : m.material;
+      parts.push({ weight: areaFromAbove(m.geometry), colour: mat?.color ? `#${mat.color.getHexString()}` : null });
+    });
+    return mainColourOf(parts);
+  }
+
   /** Starts the model of an asset object, whichever way it is made. */
   const loadFor = o => (o.blueprint ? loadObject(o) : load(o.asset));
 
@@ -153,7 +194,7 @@ export function createAssetCache({
   /** Why a blueprint object's model is missing or broken (the server's reason), or null. */
   const error = key => entries.get(key)?.error ?? null;
 
-  return { load, loadObject, loadFor, status, meta, error };
+  return { load, loadObject, loadFor, status, meta, error, rebuild, mainColour };
 }
 
 /**

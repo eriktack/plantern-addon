@@ -13,7 +13,7 @@ const ID = /^[a-z][a-z0-9-]*$/;
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 const NUMERIC = new Set(['number', 'integer', 'enum_number']);
 const OPS = new Set(['+', '-', '*', '/', 'min', 'max']);
-const TOP_KEYS = new Set(['schema', 'id', 'name', 'description', 'params', 'parts', 'materials', 'variantDefaults', 'build']);
+const TOP_KEYS = new Set(['schema', 'id', 'name', 'description', 'params', 'parts', 'materials', 'variantDefaults', 'sizeParams', 'build']);
 // block type → the keys it may carry besides `type`
 const BLOCKS = {
   box: ['size'],
@@ -35,6 +35,7 @@ const paramType = d => d.type ?? 'number';
 export function metaOf(json) {
   const meta = { id: json.id, name: json.name, description: json.description, params: json.params, parts: json.parts };
   if (json.variantDefaults !== undefined) meta.variantDefaults = json.variantDefaults;
+  if (json.sizeParams !== undefined) meta.sizeParams = json.sizeParams;
   if (json.materials !== undefined) meta.materials = json.materials;
   return meta;
 }
