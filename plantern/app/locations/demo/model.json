@@ -123,7 +123,23 @@
       "solids": [],
       "objects": [],
       "fixtures": [
-        { "id": "f_cellar_lamp", "kind": "lamp", "pos": [1800,1400], "z": 2200, "radius": 3000 }
+        { "id": "f_cellar_lamp", "kind": "lamp", "pos": [1800,1400], "z": 2200, "radius": 3000 },
+        {
+          "id": "f_boiler_strip_h",
+          "kind": "strip",
+          "name": "Boiler room strip (wall)",
+          "attach": { "wall": "w_boiler_e2", "side": "right", "offset": 400, "length": 1800 },
+          "z": 1900,
+          "radius": 1200
+        },
+        {
+          "id": "f_boiler_strip_v",
+          "kind": "strip",
+          "name": "Boiler room strip (upright)",
+          "attach": { "wall": "w_cellar_e3", "side": "right", "offset": 300, "length": 1500, "vertical": true },
+          "z": 300,
+          "radius": 1200
+        }
       ],
       "capture": { "ceilingHeight": 2200, "floorToFloor": 2450 },
       "stairs": [
@@ -378,19 +394,21 @@
         },
         { "id": "ob_sofa", "kind": "box", "pos": [6000,600], "rotationDeg": 0, "size": [2200,900,800], "z": 0, "color": "#5b6b8c" },
         {
-          "id": "ob_table",
+          "id": "ob_dining",
           "kind": "asset",
-          "asset": "table",
-          "pos": [1700,1500],
+          "blueprint": "dining-table",
+          "params": { "variant": "round" },
+          "partMaterials": { "legs": "black-metal" },
+          "pos": [1927,1452],
           "rotationDeg": 0,
-          "size": [1600,900,750],
+          "size": [1100,1100,750],
           "z": 0,
-          "color": "#8b6b4a"
+          "assumed": ["size"]
         }
       ],
       "fixtures": [
         { "id": "f_k_lamp", "kind": "lamp", "pos": [2500,2000], "z": 2400, "radius": 3600 },
-        { "id": "f_l_lamp", "kind": "lamp", "pos": [7200,2000], "z": 2400, "radius": 3600 },
+        { "id": "f_l_lamp", "kind": "lamp", "pos": [6558,1971], "z": 2400, "radius": 3600 },
         { "id": "f_k_switch", "kind": "switch", "attach": { "wall": "w_k_n", "side": "right", "offset": 6800 }, "z": 1100 },
         {
           "id": "f_t_lamp",
@@ -411,7 +429,7 @@
           "width": 900,
           "flights": [
             { "risers": 7, "length": 1500 },
-            { "risers": 8, "length": 1750 }
+            { "risers": 8, "width": 800, "length": 1750 }
           ],
           "turn": "R",
           "landing": "square",

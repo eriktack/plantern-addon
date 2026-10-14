@@ -49,11 +49,12 @@
   .switch input{width:18px;height:18px}
   [hidden]{display:none!important}
 </style>
+<script type="module" src="src/nav.js"></script>
 <script type="module" src="src/storage/page.js"></script>
 </head>
 <body>
 <div id="app">
-  <nav class="nav" aria-label="Pages"><a href="index.html" title="The plan with lights (2D / 3D)">Plan</a><a href="room-editor.html" title="Edit rooms, walls, openings and lamps (desktop)">Editor</a><a href="wizard.html" title="Measure a room, wall by wall (phone)">Rooms</a><a href="openings.html" title="Doors, windows, switches and lamps (phone)">Doors &amp; lights</a><a href="storage.html" class="on" aria-current="page" title="Where your houses are kept: folders, network shares, git">Storage</a></nav>
+  <nav class="nav" aria-label="Pages" data-page="storage" data-base=""></nav>
   <h1>Storage</h1>
   <p class="lead">Where your houses are kept: a folder on this computer, a network share or a git repository. Plantern keeps them up to date and notices changes made elsewhere.</p>
   <div id="msg"></div>
@@ -70,6 +71,11 @@
   <div class="btns" style="margin-top:8px"><button id="haAdd" class="big">+ Add connection</button></div>
   <section id="haForm" class="card" hidden></section>
   <section id="haHouses"></section>
+
+  <h2>Placed objects</h2>
+  <p class="lead">Objects made from blueprints keep their 3D file in Plantern's settings folder on this computer, not in the house. Clearing them frees the disk; they are built again when they are needed.</p>
+  <div id="glbMsg"></div>
+  <div class="btns" style="margin-top:8px"><button id="glbClear" class="big">Clear cache</button></div>
 </div>
 </body>
 </html>

@@ -10,6 +10,7 @@ import { solidCircle } from '../geometry/circle.js';
 import { wallLookPieces } from '../geometry/paint.js';
 import { stairsPlan } from '../geometry/stairs.js';
 import { stripSamples } from '../geometry/strip.js';
+import { assetKey } from '../model/assets.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 export const el = (t, a = {}, parent) => {
@@ -148,10 +149,13 @@ export function createPlanView(svg, hooks = {}) {
       if (!fp) continue;
       const above = (o.z ?? 0) >= settings.cutPlane;
       // an asset whose model is missing is drawn in red, dashed, so it is seen and fixed (decision 146)
-      const missing = o.kind === 'asset' && ['missing', 'broken'].includes(assetStatus(o.asset));
+      const missing = o.kind === 'asset' && ['missing', 'broken'].includes(assetStatus(assetKey(o)));
       const colour = missing ? '#b00020' : o.color || '#888';
       const shape = el('polygon', { points: svgPoints(fp), fill: colour, 'fill-opacity': missing ? 0.2 : 0.25, stroke: colour, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': above || missing ? '6 4' : '' }, gObj);
-      if (o.kind === 'asset') el('title', {}, shape).textContent = missing ? `${o.name || o.id}: model "${o.asset}" is missing` : `${o.name || o.id}: model "${o.asset}"`;
+      if (o.kind === 'asset') {
+        const what = o.blueprint ? `blueprint "${o.blueprint}"` : `model "${o.asset}"`;
+        el('title', {}, shape).textContent = missing ? `${o.name || o.id}: ${what} is missing` : `${o.name || o.id}: ${what}`;
+      }
     }
 
     const occ = occluders(geo, { cutPlane: settings.cutPlane });

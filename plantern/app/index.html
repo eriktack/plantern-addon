@@ -15,6 +15,7 @@
     "three/addons/": "./vendor/three/addons/"
 } }
 </script>
+<script type="module" src="src/nav.js"></script>
 <script type="module" src="src/app.js"></script>
 </head>
 <body>
@@ -27,8 +28,9 @@
   <div id="status"></div>
   <div id="compass"></div>
 </main>
+<div id="resizer" title="Drag to resize the panel (double-click: default width)"></div>
 <aside>
-  <nav class="nav" aria-label="Pages"><a href="index.html" class="on" aria-current="page" title="The plan with lights (2D / 3D)">Plan</a><a href="room-editor.html" title="Edit rooms, walls, openings and lamps (desktop)">Editor</a><a href="wizard.html" title="Measure a room, wall by wall (phone)">Rooms</a><a href="openings.html" title="Doors, windows, switches and lamps (phone)">Doors &amp; lights</a><a href="storage.html" title="Where your houses are kept: folders, network shares, git">Storage</a></nav>
+  <nav class="nav" aria-label="Pages" data-page="plan" data-base=""></nav>
   <div class="row sel">
     <select id="loc" aria-label="Location"></select>
     <select id="level" aria-label="Level" hidden></select>
@@ -49,7 +51,9 @@
       <label class="inl" title="A ceiling over every room, for a view from inside (perspective). Rooms with their own lower ceiling always have theirs, see-through from above."><input type="checkbox" id="ceilings"> Ceilings</label>
     </div>
     <label title="Lamps that are on cast shadows, brightest first. Shadows are the heavy part of 3D: fewer is faster on phones and wall tablets. Remembered in this browser; the house's defaults are settings.render3d.shadows in location.json">Shadows <small id="shadowDev">on this computer</small>
-      <input type="range" id="shadowLvl" min="0" max="4" step="1"> <span id="shadowTxt"></span></label>
+      <input type="range" id="shadowLvl" min="0" max="4" step="1"> <span id="shadowTxt"></span> <button type="button" id="shadowReset" title="Forget this browser's choice: the house's setting applies again">house default</button></label>
+    <label title="The light in the 3D view at night (daylight off), before the lamps are counted: 0 is pitch black, so only lamps that are on light the rooms. Remembered in this browser; the house's default is settings.render3d.nightLight in location.json">Night light
+      <input type="range" id="nightLvl" min="0" max="100" step="1"> <span id="nightTxt"></span> <button type="button" id="nightReset" title="Forget this browser's choice: the house's setting applies again">house default</button></label>
     <p class="help">Drag: orbit · right-drag: pan · wheel: zoom · click lamp/switch: toggle</p>
   </section>
   <section id="panel2d">

@@ -3,6 +3,7 @@
 
 import { addLevel, setLevel, setDatum, deleteLevel, newLevelId, DEFAULT_CEILING, DEFAULT_FLOOR_THICKNESS } from '../edit/ops.js';
 import { levelLabel } from '../model/names.js';
+import { askConfirm } from './dialog.js';
 import { describeElevationFrom } from '../model/elevation.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -122,7 +123,7 @@ export function showLevelEditForm(box, model, levelId, { onApply, onDelete, onCl
   };
   box.querySelectorAll('input, select').forEach(el => { el.addEventListener('input', preview); el.addEventListener('change', preview); });
   preview();
-  f('apply').onclick = () => {
+  f('apply').onclick = async () => {
     const props = { name: val('name'), ...where() }, cap = {};
     for (const k of ['ceilingHeight', 'floorThickness']) if (val(k) !== String(lv[k] ?? '') || (lv.assumed || []).includes(k) && val(k) !== '') props[k] = val(k);
     if (props.ceilingHeight === '' || props.floorThickness === '') { f('err').textContent = 'Ceiling height and floor build-up need a value.'; return; }
@@ -134,18 +135,18 @@ export function showLevelEditForm(box, model, levelId, { onApply, onDelete, onCl
     onApply(r);
   };
   f('close').onclick = () => { box.hidden = true; onClose?.(); };
-  if (f('datum')) f('datum').onclick = () => {
+  if (f('datum')) f('datum').onclick = async () => {
     const r = setDatum(model, levelId), nm = id => model.levels.find(l => l.id === id)?.name || id;
     if (r.report.errors.length) { f('err').textContent = r.report.errors.join('; '); return; }
     const lines = [`${lv.name || levelId} becomes elevation 0: every level moves ${Math.abs(r.report.shift)} mm ${r.report.shift < 0 ? 'down' : 'up'} (nothing changes height against the others).`,
       ...r.report.flipped.map(x => `${nm(x.level)} now hangs ${{ above: 'on top of', below: 'under', same: 'level with' }[x.relation]} ${nm(x.follows)}.`)];
-    if (!confirm([...lines, 'Go ahead?'].join('\n\n'))) return;
+    if (!(await askConfirm([...lines, 'Go ahead?'].join('\n\n'), { ok: 'Go ahead' }))) return;
     onApply({ ...r, report: { ...r.report, moved: [] } });
   };
-  if (f('delete')) f('delete').onclick = () => {
+  if (f('delete')) f('delete').onclick = async () => {
     const r = deleteLevel(model, levelId);
     if (r.report.errors.length) { f('err').textContent = r.report.errors.join('; '); return; }
-    if (!confirm(`Delete the empty level ${lv.name || lv.id}?`)) return;
+    if (!(await askConfirm(`Delete the empty level ${lv.name || lv.id}?`, { ok: 'Delete' }))) return;
     box.hidden = true;
     onDelete(r);
   };

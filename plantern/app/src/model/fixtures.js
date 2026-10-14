@@ -41,6 +41,9 @@ export function checkFixture(fx, level) {
   const errors = [], warnings = [];
   if (!FIXTURE_KINDS.includes(fx.kind)) errors.push(`kind must be ${FIXTURE_KINDS.join(' or ')}`);
   const strip = fx.kind === 'strip', form = stripForm(fx);
+  // a vertical strip (fixes list 48) runs up the wall from its z by its length: it must fit under the ceiling
+  if (strip && form === 'wall' && fx.attach?.vertical !== undefined && typeof fx.attach.vertical !== 'boolean') errors.push('attach.vertical is true or left out');
+  if (strip && form === 'wall' && fx.attach?.vertical === true && fx.z !== undefined && fx.attach.length > 0 && level.ceilingHeight && fx.z + fx.attach.length > level.ceilingHeight) warnings.push('the vertical strip runs above the ceiling');
   if (strip) {
     if (fx.pos || fx.points) errors.push('a strip is attached to a wall, an object or a window (attach); it is not free');
     else if (!fx.attach) errors.push('a strip must be attached to a wall, an object or a window (attach)');

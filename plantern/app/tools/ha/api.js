@@ -1,4 +1,4 @@
-// Home Assistant connections kept by Plantern's server (roadmap 11, docs/plans/ha-11-12.md S2/S3).
+// Home Assistant connections kept by Plantern's server (roadmap 11, docs/archive/ha-11-12.md S2/S3).
 // The URL is in <dataDir>/ha.json, the token in secrets.json under "ha:<name>"; the token never
 // leaves the server (responses say only tokenSet). One bridge per connection, opened when first
 // needed and kept open (tools/ha/bridge.js).

@@ -3,8 +3,9 @@ import { polylineMid } from './strip.js';
 import { fixtureHeight, stripForm } from '../model/fixtures.js';
 import { openingSymbol } from './openings.js';
 import { wallFrame, wallJoins, wallPieces, hasBody, facePoint, centrePoint, wallProfile } from './walls.js';
-import { cutWallPieces } from './solids.js';
-import { stairLayout, stairStart, stairOpening } from './stairs.js';
+import { cutWallPieces, clipConvex } from './solids.js';
+import { isConvex, signedArea, pointInPolygon, distToOutline, triangulate } from './polygon.js';
+import { stairLayout, stairStart, stairOpening, openingRectPoly, unionOutlines } from './stairs.js';
 import { collectSnapPointsAround } from '../tools/snap.js';
 import { DEFAULT_SETTINGS } from '../model/settings.js';
 
@@ -37,6 +38,8 @@ export function buildLevelGeometry(level) {
   function fixtureLine(fx) {
     const form = stripForm(fx);
     if (form === 'wall') {
+      // a vertical strip is a point on the face (its length runs up, see fixtureHeight)
+      if (fx.attach.vertical === true) { const a = resolveAttach(fx.attach); return a ? [a.p, a.p] : null; }
       const a = resolveAttach(fx.attach), b = resolveAttach({ ...fx.attach, offset: fx.attach.offset + (fx.attach.length || 0) });
       return a && b ? [a.p, b.p] : null;
     }
@@ -153,11 +156,47 @@ export function buildModelGeometry(model, { headroom = DEFAULT_SETTINGS.stairHea
       entry.under = under;
       entry.headroom = head(lv);
       const hole = stairOpening(layout, under, entry.headroom);
-      entry.opening = Array.isArray(st.opening) && st.opening.length >= 3 ? [st.opening] : hole.hole;
+      // a hand-given polygon, else a rectangle (fixes list 8), else the steps' own hole
+      const manual = Array.isArray(st.opening) && st.opening.length >= 3 ? [st.opening] : st.openingRect ? [openingRectPoly(st.openingRect, layout.flights[0].o)] : null;
+      // the opening is cut at the edge of the floor above: a part past the rooms' edge is not an opening (fixes the BBV28 upper hall)
+      const floor = openingOnFloor(manual ?? hole.hole, to);
+      entry.opening = floor.polys;
+      entry.trimmed = floor.trimmed;
       entry.openingSteps = hole.steps;
       const down = [...layout.arrow].reverse();
       for (const poly of entry.opening) geos.get(to.id).holes.push({ id: st.id, from: lv.id, poly, steps: hole.steps.map(s => s.poly), arrow: down, blocks: hole.steps, layout, stairs: st, drop: to.elevation - lv.elevation });
     }
   }
   return geos;
+}
+
+/**
+ * The parts of a stair's opening that lie on the floor of `level` (its rooms without floor "none"): an opening past a
+ * room's edge is cut at that edge. `trimmed` is true when a corner of it lies in no room (so something was cut off).
+ * A room that is not convex keeps only the pieces wholly inside it (a partly outside one would not triangulate).
+ */
+export function openingOnFloor(polys, level) {
+  const rooms = (level.rooms || []).filter(r => r.floor !== 'none' && r.polygon?.length >= 3);
+  const onRoom = (p, r) => pointInPolygon(p, r.polygon) || distToOutline(p, r.polygon) < 5;
+  const trimmed = polys.some(poly => poly.some(p => !rooms.some(r => onRoom(p, r))));
+  // each room as convex parts (an L-shaped room is cut into triangles), so the opening is clipped to every part of it
+  const parts = rooms.flatMap(r => (isConvex(r.polygon) ? [r.polygon] : triangulate(r.polygon)));
+  // both the opening and the room are cut into convex parts first: clipping a concave opening directly leaves seams that cross
+  const pieces = [];
+  for (const poly of polys) {
+    for (const hp of isConvex(poly) ? [poly] : triangulate(poly)) {
+      for (const part of parts) {
+        const ccw = signedArea(part) >= 0 ? part : part.slice().reverse();
+        // one edge of the room at a time: clipConvex needs a straight half-plane, and the room's inside is their intersection
+        let piece = hp;
+        for (let i = 0; i < ccw.length && piece.length >= 3; i++) {
+          const A = ccw[i], B = ccw[(i + 1) % ccw.length], L = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1;
+          piece = clipConvex(piece, q => ((B[0] - A[0]) * (q[1] - A[1]) - (B[1] - A[1]) * (q[0] - A[0])) / L);
+        }
+        if (piece.length >= 3) pieces.push(piece);
+      }
+    }
+  }
+  // the pieces that touch become one outline again (one opening, not a box per piece)
+  return { polys: pieces.length ? unionOutlines(pieces) : [], trimmed };
 }

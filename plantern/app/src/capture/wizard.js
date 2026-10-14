@@ -24,15 +24,18 @@ import { cornerSvg } from './plan-marks.js';
 import { refNamer } from './ref-names.js';
 import { copySources, shapeDraftFrom } from '../edit/copy.js';
 import { levelLabel } from '../model/names.js';
+import { askConfirm } from './dialog.js';
 import { HEADINGS, suggestAxis, lengthToReach, currentHeading, cornerPreview, parseAngle, parseLength, newWizard, addEdge, undo, pathPoints, finish, exportResult } from './wizard-state.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const params = new URLSearchParams(location.search);
 
-let loc, model, locId, entry, w, phase = 'setup', result = null, snaps = [], underlay = [], house, saveMode = null;
+let loc, model, locId, entry, w, phase = 'setup', result = null, snaps = [], underlay = [], wallOutlines = [], house, saveMode = null;
+let unsaved = false;   // rooms or levels added on this page and not saved yet (Save the house writes them, as the Editor's Save does)
 let shareT = null;  // thickness assumed for a neighbour whose wall is not modelled (default: settings.wallThickness.inner)
-let reach = { open: false, axis: 'x', ok: false, value: 0, target: 0 };   // "run this wall until x/y = …"
+let reach = { open: true, axis: 'x', ok: false, value: 0, target: 0 };   // always open: a coordinate or a typed length, whichever was entered last
+let reachStep = -1;   // the number of walls the coordinate was last cleared for (render clears it when a new wall starts)   // "run this wall until x/y = …"
 let focusedStep = null;   // the step the length field was last focused for (focus once, not on every redraw)
 let shareTimer = 0;       // share offers wait until typing pauses, so the page does not jump per keystroke
 let wholeHouse = false;   // the map shows the whole level instead of zooming in on what is being done
@@ -85,9 +88,9 @@ async function init() {
   $('placeMode').querySelectorAll('button').forEach(b => (b.onclick = () => setPlaceMode(b.dataset.m)));
   $('edgeSel').onchange = () => { const [room, edge] = $('edgeSel').value.split('|'); pickEdge(room, Number(edge)); };
   for (const id of ['edgeT', 'edgeSlide']) $(id).oninput = () => { w.nextTo.thickness = $('edgeT').value.trim() === '' ? NaN : Number($('edgeT').value); w.nextTo.slide = Number($('edgeSlide').value) || 0; render(); };
-  $('reachBtn').onclick = () => setReach(!reach.open);
+  $('len').oninput = () => { if (reach.ok) { reach.ok = false; $('reachVal').value = ''; $('reachPt').value = ''; $('reachOut').textContent = ''; drawMap(); } };   // a typed length replaces a coordinate
   $('zoomBtn').onclick = () => { wholeHouse = !wholeHouse; drawMap(); };
-  $('reachRow').querySelectorAll('button[data-axis]').forEach(b => (b.onclick = () => { reach.axis = b.dataset.axis; const i = $('reachPt').value; if (i !== '') $('reachVal').value = Math.round(reachPoints()[+i].pos[reach.axis === 'x' ? 0 : 1] * 10) / 10; updateReach(); }));
+  $('reachRow').querySelectorAll('button[data-axis]').forEach(b => (b.onclick = () => { reach.axis = b.dataset.axis; reach.axisChosen = true; const i = $('reachPt').value; if (i !== '') $('reachVal').value = Math.round(reachPoints()[+i].pos[reach.axis === 'x' ? 0 : 1] * 10) / 10; updateReach(); }));
   $('reachVal').oninput = () => { $('reachPt').value = ''; updateReach(); };
   $('reachPt').onchange = () => { const i = $('reachPt').value; if (i !== '') { $('reachVal').value = Math.round(reachPoints()[+i].pos[reach.axis === 'x' ? 0 : 1] * 10) / 10; updateReach(); } };
   $('custom').onclick = () => { $('customRow').hidden = !$('customRow').hidden; if (!$('customRow').hidden) $('angle').focus(); drawAngleMini(); drawMap(); };
@@ -111,7 +114,9 @@ async function init() {
     if (!$('len').value.trim()) updateShare(); else shareTimer = setTimeout(updateShare, 400);
   });
   $('undo').onclick = () => { w = undo(w); save(); render(); };
-  $('restart').onclick = () => { if (confirm('Throw away the walls entered so far?')) { w = newWizard({ level: w.level, name: w.name, exterior: w.exterior, origin: w.origin, start: w.start, heading: w.heading }); phase = 'setup'; store.set(null); render(); } };
+  $('saveHouse').onclick = saveHouse;
+  addEventListener('beforeunload', e => { if (unsaved) { e.preventDefault(); e.returnValue = ''; } });   // a room added here is in the page only until saved
+  $('restart').onclick = async () => { if (await askConfirm('Throw away the walls entered so far?', { ok: 'Throw away' })) { w = newWizard({ level: w.level, name: w.name, exterior: w.exterior, origin: w.origin, start: w.start, heading: w.heading }); phase = 'setup'; store.set(null); render(); } };
   $('copy').onclick = async () => { try { await navigator.clipboard.writeText($('json').textContent); $('copy').textContent = 'Copied ✓'; } catch { $('json').focus(); $('copy').textContent = 'Select the text below and copy'; } };
   $('done').onclick = () => done(false);
   $('doneAnyway').onclick = () => done(true);
@@ -130,6 +135,7 @@ function loadSnaps() {
   const geos = new Map(model.levels.map(l => [l.id, buildLevelGeometry(l)]));
   snaps = lv ? collectSnapPointsAround(model, lv, l => geos.get(l.id)) : [];   // this level's points, then the level below's and above's
   underlay = lv ? adjacentOutlines(model, lv, l => geos.get(l.id)) : [];
+  wallOutlines = lv ? [...(geos.get(lv.id)?.pieces?.values() || [])].flat() : [];   // this level's walls, drawn very faintly on the map
   $('originRef').innerHTML = '<option value="">Plan origin (0, 0)</option>' + startOptions(snaps, nameOpts()).map(o => `<option value="${esc(o.ref)}">${esc(o.label)}</option>`).join('');
   $('originRef').value = w.origin.ref;
   $('ox').value = w.origin.offset[0] || ''; $('oy').value = w.origin.offset[1] || '';
@@ -263,28 +269,42 @@ function reachPoints() {
   return [...mine, ...startOptions(snaps, nameOpts()).map(o => ({ label: o.label, pos: o.pos }))];
 }
 
+/** The "take it from a point" list: the corners of this room and the house's points (they change as the room grows). */
+function fillReachPoints() {
+  $('reachPt').innerHTML = '<option value="">…or take it from a point</option>' + reachPoints().map((p, i) => `<option value="${i}">${esc(p.label)}</option>`).join('');
+}
+
+/** Run until: the wall is opened for a coordinate (the axis suggested for it); the length box is cleared. */
 function setReach(open) {
   reach = { ...reach, open, ok: false };
-  $('reachRow').hidden = !open;
-  $('reachBtn').textContent = open ? 'Type the length instead' : "Don't know the length? Run the wall until a coordinate…";
-  $('len').readOnly = open;
   $('len').value = '';
   if (open) {
     reach.axis = suggestAxis(currentHeading(w));
-    $('reachPt').innerHTML = '<option value="">…or take it from a point</option>' + reachPoints().map((p, i) => `<option value="${i}">${esc(p.label)}</option>`).join('');
+    fillReachPoints();
     $('reachVal').value = '';
   }
   updateReach();
 }
 
+/** Forget the coordinate (a new corner, the closing wall): the length box is cleared with it. */
+function clearReach() {
+  reach = { ...reach, open: true, ok: false, axis: suggestAxis(currentHeading(w)), axisChosen: false };
+  $('reachVal').value = ''; $('reachPt').value = ''; $('len').value = ''; $('reachOut').textContent = '';
+  fillReachPoints();
+  drawMap();
+}
+
 function updateReach() {
   $('reachRow').querySelectorAll('button[data-axis]').forEach(b => b.classList.toggle('on', b.dataset.axis === reach.axis));
   if (!reach.open) { reach.ok = false; drawMap(); return; }
-  const h = currentHeading(w), raw = $('reachVal').value.trim(), val = raw === '' ? NaN : Number(raw);
+  const h = currentHeading(w), raw = $('reachVal').value.trim(), val = raw === '' ? NaN : Number(raw), wasOk = reach.ok;
   $('reachHelp').textContent = `This wall runs at ${roundDeg(h)}° (plan), so it mostly advances in ${suggestAxis(h)}. Use this when you know where the wall ends (the same x or y as another corner) but not how long it is.`;
+  // nothing typed in the coordinate box: a coordinate that was there is gone (its length with it); a typed length stays
+  if (raw === '') { if (reach.ok) $('len').value = ''; reach.ok = false; $('reachOut').textContent = ''; $('err').textContent = ''; drawMap(); return; }
   const r = lengthToReach(w, reach.axis, val);
   reach.ok = !r.error; reach.value = r.value ?? 0; reach.target = val;
-  $('len').value = r.error ? '' : r.value;
+  if (!r.error) $('len').value = r.value;                                  // the length box shows the worked-out length only when the coordinate is valid
+  else if (wasOk) $('len').value = '';
   $('reachOut').innerHTML = r.error ? (raw === '' ? '' : `<span style="color:var(--bad)">${esc(r.error)}</span>`) : `The wall runs <b>${r.value} mm</b> until ${reach.axis} = ${val}. This length is worked out, not measured.`;
   $('err').textContent = '';
   drawMap();
@@ -310,12 +330,8 @@ function newLevel(first) {
       $('s-setup').hidden = false;
       model = r.model;
       if (!saveMode) { $('levelMsg').textContent = `Level "${r.level.name}" exists only on this page: this page cannot save. Create it in the editor too.`; resolve(r.level.id); return; }
-      try {
-        model = (await house.save(model)).value;
-        $('levelMsg').textContent = `Level "${r.level.name}" created and saved.`;
-      } catch (e) {
-        $('levelMsg').textContent = e.conflict ? 'The house was changed elsewhere meanwhile: reload this page and create the level again.' : `Level not saved: ${e.message}`;
-      }
+      unsaved = true; updateSaveRow();                       // not saved yet, like the rooms: Save the house writes it
+      $('levelMsg').textContent = `Level "${r.level.name}" created, not saved yet: press Save the house.`;
       resolve(r.level.id);
     },
   }));
@@ -326,48 +342,68 @@ async function done(force) {
   if (!result?.sol?.ok || result.added) return;
   if (result.overlaps?.length && !force) return;
   // the room and its walls (reconcile), checked; errors block saving, larger wall moves are confirmed
-  const prepare = () => {
+  const prepare = async () => {
     const r = addRoom(model, w.level, { name: w.name, exterior: w.exterior }, result.sol.polygon, result.capture, { settings: resolveSettings(loc, level()) });
     const errs = blockingErrors(r.report), lines = describeReconcile(r.report);
     if (errs.length) {
       $('doneOut').innerHTML = `<div class="iss error">Not saved: the house would have errors. Fix them in the editor first, or use <b>Copy</b> / <b>Download</b> below.<br>${errs.map(e => `<b>${esc(e.id)}</b> ${esc(e.msg)}`).join('<br>')}</div>`;
       return null;
     }
-    if (r.report.preview.length && !confirm(['Adding this room changes the plan:', ...lines, 'Add it?'].join('\n\n'))) return null;
+    if (r.report.preview.length && !(await askConfirm(['Adding this room changes the plan:', ...lines, 'Add it?'].join('\n\n'), { ok: 'Add it' }))) return null;
     return { ...r, lines };
   };
-  const first = prepare();
+  const first = await prepare();
   if (!first) return;
   let { model: next, room } = first;
   if (!saveMode) {
     $('doneOut').innerHTML = `<div class="iss">This page cannot write to your repo, so "${esc(room.name)}" is not in the house yet. Start the app with <b>run.cmd</b> to save from here, or use <b>Copy</b> / <b>Download</b> below and press <b>Import</b> in the editor.</div>`;
     return;
   }
-  $('done').disabled = true; $('doneOut').textContent = 'Saving…';
+  // unsaved, like Apply in the Editor: the room is in the house on this page; Save the house writes it
+  model = next; result.added = true; unsaved = true;
+  $('doneOut').innerHTML = `<div class="iss" style="border-color:var(--ok)">Added <b>${esc(room.name)}</b> (${esc(room.id)}) to the house with its walls, <b>not saved yet</b>. Press <b>Save the house</b> below; the Editor's Save stores it too.${first.lines.length ? '<br>' + first.lines.map(esc).join('<br>') : ''}<br>Walls marked as assumed still need their thickness measured.</div>`;
+  showResult();
+  updateSaveRow();
+}
+
+/** The "not saved yet" row: shown while the house has rooms or levels added on this page and not saved. */
+function updateSaveRow() {
+  const added = !!result?.added;
+  $('saveRow').hidden = !added;
+  $('saveHouse').hidden = !unsaved; $('saveHouse').disabled = false;
+  $('again').hidden = unsaved;                              // measuring another room waits until the house is saved
+  $('toEditor').hidden = !added;
+  $('toEditor').className = unsaved ? 'quiet' : 'primary';   // the yellow one once everything is saved
+  $('toEditor').onclick = () => { location.href = `room-editor.html?loc=${encodeURIComponent(locId)}&level=${encodeURIComponent(w.level)}`; };
+}
+
+/**
+ * Save the house with what this page added (the Editor's Save, for this page). Changes saved elsewhere are merged by
+ * id. On a real conflict the current house is loaded and the room is added to it again, checked as before.
+ */
+async function saveHouse() {
+  if (!unsaved || !saveMode) return;
+  $('saveHouse').disabled = true; $('saveHouseMsg').textContent = 'Saving…';
+  const addRoomNow = m => addRoom(m, w.level, { name: w.name, exterior: w.exterior }, result.sol.polygon, result.capture, { settings: resolveSettings(loc, level()) });
   try {
-    let next2 = next, added = room, lines = first.lines;
     try {
-      next2 = (await house.save(next)).value;          // changes saved elsewhere meanwhile are merged in (by id)
+      model = (await house.save(model)).value;
     } catch (e) {
       if (!e.conflict) throw e;
-      // a real conflict elsewhere (the same things changed): load the current house, check for
-      // overlaps again and add the room to that
       await house.load();
       model = house.model; loadSnaps();
-      result.overlaps = result.sol.ok ? overlapsAfterApply(model, w.level, { name: w.name, exterior: w.exterior, polygon: result.sol.polygon, capture: result.capture }, { settings: resolveSettings(loc, level()) }) : [];
-      if (result.overlaps.length && !force) { $('doneOut').textContent = 'The house changed since this page was opened; with the latest version this room overlaps.'; showResult(); drawMap(); return; }
-      const again = prepare();
-      if (!again) { $('done').disabled = false; return; }
-      ({ model: next2, room: added, lines } = again);
-      next2 = (await house.save(next2)).value;
+      const r = result.sol?.ok ? addRoomNow(model) : null;
+      const errs = r ? blockingErrors(r.report) : ['the room has no shape any more'];
+      if (errs.length) { $('saveHouseMsg').textContent = `Not saved: the house changed elsewhere and the room would now have errors (${errs.join('; ')}). Fix it in the editor.`; $('saveHouse').disabled = false; return; }
+      model = r.model;
+      model = (await house.save(model)).value;
     }
-    model = next2; result.added = true;
-    store.set(null);
-    $('doneOut').innerHTML = `<div class="iss" style="border-color:var(--ok)">Added <b>${esc(added.name)}</b> (${esc(added.id)}) to the house with its walls, and saved.${lines.length ? '<br>' + lines.map(esc).join('<br>') : ''}<br>Walls marked as assumed still need their thickness measured.</div>`;
-    showResult();
+    unsaved = false; store.set(null);
+    $('saveHouseMsg').textContent = 'Saved.';
+    updateSaveRow();
   } catch (e) {
-    $('done').disabled = false;
-    $('doneOut').innerHTML = `<div class="iss error">${esc(e.message)}</div>`;
+    $('saveHouse').disabled = false;
+    $('saveHouseMsg').textContent = `Not saved: ${e.message}`;
   }
 }
 
@@ -394,7 +430,7 @@ function addAlongside(c) {
 /** Offers to share a wall: the wall being measured ENDS next to another room's wall, or RUNS ALONGSIDE one. */
 function updateShare() {
   const card = $('shareCard');
-  const len = phase === 'measure' && !reach.open ? pending() : 0;
+  const len = phase === 'measure' ? pending() : 0;   // the length box holds the worked-out length too
   const pts = pathPoints(w), from = pts[pts.length - 1];
   // live hint: the corner would land inside another room or wall
   const hit = len > 0 ? pointCollisions(level(), buildLevelGeometry(level()), pathPoints(w, len).at(-1)) : [];
@@ -420,8 +456,7 @@ function updateShare() {
 }
 
 function step(turn) {
-  const derived = reach.open && reach.ok;
-  if (reach.open && !reach.ok) { $('err').textContent = 'Enter the coordinate the wall should reach first (or close that section and type the length).'; return; }
+  const derived = reach.ok;   // a valid coordinate (typed or picked) worked the length out; a typed length otherwise
   const r = derived ? { value: reach.value } : parseLength($('len').value);   // a derived length is already a number (never re-read as text)
   if (r.error) { $('err').textContent = r.error; $('len').focus(); return; }
   w = addEdge(w, r.value, turn, derived);
@@ -430,7 +465,7 @@ function step(turn) {
 }
 
 function closeRoom() {
-  if (reach.open) setReach(false);                                     // the closing wall is worked out anyway
+  if (reach.ok) clearReach();                                          // a coordinate for the closing wall is dropped: it is worked out anyway
   const typedText = $('len').value.trim();
   const r = typedText ? parseLength(typedText) : { value: null };      // empty = nothing measured: the way back is used
   if (r.error) { $('err').textContent = r.error; $('len').focus(); return; }
@@ -450,11 +485,13 @@ function review(capture, keep = {}) {
 
 function render() {
   for (const p of ['setup', 'measure', 'review']) $(`s-${p}`).hidden = phase !== p;
+  updateSaveRow();                                                                    // the row after Done: Save, then Measure another room, Close wizard
   if (phase !== 'measure') focusedStep = null;
   $('dirs').querySelectorAll('button').forEach(b => b.classList.toggle('on', HEADINGS[b.dataset.d] === w.heading));
   $('placeMode').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.m === 'wall') === !!w.nextTo));
   $('placePoint').hidden = !!w.nextTo; $('placeWall').hidden = !w.nextTo; $('dirBlock').hidden = !!w.nextTo;
   const startOk = updateStart();
+  if (reach.open) updateReach();                 // the run-until length depends on the start: follow it when the start or its offset moves
   $('begin').disabled = !startOk;
   const na = northAngleOf(model);
   $('headTxt').textContent = `First wall: plan heading ${roundDeg(w.heading)}° = compass bearing ${roundDeg(bearingFromHeading(w.heading, na))}° (plan north is ${na}° from true north${na ? '' : '; set it in the editor'}).`;
@@ -468,7 +505,8 @@ function render() {
     $('closeHint').hidden = n < 3;
     $('turnQ').textContent = `At corner ${i + 1}, does the wall continue…`;
     $('customRow').hidden = true;
-    setReach(false);
+    if (reachStep !== w.edges.length) { reachStep = w.edges.length; clearReach(); }   // a new corner: its wall's coordinate starts empty (not on every render)
+    if (!reach.axisChosen && suggestAxis(currentHeading(w)) !== reach.axis) { reach.axis = suggestAxis(currentHeading(w)); updateReach(); }   // the axis follows the wall's heading until x or y is picked
     const sh = w.edges.at(-1)?.sharedWith;
     $('shareNext').hidden = !sh;
     if (sh) {
@@ -519,7 +557,7 @@ function showResult() {
   $('toEditor').href = `room-editor.html?loc=${encodeURIComponent(locId)}&level=${encodeURIComponent(w.level)}`;
   $('done').textContent = result.added ? 'Added ✓' : 'Done';
   $('doneHelp').textContent = result.added ? '' : saveMode
-    ? `Adds "${w.name}" to ${level().name || level().id} and saves it (${house.where}).`
+    ? `Adds "${w.name}" to ${level().name || level().id} (${house.where}). It is not saved until you press Save the house, as in the editor.`
     : 'This page cannot write to your repo (start it with run.cmd, or use Chrome/Edge on the PC). Use Copy or Download, then Import in the editor.';
 }
 
@@ -552,6 +590,8 @@ function drawMap() {
     for (const p of u.walls) out += `<polygon points="${pts(p)}" fill="${c}" fill-opacity="0.08" stroke="${c}" stroke-opacity="0.45" stroke-width="${fs / 14}" pointer-events="none"/>`;
   }
   for (const r of existing) out += `<polygon points="${pts(r.polygon)}" fill="${r.exterior ? '#243026' : '#252a33'}" stroke="${clashing.has(r.id) ? '#e5534b' : '#46505f'}" stroke-width="${clashing.has(r.id) ? fs / 4 : fs / 8}"/>`;
+  // this level's walls, very faintly, so a wall's corners and faces are easy to see when a point is picked (run until x/y)
+  for (const p of wallOutlines) out += `<polygon points="${pts(p)}" fill="#9aa6b8" fill-opacity="0.14" stroke="#9aa6b8" stroke-opacity="0.3" stroke-width="${fs / 16}" pointer-events="none"/>`;
   // room names, so the rooms (and their walls) can be told apart
   for (const r of existing) {
     const lay = roomNameLayout(r.polygon, r.name || r.id, { maxSize: fs * 1.1, minSize: fs * 0.7 }), [cx, cy] = toSvg(lay.pos);
@@ -617,8 +657,15 @@ function drawMap() {
     if (closed ? false : i > w.edges.length + 1) return;
     out += cornerSvg(p, i, { fs, active: i === here, tag: i === here ? 'you are here' : '', toward: mine.length > 2 ? [2 * p[0] - mid[0], 2 * p[1] - mid[1]] : null });   // outside the room, clear of the wall labels
   });
+  // "run until x/y =" (fixes list 24): every point it can take is a tap target on the map, named when tapped
+  if (phase === 'measure' && reach.open) {
+    reachPoints().forEach((p, i) => {
+      const [px, py] = toSvg(p.pos);
+      out += `<g data-reachi="${i}" style="cursor:pointer"><title>${esc(p.label)}</title><circle cx="${px}" cy="${py}" r="${fs * 0.9}" fill="transparent"/><circle cx="${px}" cy="${py}" r="${fs * 0.3}" fill="#8b93a1" stroke="#14161a" stroke-width="${fs / 10}" pointer-events="none"/></g>`;
+    });
+  }
   // the point "run until x/y =" took its value from
-  const rp = phase === 'measure' && reach.open && $('reachPt').value !== '' ? reachPoints()[+$('reachPt').value] : null;
+  const rp =phase === 'measure' && reach.open && $('reachPt').value !== '' ? reachPoints()[+$('reachPt').value] : null;
   if (rp) { const [px, py] = toSvg(rp.pos); out += `<circle cx="${px}" cy="${py}" r="${fs * 0.7}" fill="none" stroke="#4cc38a" stroke-width="${fs / 5}" pointer-events="none"/>`; }
   const ang = phase === 'measure' ? typedAngle() : null;
   if (ang !== null && mine.length > 1 && pending() > 0) {
@@ -635,6 +682,7 @@ function drawMap() {
   svg.innerHTML = out;
   svg.querySelectorAll('[data-ref]').forEach(c => (c.onclick = () => { w.origin = { ref: c.dataset.ref, offset: [0, 0] }; loadSnaps(); save(); render(); }));
   svg.querySelectorAll('[data-edge]').forEach(l => (l.onclick = () => { const [room, edge] = l.dataset.edge.split('|'); pickEdge(room, Number(edge)); }));
+  svg.querySelectorAll('[data-reachi]').forEach(c => (c.onclick = () => { $('reachPt').value = c.dataset.reachi; $('reachPt').dispatchEvent(new Event('change')); }));
   const sameAs = $('sameAs').value && level()?.rooms ? model.levels.flatMap(l => l.rooms || []).find(r => r.id === $('sameAs').value) : null;
   $('hint').textContent = phase !== 'setup' ? '' : w.nextTo ? 'Tap the wall the new room shares with its neighbour (or pick it in the list below).'
     : sameAs ? `The shape of ${sameAs.name || sameAs.id}: its corner 0 goes where corner 0 is now${w.origin.ref === `${sameAs.id}#p0` && !w.origin.offset[0] && !w.origin.offset[1] ? ' (exactly over or under it)' : ''}. Tap another corner to move it, then Check the result.`

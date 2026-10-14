@@ -36,11 +36,12 @@
   [hidden]{display:none!important}
   pre{white-space:pre-wrap;word-break:break-all;background:#14161a;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:12px;max-height:160px;overflow:auto}
 </style>
+<script type="module" src="src/nav.js"></script>
 <script type="module" src="src/capture/wizard.js"></script>
 </head>
 <body>
 <div id="app">
-  <nav class="nav" aria-label="Pages"><a href="index.html" title="The plan with lights (2D / 3D)">Plan</a><a href="room-editor.html" title="Edit rooms, walls, openings and lamps (desktop)">Editor</a><a href="wizard.html" class="on" aria-current="page" title="Measure a room, wall by wall (phone)">Rooms</a><a href="openings.html" title="Doors, windows, switches and lamps (phone)">Doors &amp; lights</a><a href="storage.html" title="Where your houses are kept: folders, network shares, git">Storage</a></nav>
+  <nav class="nav" aria-label="Pages" data-page="wizard" data-base=""></nav>
   <div id="mapBox"><svg id="map"></svg><button id="zoomBtn" hidden></button></div>
   <div id="hint" class="help" style="margin:4px 2px"></div>
 
@@ -59,8 +60,9 @@
       <button data-m="point" class="on">At a point</button><button data-m="wall">Next to another room</button>
     </div>
     <div id="placePoint">
-      <label class="f">Start from <small>(tap a corner on the map, or pick a point)</small>
-        <select id="originRef" class="big" style="font-size:16px;padding:10px"></select></label>
+      <div class="f">Start from <small>(tap a corner on the map)</small></div>
+      <details class="pickList"><summary>or pick it from a list</summary>
+        <label class="f">Point <select id="originRef" class="big" style="font-size:16px;padding:10px"></select></label></details>
       <div class="two" style="margin:2px 0">
         <label class="f" style="margin:0">Offset x <small>mm, east</small><input id="ox" class="big" inputmode="numeric" placeholder="0" autocomplete="off" style="font-size:18px;padding:10px"></label>
         <label class="f" style="margin:0">Offset y <small>mm, north</small><input id="oy" class="big" inputmode="numeric" placeholder="0" autocomplete="off" style="font-size:18px;padding:10px"></label>
@@ -92,11 +94,12 @@
     <div class="walk" id="walkTip"></div>
     <div class="walk" id="shareNext" hidden></div>
     <input id="len" class="big" inputmode="decimal" autocomplete="off" placeholder="length, e.g. 4025 or 4.025 m">
-    <button id="reachBtn" class="quiet" style="width:100%;padding:8px;margin:2px 0">Don't know the length? Run the wall until a coordinate…</button>
-    <div id="reachRow" hidden>
+    <div id="reachRow">
       <div class="help" id="reachHelp"></div>
       <div class="two"><button data-axis="x" id="axX">until x =</button><button data-axis="y" id="axY">until y =</button></div>
-      <div class="two"><input id="reachVal" class="big" inputmode="numeric" placeholder="mm, e.g. 3000" autocomplete="off"><select id="reachPt" class="big" style="font-size:15px;padding:8px"></select></div>
+      <div class="two"><input id="reachVal" class="big" inputmode="numeric" placeholder="mm, e.g. 3000" autocomplete="off"></div>
+      <div class="help">or tap the point on the map (every point is marked while this is open)</div>
+      <details class="pickList"><summary>or pick it from a list</summary><select id="reachPt" class="big" style="font-size:15px;padding:8px"></select></details>
       <div class="help" id="reachOut"></div>
     </div>
     <div class="err" id="err"></div>
@@ -125,12 +128,12 @@
     <div id="lockOffers"></div>
     <button id="done" class="big go">Done</button>
     <button id="doneAnyway" class="quiet big" style="font-size:15px" hidden>Add anyway (it overlaps)</button>
-    <a id="toEditor" class="big go" href="room-editor.html" hidden>Back to the editor →</a>
     <div class="help" id="doneHelp"></div>
     <div id="doneOut"></div>
+    <div id="saveRow" class="two" hidden><button id="saveHouse" class="primary">Save the house</button><button id="again" class="quiet" hidden>Measure another room</button><button id="toEditor" class="quiet" hidden>Close wizard</button></div>
+    <div class="help" id="saveHouseMsg"></div>
     <div class="two"><button id="copy" class="quiet">Copy</button><button id="dl" class="quiet">Download</button></div>
     <pre id="json" hidden></pre>
-    <button id="again" class="quiet big" style="font-size:16px">Measure another room</button>
   </section>
 </div>
 </body>

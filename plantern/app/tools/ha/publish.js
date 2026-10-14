@@ -1,4 +1,4 @@
-// Publishes the Lovelace card from the add-on (docs/plans/ha-11-12.md S15): mirrors what the card needs to
+// Publishes the Lovelace card from the add-on (docs/archive/ha-11-12.md S15): mirrors what the card needs to
 // Home Assistant's /config/www/plantern/ (served as /local/plantern/, without login: the trade-off accepted
 // in the plan) and registers the card as a dashboard resource over the HA WebSocket API.
 //

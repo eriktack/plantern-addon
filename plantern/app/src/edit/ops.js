@@ -256,6 +256,9 @@ export function setWallProps(model, levelId, wallId, props, options = {}) {
   if ('thickness' in props && !(props.thickness >= 0)) return refuse(model, 'thickness must be 0 or more');
   const nw = { ...w };
   for (const k of keys) { if (props[k] === null) delete nw[k]; else nw[k] = props[k]; }
+  // a virtual boundary on a room edge turned into a wall: its face stays on the room edge and the thickness goes away
+  // from the room (PLANTERN §4), not centred on the line it was drawn on (fixes list 44)
+  if ('kind' in props && w.kind === 'virtual' && props.kind !== 'virtual' && w.from?.length && w.justify === 'center' && !('justify' in props)) nw.justify = 'left';
   // a hand-drawn wall moved by hand keeps hanging on its points: the offsets change, not the points
   if (nw.anchor && ('a' in props || 'b' in props) && !('anchor' in props)) {
     const g = buildLevelGeometry(lv), pts = new Map(collectSnapPoints(model, lv, g).map(s => [s.ref, s.pos])), r1 = v => Math.round(v * 10) / 10;
@@ -819,9 +822,14 @@ export function addObject(model, levelId, spec = {}, options = {}) {
   if (!lv) return refuse(model, `no level "${levelId}"`);
   const wall = !!spec.attach, d = wall ? OBJECT_DEFAULTS.wall : OBJECT_DEFAULTS.free;
   const used = new Set(model.levels.flatMap(l => (l.objects || []).map(o => o.id)));
-  const prefix = spec.asset ? `ob_${String(spec.asset).replace(/-/g, '_')}` : 'ob_box';
+  const made = spec.blueprint ?? spec.asset;        // what it is made of: a blueprint (params, partMaterials) or a model in assets/
+  const prefix = made ? `ob_${String(made).replace(/-/g, '_')}` : 'ob_box';
   let n = 1; while (used.has(`${prefix}_${n}`) || allIds(model).has(`${prefix}_${n}`)) n++;
-  const o = { id: `${prefix}_${n}`, kind: spec.asset ? 'asset' : 'box', ...(spec.asset ? { asset: String(spec.asset) } : {}), ...(spec.name ? { name: spec.name } : {}) };
+  const o = {
+    id: `${prefix}_${n}`, kind: made ? 'asset' : 'box', ...(spec.asset ? { asset: String(spec.asset) } : {}),
+    ...(spec.blueprint ? { blueprint: String(spec.blueprint), params: { ...spec.params }, ...(spec.partMaterials && Object.keys(spec.partMaterials).length ? { partMaterials: { ...spec.partMaterials } } : {}) } : {}),
+    ...(spec.name ? { name: spec.name } : {}),
+  };
   if (wall) o.attach = { side: 'right', offset: 0, ...spec.attach };
   else if (spec.pos) { o.pos = spec.pos.map(Number); o.rotationDeg = Number(spec.rotationDeg ?? 0); }
   o.size = (spec.size ?? d.size).map(Number);

@@ -4,15 +4,27 @@
 // broken stays a marked box. The loader is imported only when a model is first needed, so a page without assets
 // never loads it. Browser only; the pure rules are in src/model/assets.js.
 
-import { assetSources, ASSET_NAME } from '../model/assets.js';
+import { assetSources, ASSET_NAME, assetKey, blueprintRequest } from '../model/assets.js';
+import { glbStore } from './glb-store.js';
+
+// A store call that fails counts as no answer: the page then asks the server, as it did before the store existed.
+const settle = p => Promise.resolve(p).then(v => v, () => null);
 
 /**
  * houseBase: the URL of the house folder (with a trailing slash), or null; sharedBase: the URL of the folder with the
- * repo's assets/ ('' on the repo's own pages), or null. onChange(name, status) runs when a model has loaded or failed.
+ * repo's assets/ ('' on the repo's own pages), or null. onChange(key, status) runs when a model has loaded or failed.
+ * house and apiBase are for objects made from a blueprint: the server builds their model (POST api/glb, then GET api/glb/<hash>,
+ * docs/plans/object-templates.md T4); house is the house id (for its own blueprints), apiBase the path from the page to the app's root.
+ * store: the browser's own copy of those GLBs (glb-store.js; null for none). fetchImpl and parseImpl stand in for fetch and the
+ * GLB reader in tests.
  */
-export function createAssetCache({ houseBase = null, sharedBase = null, onChange = () => {} } = {}) {
+export function createAssetCache({
+  houseBase = null, sharedBase = null, house = null, apiBase = '', onChange = () => {},
+  store = glbStore(), fetchImpl = null, parseImpl = null,
+} = {}) {
   const entries = new Map();   // name -> { status, scene, meta, ready: Promise }
   let loader = null;
+  const doFetch = fetchImpl ?? ((...args) => fetch(...args));
 
   // meta.json beside the model: optional, and a file that is not JSON counts as none
   async function readMeta(modelUrl) {
@@ -31,6 +43,8 @@ export function createAssetCache({ houseBase = null, sharedBase = null, onChange
     }
     return new Promise((resolve, reject) => loader.parse(buffer, '', gltf => resolve(gltf.scene), reject));
   }
+
+  const readGlb = parseImpl ?? parse;
 
   /** Starts loading the model of `name` (once). The entry's `ready` resolves when its status is known. */
   function load(name) {
@@ -64,12 +78,82 @@ export function createAssetCache({ houseBase = null, sharedBase = null, onChange
     return entry;
   }
 
-  /** 'loading' | 'ok' | 'missing' | 'broken', or 'unknown' when the model has not been asked for yet. */
-  const status = name => entries.get(name)?.status ?? 'unknown';
-  /** The model's meta.json (its size in mm, its parts), once loaded; null when there is none. */
-  const meta = name => entries.get(name)?.meta ?? null;
+  /**
+   * Starts loading the model of an object made from a blueprint (once per blueprint and values). Three steps (decision 21, T8):
+   *  1. the copy this browser kept for these settings is shown at once, with no server needed;
+   *  2. the server is asked for the current hash (it changes with the code and the blueprint file), and the GLB is fetched and
+   *     kept when that hash is not the one shown;
+   *  3. with no server, the kept copy stays as it is; with neither, the object is 'missing' (a marked box). A blueprint the
+   *     server refuses (bad values, a failed build) is 'broken' whatever was kept, with the reason in error(key).
+   */
+  function loadObject(o) {
+    const key = assetKey(o);
+    if (entries.has(key)) return entries.get(key);
+    const entry = { status: 'loading', scene: null, meta: null, error: null, hash: null, ready: null };
+    entries.set(key, entry);
+    entry.ready = (async () => {
+      // 1. the kept copy
+      const kept = await settle(store?.getLink(key));
+      const keptBytes = kept ? await settle(store.getFile(kept.hash)) : null;
+      if (keptBytes) {
+        try {
+          entry.scene = await readGlb(keptBytes);
+          Object.assign(entry, { status: 'ok', hash: kept.hash, meta: { size: kept.size } });
+          onChange(key, 'ok');
+        } catch { /* a kept copy that cannot be read is not used: the server decides */ }
+      }
+      // 2. the server
+      try {
+        const res = await doFetch(`${apiBase}api/glb`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...(house ? { house } : {}), ...blueprintRequest(o) }) });
+        const answer = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          entry.error = answer.error || `the server answered ${res.status}`;
+          if (res.status === 400) { entry.status = 'broken'; entry.scene = null; }
+          else if (!entry.scene) entry.status = 'missing';
+        } else if (entry.scene && entry.hash === answer.hash) {
+          entry.meta = { size: answer.size };          // the copy shown is the current one
+          entry.error = null;
+        } else {
+          const file = await doFetch(`${apiBase}api/glb/${answer.hash}`);
+          if (!file.ok) {
+            entry.error = `the server answered ${file.status}`;
+            if (!entry.scene) entry.status = 'missing';
+          } else {
+            const bytes = await file.arrayBuffer();
+            try {
+              entry.scene = await readGlb(bytes);
+              Object.assign(entry, { status: 'ok', hash: answer.hash, meta: { size: answer.size }, error: null });
+              await settle(store?.putFile(answer.hash, bytes));
+              await settle(store?.putLink(key, answer.hash, answer.size));
+            } catch (e) {
+              entry.error = e.message;
+              entry.status = 'broken';
+              console.warn(`blueprint ${o.blueprint} could not be shown:`, e);
+            }
+          }
+        }
+      } catch (e) {
+        // no server: what was kept stays on screen; with nothing kept the object is a marked box
+        entry.error = entry.scene ? null : e.message;
+        if (!entry.scene) entry.status = 'missing';
+      }
+      onChange(key, entry.status);
+      return entry;
+    })();
+    return entry;
+  }
 
-  return { load, status, meta };
+  /** Starts the model of an asset object, whichever way it is made. */
+  const loadFor = o => (o.blueprint ? loadObject(o) : load(o.asset));
+
+  /** 'loading' | 'ok' | 'missing' | 'broken', or 'unknown' when the model has not been asked for yet. `key` is a model name or assetKey(object). */
+  const status = key => entries.get(key)?.status ?? 'unknown';
+  /** The model's meta.json (its size in mm, its parts), once loaded; for a blueprint object { size } as built. Null when there is none. */
+  const meta = key => entries.get(key)?.meta ?? null;
+  /** Why a blueprint object's model is missing or broken (the server's reason), or null. */
+  const error = key => entries.get(key)?.error ?? null;
+
+  return { load, loadObject, loadFor, status, meta, error };
 }
 
 /**

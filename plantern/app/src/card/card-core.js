@@ -1,4 +1,4 @@
-// The pure parts of the Lovelace card (docs/plans/ha-11-12.md S14): its config, where the files of a house
+// The pure parts of the Lovelace card (docs/archive/ha-11-12.md S14): its config, where the files of a house
 // are, and which level it opens on. No DOM, so Node tests cover them; the element is plantern-card.js.
 
 /** Where the add-on mirrors the houses (S15); the editor looks here for the list of houses. */

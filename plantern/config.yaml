@@ -1,5 +1,5 @@
 name: Plantern
-version: "0.1.9"
+version: "0.2.0"
 slug: plantern
 description: A floor plan of your house that glows with your Home Assistant lights
 url: https://github.com/eriktack/plantern-addon

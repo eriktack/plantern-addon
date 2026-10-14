@@ -1,4 +1,4 @@
-// Linking lamps and switches to Home Assistant (roadmap 11, docs/plans/ha-11-12.md S6). Pure: which
+// Linking lamps and switches to Home Assistant (roadmap 11, docs/archive/ha-11-12.md S6). Pure: which
 // entities fit a fixture (by kind and by how its name and room read against the entity's id and
 // friendly name), and the binding written into location.json → bindings.
 

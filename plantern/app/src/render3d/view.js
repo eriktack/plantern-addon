@@ -4,6 +4,7 @@ import { levelPrisms } from '../geometry/prisms.js';
 import { MM, toThree, dirToThree, prismGeometry, cylinderGeometry } from './coords.js';
 import { pointAlong, polylineLength } from '../geometry/strip.js';
 import { pickShadowLamps, SHADOW_COUNT } from '../model/shadows.js';
+import { DEFAULT_NIGHT_LIGHT } from '../model/night.js';
 import { assetPlacement } from '../model/assets.js';
 
 /**
@@ -43,6 +44,7 @@ export function createView3d(container, hooks = {}) {
   let settings = {};
   let transparent = false;   // setBackground: nothing behind the house (the page shows through), only its shadows on the ground
   let shadowBudget = SHADOW_COUNT.average;   // lamps that may cast shadows (setShadows)
+  let nightLight = DEFAULT_NIGHT_LIGHT;      // the ambient light with daylight off (setNightLight)
   let buildGen = 0;
 
   const render = () => renderer.render(scene, camera);
@@ -190,7 +192,7 @@ export function createView3d(container, hooks = {}) {
       const fp = geo.objectFootprint(o);
       if (!fp) return;
       const { centre, z, heading } = assetPlacement(o, fp);
-      const entry = assets.load(o.asset);
+      const entry = assets.loadFor(o);
       entry.ready.then(() => {
         if (gen !== buildGen) return;
         if (entry.scene) {
@@ -285,7 +287,18 @@ export function createView3d(container, hooks = {}) {
     const a = face?.wall && geo.resolveAttach(face);
     if (a) line = line.map(p => [p[0] + a.dir[0] * 12, p[1] + a.dir[1] * 12]);
     const z = geo.fixtureZ(fx) ?? 1400, meshes = [], halos = [];
-    for (let i = 1; i < line.length; i++) {
+    // a vertical strip (fixes list 48): one bar from its bottom z up its length, on the wall face
+    const vertical = fx.attach?.vertical === true && fx.attach?.wall !== undefined, H = vertical ? (fx.attach.length || 0) : 0;
+    if (vertical) {
+      const p = line[0];
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.02, H * MM, 0.02), new THREE.MeshStandardMaterial({ color: 0x444444, emissive: 0x000000 }));
+      m.position.set(...toThree(p, z + H / 2));
+      m.name = fx.id;
+      m.userData = { fixture: fx, label: fixtureLabel(fx) };
+      const h = new THREE.Mesh(new THREE.BoxGeometry(0.07, H * MM, 0.07), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+      h.position.copy(m.position); h.raycast = () => {};
+      g.add(m, h); pickables.push(m); meshes.push(m); halos.push(h);
+    } else for (let i = 1; i < line.length; i++) {
       const a = line[i - 1], b = line[i], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
       if (!(len > 0)) continue;
       const m = new THREE.Mesh(new THREE.BoxGeometry(len * MM, 0.02, 0.02), new THREE.MeshStandardMaterial({ color: 0x444444, emissive: 0x000000 }));
@@ -300,7 +313,7 @@ export function createView3d(container, hooks = {}) {
     }
     const lights = [0, 0.5, 1].map(t => {
       const L = new THREE.PointLight(0xffffff, 0, (fx.radius || 1200) * MM * 1.8, 2);
-      L.position.set(...toThree(pointAlong(line, polylineLength(line) * t), z));
+      L.position.set(...toThree(pointAlong(line, polylineLength(line) * t), vertical ? z + H * t : z));
       L.name = `${fx.id}:light`;
       g.add(L);
       return L;
@@ -359,9 +372,16 @@ export function createView3d(container, hooks = {}) {
     render();
   }
 
+  /** The light the house has at night (daylight off), 0 to 1 (night.js): the slider in the viewer. */
+  function setNightLight(v) {
+    nightLight = v;
+    if (!daylight) hemi.intensity = v;
+    render();
+  }
+
   function setDaylight(on) {
     daylight = on;
-    hemi.intensity = on ? 1.1 : 0.3;
+    hemi.intensity = on ? 1.1 : nightLight;
     sun.intensity = on ? 2.2 : 0;
     scene.background = transparent ? null : new THREE.Color(on ? 0xb9cde0 : 0x14161a);
     render();
@@ -407,5 +427,5 @@ export function createView3d(container, hooks = {}) {
   });
 
   setDaylight(false);
-  return { build, setFixture, setShadows, setDaylight, setBackground, setProjection, resetView, getCamera, setCamera, render, root, isDaylight: () => daylight };
+  return { build, setFixture, setShadows, setNightLight, setDaylight, setBackground, setProjection, resetView, getCamera, setCamera, render, root, isDaylight: () => daylight };
 }

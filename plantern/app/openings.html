@@ -33,11 +33,12 @@
   .list button{display:block;width:100%;text-align:left;padding:12px;margin:6px 0;border-radius:10px;font-size:16px}
   [hidden]{display:none!important}
 </style>
+<script type="module" src="src/nav.js"></script>
 <script type="module" src="src/capture/openings-wizard.js"></script>
 </head>
 <body>
 <div id="app">
-  <nav class="nav" aria-label="Pages"><a href="index.html" title="The plan with lights (2D / 3D)">Plan</a><a href="room-editor.html" title="Edit rooms, walls, openings and lamps (desktop)">Editor</a><a href="wizard.html" title="Measure a room, wall by wall (phone)">Rooms</a><a href="openings.html" class="on" aria-current="page" title="Doors, windows, switches and lamps (phone)">Doors &amp; lights</a><a href="storage.html" title="Where your houses are kept: folders, network shares, git">Storage</a></nav>
+  <nav class="nav" aria-label="Pages" data-page="openings" data-base=""></nav>
   <div id="mapBox"><svg id="map"></svg></div>
   <div id="hint" class="help" style="margin:4px 2px"></div>
   <h1>Doors, windows &amp; lights</h1>

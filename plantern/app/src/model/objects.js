@@ -6,11 +6,16 @@
 //                                                                       w along the direction rotationDeg (0 = east)
 // kind "asset" (decision 145) is the same placement with a model: asset: "table" names assets/table/model.glb, which
 // is drawn in place of the box (a marker when it is missing). Its size is the model's size (see src/model/assets.js).
+// An asset may instead be made from a blueprint (decisions 23, 24, 29): blueprint: "dining-table" with params (the
+// values chosen) and partMaterials (a material per part); `asset` is then optional. The blueprint's rules are checked
+// only when the caller passes the blueprints (a Map of id to meta, from src/blueprints/load.js).
 // `z` is the bottom above the floor (a wall cabinet at 1400, furniture on the floor at 0). The plan draws objects
 // whose bottom is above the cut plane dashed. Pure.
 
 import { pointInPolygon } from '../geometry/polygon.js';
 import { ASSET_NAME } from './assets.js';
+import { resolveParams } from '../../object-designs/lib/params.js';
+import { materialOptions, materialAllowed } from '../blueprints/options.js';
 
 export const OBJECT_KINDS = ['box', 'asset'];
 export const OBJECT_DEFAULTS = Object.freeze({
@@ -19,12 +24,69 @@ export const OBJECT_DEFAULTS = Object.freeze({
 });
 const HEX = /^#[0-9a-f]{6}$/i;
 
-/** Problems with an object: { errors, warnings }. `level` is the level it stands on. */
-export function checkObject(o, level) {
+const isPlainObject = v => v && typeof v === 'object' && !Array.isArray(v);
+
+// The shape of the blueprint keys, checked without the blueprints.
+function blueprintShapeProblems(o) {
+  const out = [];
+  if (o.blueprint !== undefined) {
+    if (o.kind !== 'asset') out.push('only an asset object has a blueprint');
+    if (typeof o.blueprint !== 'string' || !ASSET_NAME.test(o.blueprint)) out.push('blueprint must be the id of a blueprint (lower-case letters, digits and -)');
+  } else {
+    if (o.params !== undefined) out.push('params needs a blueprint');
+    if (o.partMaterials !== undefined) out.push('partMaterials needs a blueprint');
+  }
+  if (o.params !== undefined && !isPlainObject(o.params)) out.push('params must be an object of parameter values');
+  if (o.partMaterials !== undefined) {
+    if (!isPlainObject(o.partMaterials)) out.push('partMaterials must be an object of part key to material');
+    else for (const [k, v] of Object.entries(o.partMaterials)) {
+      if (typeof v !== 'string' || !v.trim()) out.push(`partMaterials.${k} must be a material name or #rrggbb`);
+    }
+  }
+  return out;
+}
+
+// The values of a blueprint object against its blueprint: the parameters with the library's own rules (type, range,
+// option, unknown key), the whole-object material and each part's material against its options.
+function blueprintValueProblems(meta, o) {
+  let values;
+  try { values = resolveParams(meta, o.params ?? {}); }
+  catch (e) { return [`blueprint ${o.blueprint}: ${e.message}`]; }
+  const out = [];
+  for (const d of meta.params.filter(d => d.type === 'material')) {
+    const v = values[d.key].trim();
+    if (!materialAllowed(v, Array.isArray(d.options) ? d.options : null)) {
+      out.push(`${d.label} "${v}" is not one of ${d.options.filter(x => x !== 'custom').join(', ')}${d.options.includes('custom') ? ' or #rrggbb' : ''}`);
+    }
+  }
+  const parts = new Map(meta.parts.map(p => [p.key, p]));
+  for (const [k, v] of Object.entries(o.partMaterials ?? {})) {
+    const part = parts.get(k);
+    if (!part) { out.push(`partMaterials: the blueprint has no part "${k}"`); continue; }
+    if (typeof v !== 'string') continue;   // reported by blueprintShapeProblems()
+    const options = materialOptions(meta, part.key);
+    if (!materialAllowed(v.trim(), options)) {
+      out.push(`${part.label} material "${v}" is not one of ${options.filter(x => x !== 'custom').join(', ')}${options.includes('custom') ? ' or #rrggbb' : ''}`);
+    }
+  }
+  return out;
+}
+
+/**
+ * Problems with an object: { errors, warnings }. `level` is the level it stands on. `blueprints` is optional: a Map of
+ * blueprint id to its meta. Without it the blueprint's own rules are not checked (only the shape of its keys).
+ */
+export function checkObject(o, level, blueprints) {
   const errors = [], warnings = [];
   if (!OBJECT_KINDS.includes(o.kind)) errors.push(`kind must be ${OBJECT_KINDS.join(' or ')}`);
-  if (o.kind === 'asset' && !ASSET_NAME.test(o.asset ?? '')) errors.push('an asset object needs asset: the name of its model folder in assets/ (lower-case letters, digits and -)');
+  if (o.kind === 'asset' && o.blueprint === undefined && !ASSET_NAME.test(o.asset ?? '')) errors.push('an asset object needs asset (the name of its model folder in assets/, lower-case letters, digits and -) or blueprint (a blueprint id)');
   if (o.kind !== 'asset' && o.asset !== undefined) errors.push('only an asset object has an asset (kind "asset")');
+  errors.push(...blueprintShapeProblems(o));
+  if (blueprints && typeof o.blueprint === 'string' && ASSET_NAME.test(o.blueprint)) {
+    const meta = blueprints.get(o.blueprint);
+    if (!meta) warnings.push(`blueprint "${o.blueprint}" is not in this house or the built-in library (shown as a marker)`);
+    else if (isPlainObject(o.params ?? {}) && (o.partMaterials === undefined || isPlainObject(o.partMaterials))) errors.push(...blueprintValueProblems(meta, o));
+  }
   if (!Array.isArray(o.size) || o.size.length !== 3 || !o.size.every(v => Number.isFinite(v) && v > 0)) errors.push('size must be [width, depth, height] in mm, all more than 0');
   if (!Number.isFinite(o.z) || o.z < 0) errors.push('z (the bottom above the floor) must be 0 or more');
   if (o.color !== undefined && !HEX.test(o.color)) errors.push('color must look like #rrggbb');
