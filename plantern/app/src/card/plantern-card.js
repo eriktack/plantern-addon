@@ -156,8 +156,8 @@ class PlanternCard extends HTMLElement {
     let view3d = null;
     // asset models of the house (its own assets/ folder; the card has no shared one), decision 146
     const assets = createAssetCache({ houseBase: baseUrl, sharedBase: null, onChange: () => renderPlans() });
-    for (const lv of model.levels) for (const o of lv.objects || []) if (o.kind === 'asset') assets.load(o.asset);
-    const looks = { materials: model.materials || {}, baseUrl, assets, assetStatus: n => assets.status(n) };
+    for (const lv of model.levels) for (const o of lv.objects || []) if (o.kind === 'asset' && !o.blueprint) assets.load(o.asset);   // an object made from a blueprint needs Plantern's server, which the card does not reach
+    const looks = { materials: model.materials || {}, baseUrl, assets, assetStatus: n => assets.status(n), assetColour: n => assets.mainColour(n) };
     const refresh = () => shown().forEach(l => l.fixtures?.forEach(fx => {
       const a = fixtureAppearance(bindings, getState, fx);
       this._plans.find(p => p.level === l)?.view.setFixture(fx.id, a);

@@ -80,3 +80,25 @@ export function idFromName(model, oldId, name) {
   for (let n = 2; used.has(id) && id !== oldId; n++) id = `${base}_${n}`;
   return id;
 }
+
+/**
+ * The link of a fixture that is renamed moves with it (location.json → bindings, which are not in the model). Returns
+ * { location, moved, conflict? }: when the new id already has a link, nothing changes and `conflict` holds both links, until
+ * the choice is given: `resolve: 'use-old'` puts the renamed fixture's link in place of the existing one, `'keep-existing'`
+ * drops the renamed fixture's link. The key keeps its place in the file.
+ */
+export function renameBinding(location, oldId, newId, { resolve = null } = {}) {
+  const bindings = location.bindings || {};
+  if (!(oldId in bindings)) return { location, moved: false };
+  const old = bindings[oldId];
+  const existing = bindings[newId];
+  if (existing !== undefined && resolve === null) return { location, moved: false, conflict: { old, existing } };
+  const winner = existing === undefined || resolve === 'use-old' ? old : existing;
+  const out = {};
+  for (const [k, v] of Object.entries(bindings)) {
+    if (k === newId) continue;                      // placed where the old key was, below
+    if (k === oldId) out[newId] = winner;
+    else out[k] = v;
+  }
+  return { location: { ...location, bindings: out }, moved: true };
+}

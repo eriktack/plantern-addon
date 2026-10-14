@@ -97,10 +97,41 @@ export function shapeDraftFrom(model, coll, srcId, targetLevelId) {
   return { kind: 'room', name, exterior: !!src.exterior, floor: src.floor, floorOffset: src.floorOffset, ceilingHeight: src.ceilingHeight, capture, placed, from: from.id };
 }
 
-/** An object's sizes and look (not where it is). */
+/**
+ * What an object is (not where it is): its sizes, and its look. A plain box keeps its colour; an asset object keeps its model, and
+ * a blueprint object its blueprint with the options and part materials it was made with (its look comes from those, not a colour).
+ */
 export const objectSpecFrom = o => ({
-  size: [...o.size], z: o.z, ...(o.color ? { color: o.color } : {}), assumed: [...(o.assumed || [])],
+  size: [...o.size], z: o.z, assumed: [...(o.assumed || [])],
+  ...(o.kind !== 'asset' && o.color ? { color: o.color } : {}),
+  ...(o.asset ? { asset: o.asset } : {}),
+  ...(o.blueprint ? {
+    blueprint: o.blueprint, params: structuredClone(o.params ?? {}),
+    ...(o.partMaterials && Object.keys(o.partMaterials).length ? { partMaterials: structuredClone(o.partMaterials) } : {}),
+  } : {}),
 });
+
+/** Whether `dst` can take the look of `src` with *Copy from…*: a box from a box, a model from the same model, a blueprint object from one of the same blueprint. */
+export function canCopyObject(src, dst) {
+  if (!src || !dst || src.id === dst.id) return false;
+  if (src.blueprint || dst.blueprint) return src.blueprint === dst.blueprint;
+  if (src.asset || dst.asset) return src.asset === dst.asset;
+  return true;
+}
+
+/**
+ * What *Copy from…* sets on `dst` (for setObject; it stays where it is), or null when the two cannot be copied (canCopyObject).
+ * A box takes size, height and colour; a model its size and height; a blueprint object its options, part materials and size
+ * (so it is the same thing, not just the same outer box). A field the source does not have is removed from the target.
+ */
+export function objectCopyProps(src, dst) {
+  if (!canCopyObject(src, dst)) return null;
+  const common = { size: [...src.size], assumed: [...(src.assumed || [])] };
+  if (src.blueprint) {
+    return { ...common, params: structuredClone(src.params ?? {}), partMaterials: src.partMaterials && Object.keys(src.partMaterials).length ? structuredClone(src.partMaterials) : null };
+  }
+  return { ...common, z: src.z, ...(src.asset ? {} : { color: src.color ?? null }) };
+}
 
 /** An opening's kind and sizes (not the wall or the position along it). */
 export function openingSpecFrom(o) {

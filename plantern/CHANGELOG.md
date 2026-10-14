@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0
+
+- **Add menu in the Editor.** One *Add ▾* replaces the rows of buttons: in the house view (room, wall, stairs, solid, ceiling lamp, a box, and every blueprint of the library and your house), and in the wall, room and opening panels (door, window, passage, switch, lamps, LED strip, objects on that wall). An entry that cannot be used says why. *Import* is gone: the phone saves rooms into the house itself.
+- **Place and change blueprints in the Editor.** Pick a blueprint from the Add menu and it stands in the middle of the selected room (or on the selected wall) with its default options. The object panel has the options form: change the shape, sizes and materials of each part there; the object is built again and takes the new size. Undo works as for anything else in the Editor.
+- **Type a size, change the option.** On a blueprint object, typing a width, depth or height changes the option that sets it (a round table is as long as it is wide); values outside the option's range are refused with the range. Plantern checks the size of an object against a fresh build, with *Check the build*.
+- **Copies keep the whole object.** *Duplicate* and *Copy from…* used to turn a blueprint object into a plain box. They now keep its blueprint, options and part materials, and *Copy from…* only offers objects it can copy.
+- **Colours of objects.** An object made from a model or blueprint has no colour box; in the plan its footprint is the colour of its main part (the top of a table).
+- **Fix:** renaming a lamp or switch in the Editor now moves its Home Assistant link in `location.json` too.
+- **Old example model removed.** The shared example table in `assets/` is gone; the demo has the dining table blueprint.
+- The same menu component and icons are used by the page menu.
+
 ## 0.2.0
 
 - **Objects made from blueprints.** An object can now be a parametric model (a dining table in five shapes, for example) with its own sizes and materials. Open the Objects page from the page menu, pick a blueprint, set its options and *Place in house*; change the options of a placed object later as one undo step.

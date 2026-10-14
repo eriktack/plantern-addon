@@ -103,6 +103,47 @@ function checkVariantDefaults(meta, problems) {
   }
 }
 
+// Which parameter sets an outer dimension (`meta.sizeParams`, docs/plans/object-templates.md): { x?, y?, z? }, each a parameter
+// key (a number or integer parameter whose value IS the dimension in mm), or { <variant>: key | null, default?: key | null }
+// when a shape sets it with another parameter (a round table's width is its length too). An axis that is not named, or that is
+// null for the variant, is set by the build only. The Editor uses it to turn a typed size into options.
+const AXES = ['x', 'y', 'z'];
+const SIZE_TYPES = new Set(['number', 'integer']);
+
+function checkSizeParams(meta, problems) {
+  const sp = meta.sizeParams;
+  if (sp === undefined) return;
+  if (!sp || typeof sp !== 'object' || Array.isArray(sp)) { problems.push('meta.sizeParams must be an object of axis (x, y, z) to parameter'); return; }
+  const byKey = new Map((meta.params || []).filter(Boolean).map(d => [d.key, d]));
+  const variant = (meta.params || []).find(d => d?.key === 'variant');
+  const key = (v, where) => {
+    const d = byKey.get(v);
+    if (typeof v !== 'string' || !d) problems.push(`${where}: "${v}" is not a parameter`);
+    else if (!SIZE_TYPES.has(typeOf(d))) problems.push(`${where}: "${v}" must be a number or integer parameter (its value is the size in mm)`);
+  };
+  for (const [axis, spec] of Object.entries(sp)) {
+    const where = `sizeParams.${axis}`;
+    if (!AXES.includes(axis)) { problems.push(`${where}: the axes are x, y and z`); continue; }
+    if (typeof spec === 'string') { key(spec, where); continue; }
+    if (!spec || typeof spec !== 'object' || Array.isArray(spec)) { problems.push(`${where} must be a parameter key, or an object of variant to parameter key`); continue; }
+    for (const [name, v] of Object.entries(spec)) {
+      if (name !== 'default' && !(Array.isArray(variant?.options) && variant.options.includes(name))) { problems.push(`${where}: "${name}" is not a variant`); continue; }
+      if (v !== null) key(v, `${where}.${name}`);
+    }
+  }
+}
+
+/**
+ * The parameter key that sets the dimension of `axis` ('x', 'y' or 'z') for a shape (the value of the `variant` parameter, if any),
+ * or null when the build sets it. Assumes a meta that checkMeta accepts.
+ */
+export function sizeParamFor(meta, axis, variant) {
+  const spec = meta.sizeParams?.[axis];
+  if (typeof spec === 'string') return spec;
+  if (!spec) return null;
+  return (variant !== undefined && Object.hasOwn(spec, variant) ? spec[variant] : spec.default) ?? null;
+}
+
 /** Lists problems with a model's meta. An empty list means the descriptor is usable. */
 export function checkMeta(meta) {
   const problems = [];
@@ -125,6 +166,7 @@ export function checkMeta(meta) {
   const variant = (meta.params || []).find(d => d?.key === 'variant');
   if (variant && variant.type !== 'enum') problems.push('param "variant" must be of type enum');
   checkVariantDefaults(meta, problems);
+  checkSizeParams(meta, problems);
 
   const partKeys = new Set();
   for (const p of meta.parts || []) {

@@ -77,3 +77,26 @@ export function builtSizeWarning(o, built) {
   if (!built.some((v, k) => Math.abs(v - o.size[k]) > SIZE_TOLERANCE)) return null;
   return `size ${o.size.join(' × ')} mm differs from what blueprint "${o.blueprint}" builds with these options (${built.join(' × ')} mm)`;
 }
+
+/**
+ * The size of a blueprint object against a fresh build with its options (`built`, [x, y, z] mm, from the server): null when
+ * there is no build to compare with, { matches: true } when the stored size is the build's, else { matches: false, reason }.
+ * The reason does not claim more than the data says: the object does not record how its size was set, so a size that
+ * differs may be one set by hand, or a build that changed since the object was made (the blueprint or the library).
+ */
+export function builtSizeStatus(o, built) {
+  if (!Array.isArray(built)) return null;
+  if (!builtSizeWarning(o, built)) return { matches: true, built };
+  return { matches: false, built, reason: 'The size differs from the build with these options: it was set by hand, or the blueprint or the library changed since the object was made.' };
+}
+
+/**
+ * The main colour of a model, for its footprint in the plan: the colour of the part that shows most from above (its area seen from
+ * above, `weight`), so a table is the colour of its top and not of its legs, whose box is as large. `parts` is [{ weight, colour }]
+ * with colour '#rrggbb'; a part with no colour is skipped; none at all gives null. Ties go to the first.
+ */
+export function mainColourOf(parts) {
+  let best = null;
+  for (const p of parts) if (p.colour && (!best || p.weight > best.weight)) best = p;
+  return best ? best.colour : null;
+}

@@ -93,13 +93,8 @@
   <div id="browse">
   <p class="help">Click something in the plan or the list to select it; double-click it, press Enter or use ✎ to edit it. Esc lets go.</p>
 
-  <h2>House <span><button id="importBtn" title="Paste a room measured with the phone wizard">Import</button> <button id="newSolid" title="A solid: chimney, pillar, boxed-in pipe (a lintel or a wall inside a room: + Wall). Measured like a room; its sides bound the rooms around it, walls can give way to it">+ Solid</button> <button id="newObject" title="A box: furniture, a cabinet. Drag it on the plan to place it (a wall object slides along its wall)">+ Object</button> <select id="assetPick" title="A model from assets/ (made with object-designs, or copied into this house's assets/)" aria-label="Model"></select> <button id="newAsset" title="Place the chosen model (a red marker if it is not found). Its size is the model's; drag it where it belongs">+ Asset</button> <button id="newStairs" title="Stairs from this level up to the next: where they start, how wide, how many risers; the opening in the floor above follows">+ Stairs</button> <button id="newWall" title="Draw a wall by hand: a room divider, a half wall, a wall beside stairs, a lintel. Click its start and its end on the plan">+ Wall</button> <button id="newRoom" title="Measure a new room">+ Room</button></span></h2>
+  <h2>House <span id="addHouse" class="inline"></span></h2>
   <div id="tree" class="tree"></div>
-  <div id="importBox" hidden>
-    <textarea id="importText" rows="4" spellcheck="false" placeholder="Paste the JSON from the wizard"></textarea>
-    <div class="row btns"><button id="importUse">Use</button></div>
-    <div id="importErr" class="err" style="color:var(--bad);font-size:12px"></div>
-  </div>
 
   <details class="sect" open><summary>Still to measure <span id="todoCount"></span></summary>
   <div id="todo"></div>
@@ -261,7 +256,7 @@
       <button class="moved" id="apply" disabled>Apply to room</button>
       <button id="fromPoly" title="Fill in lengths and corners from the current polygon (not measurements!)">From polygon</button>
       <button class="moved" id="delRoom" title="Remove this room, its measurements and the walls only it uses" hidden>Delete room</button>
-      <button id="addCeilingLamp" hidden title="A lamp on the ceiling, in the middle of the room to start with">+ Ceiling lamp</button>
+      <span id="addRoom" class="inline" hidden></span>
       <span id="copyTo"></span>
     </div>
   </section>
@@ -325,15 +320,7 @@
       <div id="wRoomLooks"></div>
     </div>
     <div id="wOpenings" class="help"></div>
-    <div class="row btns">
-      <button id="wAddDoor" title="Add a door to this wall (defaults until measured)">+ Door</button>
-      <button id="wAddWindow">+ Window</button>
-      <button id="wAddPassage" title="An opening without a door">+ Passage</button>
-      <button id="wAddSwitch">+ Switch</button>
-      <button id="wAddWallLamp">+ Wall lamp</button>
-      <button id="wAddStrip" title="An LED strip along this wall: under a cabinet, behind a TV">+ LED strip</button>
-      <button id="wAddObject" title="A box on this wall: a wall cabinet, a shelf">+ Wall object</button>
-    </div>
+    <div class="row btns"><span id="wAdd" class="inline"></span></div>
     <div class="grid2">
       <label>Split at <small id="wSplitNote">mm from the start</small><input id="wSplitAt" inputmode="numeric" autocomplete="off"></label>
       <div><button id="wSplit" title="Two walls, each with its own thickness, kind and colours (e.g. a closet front next to a chimney)">Split wall here</button></div>
@@ -387,8 +374,7 @@
     <div class="row btns">
       <button class="moved" id="oApply">Apply opening changes</button>
       <button class="moved" id="oDelete">Delete opening</button>
-      <button id="oAddLamp" title="A lamp that stands in this opening, e.g. a window star or a lamp on the sill">+ Lamp in it</button>
-      <button id="oAddStrip" title="An LED strip along this window or door (its sill or its top): it follows it">+ LED strip</button>
+      <span id="oAdd" class="inline"></span>
       <button id="oBack">← its wall</button>
     </div>
   </section>
@@ -441,10 +427,16 @@
     <h2>Object <span id="obTitle"></span></h2>
     <div id="obInfo" class="help"></div>
     <div id="obBlueprint" class="help" hidden></div>
+    <details class="sect" id="obOptionsBox" open hidden>
+      <summary>Options <span class="help">· what it is built from</span></summary>
+      <div id="obOptionsSummary" class="psummary inline" role="alert" hidden></div>
+      <div id="obOptions" class="pform"></div>
+      <div id="obOptionsNote" class="help"></div>
+    </details>
     <label>Copy from <small>size, height and colour of another object (stays where it is)</small><select id="obCopy" class="copyFrom"></select></label>
     <div class="grid2">
       <label>Name<input id="obName" autocomplete="off"></label>
-      <label>Colour<input type="color" id="obColor"></label>
+      <label id="obColorRow">Colour<input type="color" id="obColor"></label>
       <label id="obAssetRow">Model <small>a folder in assets/ (empty: a box)</small><input id="obAsset" list="assetNames" autocomplete="off" placeholder="none: a box"></label>
       <div id="obAssetNote" class="help"></div>
       <datalist id="assetNames"></datalist>
