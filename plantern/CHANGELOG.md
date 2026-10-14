@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+- Fix: 0.4.0 did not start: the library files of the server (`tools/library/` and the shared checks) were missing from the add-on. They are included now, and a test checks that every file the server loads is in the add-on.
+
 ## 0.4.0
 
 - **Colour bar on material choices.** Each material choice shows a wide bar in the colour that applies, with its name: the default, the whole object's material for a part, or the choice made. Part bars follow the whole object.
