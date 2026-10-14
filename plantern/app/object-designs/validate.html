@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Validate a model</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; background: #1d2026; color: #d9dde4; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p { color: #8b93a1; font-size: 13px; margin: 4px 0 12px; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 320px; background: #14161a; color: #d9dde4; border: 1px solid #3a404b; border-radius: 6px; padding: 8px; font: 12px/1.4 ui-monospace, Consolas, monospace; }
+  button { background: #ffb454; color: #14161a; border: 0; border-radius: 6px; padding: 8px 16px; font-weight: 600; cursor: pointer; margin-top: 10px; }
+  button:disabled { opacity: .5; }
+  #result { margin-top: 16px; font-size: 14px; }
+  .ok { color: #4cc38a; font-weight: 600; }
+  .fail { color: #e5534b; font-weight: 600; }
+  .err { color: #e5534b; }
+  .warn { color: #e5a93a; }
+  .note { color: #8b93a1; }
+  li { margin: 3px 0; }
+  ul { padding-left: 20px; margin: 6px 0; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three/three.module.js", "three/addons/": "../vendor/three/addons/" } }
+</script>
+<script src="vendor/jscad/jscad-modeling.min.js"></script>
+</head>
+<body>
+<h1>Brief for an external agent</h1>
+<p>Pick an item. Its brief is joined with the shared instructions into one text, ready to copy.</p>
+<select id="item" style="background:#14161a;color:#d9dde4;border:1px solid #3a404b;border-radius:6px;padding:6px;min-width:260px"></select>
+<textarea id="brief" readonly style="margin-top:10px;min-height:220px"></textarea>
+<div><button id="copy">Copy</button> <span id="copied" class="note"></span></div>
+
+<h1 style="margin-top:28px">Validate a model</h1>
+<p>Paste the whole model file (the JavaScript that exports <code>meta</code> and <code>build</code>), then press Check. It runs the same checks as <code>tools/check-model.js</code>. Nothing is saved.</p>
+<textarea id="src" spellcheck="false" placeholder="// paste the model file here"></textarea>
+<div><button id="check">Check</button></div>
+<div id="result"></div>
+<div style="margin-top:10px"><button id="save" disabled>Save to library</button> <span id="saved" class="note"></span></div>
+
+<h2 style="font-size:15px;margin:22px 0 6px">Preview</h2>
+<div id="variantRow" hidden style="margin-bottom:8px">Variant <select id="variant" style="background:#14161a;color:#d9dde4;border:1px solid #3a404b;border-radius:6px;padding:4px"></select></div>
+<div id="pv" style="position:relative;height:380px;border-radius:8px;overflow:hidden;background:#1d2026"></div>
+<div id="pvInfo" class="note" style="margin-top:6px;font-size:12px"></div>
+
+<script type="module">
+import { checkModule } from './tools/check-core.js';
+import { buildModel } from './lib/build.js';
+import { defaultsFor } from './lib/params.js';
+import { createPreview } from './preview.js';
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+// The shared material library and the texture files it names, read once.
+const library = await (await fetch('materials/library.json')).json();
+const textures = new Map();
+for (const entry of Object.values(library)) {
+  const path = entry?.texture;
+  if (!path || textures.has(path)) continue;
+  const res = await fetch(path).catch(() => null);
+  if (res?.ok) textures.set(path, { bytes: new Uint8Array(await res.arrayBuffer()), mime: /\.png$/i.test(path) ? 'image/png' : 'image/jpeg' });
+}
+
+// The pasted file is loaded from a blob address, which cannot resolve '../lib/jscad.js'. Its one allowed import
+// is pointed at the real file, so the model runs exactly as it does in the designs folder.
+const jscadUrl = new URL('lib/jscad.js', location.href).href;
+function guessName(source) {
+  const m = source.match(/export\s+const\s+meta\s*=\s*\{[\s\S]*?\bid:\s*['"]([^'"]+)['"]/);
+  return m ? `${m[1]}.js` : 'pasted-model.js';
+}
+async function loadPasted(source) {
+  const rewritten = source.split("'../lib/jscad.js'").join(`'${jscadUrl}'`).split('"../lib/jscad.js"').join(`"${jscadUrl}"`);
+  const url = URL.createObjectURL(new Blob([rewritten], { type: 'text/javascript' }));
+  try { return await import(url); } finally { URL.revokeObjectURL(url); }
+}
+
+function show(r) {
+  $('save').disabled = r.errors.length > 0;
+  const ok = r.errors.length === 0;
+  const list = (items, cls) => items.length ? `<ul>${items.map(i => `<li class="${cls}">${esc(i)}</li>`).join('')}</ul>` : '';
+  $('result').innerHTML = `
+    <div class="${ok ? 'ok' : 'fail'}">${ok ? 'OK' : 'FAILED'}: ${esc(r.id)}${r.warnings.length ? ` (${r.warnings.length} warning${r.warnings.length > 1 ? 's' : ''})` : ''}</div>
+    ${list(r.notes, 'note')}${list(r.errors.map(e => 'error: ' + e), 'err')}${list(r.warnings.map(w => 'warning: ' + w), 'warn')}`;
+}
+
+// The brief: the shared instructions (written once) with the chosen item's part at their marker.
+const BRIEFS = '../docs/handoffs/object-library/';
+const ITEM_MARK = '<<ITEM>>';
+const items = await (await fetch(BRIEFS + 'index.json')).json();
+for (const it of items) {
+  const o = document.createElement('option');
+  o.value = it.file;
+  o.textContent = `${it.n}. ${it.name}`;
+  $('item').append(o);
+}
+async function showBrief() {
+  const shared = await (await fetch(BRIEFS + '_instructions.md')).text();
+  const part = await (await fetch(BRIEFS + $('item').value)).text();
+  $('brief').value = shared.replace(ITEM_MARK, part.trim());
+  $('copied').textContent = '';
+}
+$('item').addEventListener('change', showBrief);
+$('copy').addEventListener('click', async () => {
+  $('brief').select();
+  try { await navigator.clipboard.writeText($('brief').value); $('copied').textContent = 'Copied.'; }
+  catch { document.execCommand('copy'); $('copied').textContent = 'Copied (selected text).'; }
+});
+if (items.length) showBrief();
+
+// The schemas (suggestedschemas.md, in mm): a model is compared with its item, and every difference is a warning.
+const schemas = new Map();
+for (const block of (await (await fetch('suggestedschemas.md')).text()).matchAll(/```json\n([\s\S]*?)```/g)) {
+  for (const g of JSON.parse(block[1]).generators || []) schemas.set(g.id, g);
+}
+function schemaDiffs(model) {
+  const id = String(model.meta?.id ?? '').replace(/-/g, '_');
+  const s = schemas.get(id);
+  if (!s) return [`schema: no schema for "${id}" in suggestedschemas.md (only queue items have one; a built item is not listed)`];
+  const out = [];
+  const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const mine = new Map((model.meta.params ?? []).map(d => [d.key, d]));
+  for (const row of s.parameters) {
+    const d = mine.get(row.key);
+    if (!d) { out.push(`schema: parameter "${row.key}" is missing`); continue; }
+    if ((d.type ?? 'number') !== row.type) out.push(`schema: "${row.key}" is ${row.type} in the schema, ${d.type ?? 'number'} in the model`);
+    for (const f of ['default', 'min', 'max', 'options']) {
+      const want = f === 'default' ? row.default : row[f], got = f === 'default' ? d.default : d[f];
+      if (!same(want, got)) out.push(`schema: "${row.key}" ${f} is ${JSON.stringify(got)}, the schema says ${JSON.stringify(want)}`);
+    }
+  }
+  const want = new Set(s.parameters.map(r => r.key));
+  for (const d of model.meta.params ?? []) if (!want.has(d.key) && d.key !== 'lightHeight') out.push(`schema: parameter "${d.key}" is not in the schema`);
+  const vdm = model.meta.variantDefaults ?? {}, vds = s.variant_defaults ?? {};
+  for (const v of new Set([...Object.keys(vdm), ...Object.keys(vds)])) {
+    if (!same(vds[v], vdm[v])) out.push(`schema: variant "${v}" defaults are ${JSON.stringify(vdm[v] ?? {})}, the schema says ${JSON.stringify(vds[v] ?? {})}`);
+  }
+  const mp = (model.meta.parts ?? []).map(p => p.key), sp = (s.parts ?? []).map(p => p[0]);
+  if (!same(mp, sp)) out.push(`schema: parts are ${mp.join(', ')}, the schema says ${sp.join(', ')}`);
+  if (!same(model.meta.placement, s.placement)) out.push(`schema: placement is ${JSON.stringify(model.meta.placement ?? null)}, the schema says ${JSON.stringify(s.placement ?? null)}`);
+  return out;
+}
+let lastSource = '';
+
+// The preview: the pasted model built with the chosen variant's values (defaults of the table when there is none).
+const pv = createPreview($('pv'), () => textures);
+let loaded = null;
+function variantInput() {
+  return defaultsFor(loaded.meta, $('variant').value || undefined);
+}
+function buildPreview() {
+  if (!loaded) return;
+  try {
+    const built = buildModel(loaded, variantInput(), library, { textures });
+    pv.show(built.parts.map(p => ({ mesh: p.mesh, material: built.resolved[p.key] })));
+    $('pvInfo').textContent = built.parts.map(p => `${p.label}: ${p.triangles} triangles, ${p.material}`).join(' · ');
+  } catch (e) {
+    pv.clear();
+    $('pvInfo').textContent = `Cannot build: ${e.message}`;
+  }
+}
+function previewModel(model) {
+  loaded = model;
+  const variant = model.meta?.params?.find(d => d.key === 'variant');
+  $('variantRow').hidden = !variant;
+  $('variant').innerHTML = variant ? variant.options.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('') : '';
+  if (variant) $('variant').value = variant.default;
+  buildPreview();
+}
+$('variant').addEventListener('change', buildPreview);
+
+// Save to library: the server checks the file again and refuses an id that is already there (decision 68).
+$('save').addEventListener('click', async () => {
+  $('save').disabled = true;
+  $('saved').textContent = 'Saving…';
+  const res = await fetch('../api/library/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: lastSource }) });
+  const j = await res.json().catch(() => ({}));
+  if (res.ok) $('saved').textContent = `Saved as object-designs/models/${j.file}. It is listed in the catalog.`;
+  else { $('saved').textContent = `Not saved: ${j.error ?? res.status}`; $('save').disabled = false; }
+});
+
+$('check').addEventListener('click', async () => {
+  const source = $('src').value;
+  if (!source.trim()) { $('result').innerHTML = '<div class="fail">Paste a model first.</div>'; return; }
+  $('check').disabled = true;
+  $('result').innerHTML = '<div class="note">Checking…</div>';
+  const fileName = guessName(source);
+  let model;
+  try {
+    model = await loadPasted(source);
+  } catch (e) {
+    loaded = null;
+    pv.clear();
+    $('pvInfo').textContent = '';
+    $('result').innerHTML = `<div class="fail">FAILED: ${esc(fileName)}</div><ul><li class="err">error: does not load: ${esc(e.message)}</li></ul>`;
+    $('check').disabled = false;
+    return;
+  }
+  previewModel(model);
+  try {
+    lastSource = source;
+    const r = checkModule({ fileName, source, model, library, textures });
+    show({ ...r, warnings: [...r.warnings, ...schemaDiffs(model)] });
+  } catch (e) {
+    $('result').innerHTML = `<div class="fail">FAILED: ${esc(fileName)}</div><ul><li class="err">error: the check stopped: ${esc(e.message)}</li></ul>`;
+  } finally {
+    $('check').disabled = false;
+  }
+});
+</script>
+</body>
+</html>
