@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3
+
+- Fix: 0.4.1 still did not start. The library route's checks (in `object-designs/tools/`) were not picked up by the add-on snapshot, because the snapshot scan did not reach that folder. They are included now, and a test checks what the snapshot really takes.
+
 ## 0.4.1
 
 - Fix: 0.4.0 did not start: the library files of the server (`tools/library/` and the shared checks) were missing from the add-on. They are included now, and a test checks that every file the server loads is in the add-on.
