@@ -89,6 +89,25 @@ export function wallJoins(walls, level = {}) {
   const hAt = (w, s) => { const h = prof.get(w.id).at(s); return [h.base, h.top]; };
   const sAt = (w, p) => dot(sub(p, w.a), frames.get(w.id).u);
   const caps = new Map(), issues = [];
+  // A parallel wall whose body carries on from this end: the same two face lines, its body starting where this
+  // one's ends, and of the same height there. Its reference line may be this wall's other face (a shared wall
+  // that carries on past one room's corner along the other room only).
+  const bodyContinues = (w, end) => {
+    const f = frames.get(w.id), p = w[end], mine = hAt(w, end === 'a' ? 0 : f.L), faces = [f.offL, -f.offR].sort((x, y) => x - y);
+    return solid.some(o => {
+      if (o === w) return false;
+      const g = frames.get(o.id);
+      if (Math.abs(cross(f.u, g.u)) > 1e-6) return false;
+      const sg = dot(g.n, f.n) > 0 ? 1 : -1, m0 = dot(sub(o.a, w.a), f.n);
+      const of = [m0 + sg * g.offL, m0 - sg * g.offR].sort((x, y) => x - y);
+      if (Math.abs(of[0] - faces[0]) > TOL || Math.abs(of[1] - faces[1]) > TOL) return false;
+      const t = [dot(sub(o.a, w.a), f.u), dot(sub(o.b, w.a), f.u)];
+      const starts = end === 'a' ? t.some(x => Math.abs(x) <= TOL) && Math.min(...t) < -TOL : t.some(x => Math.abs(x - f.L) <= TOL) && Math.max(...t) > f.L + TOL;
+      if (!starts) return false;
+      const h = hAt(o, sAt(o, p));
+      return Math.abs(h[0] - mine[0]) <= 1 && Math.abs(h[1] - mine[1]) <= 1;
+    });
+  };
   for (const w of solid) {
     const f = frames.get(w.id);
     const cap = { a: { left: 0, right: 0 }, b: { left: f.L, right: f.L } };
@@ -103,8 +122,10 @@ export function wallJoins(walls, level = {}) {
       // (only a continuation of the same height there: a lintel carrying on the line overhead is not one)
       const sameThere = o => { const h = hAt(o, sAt(o, p)); return Math.abs(h[0] - mine[0]) <= 1 && Math.abs(h[1] - mine[1]) <= 1; };
       const continues = solid.some(o => o !== w && Math.abs(cross(f.u, frames.get(o.id).u)) <= 1e-6 && (dist(o.a, p) <= TOL || dist(o.b, p) <= TOL) && sameThere(o));
-      if (continues) continue;
-      if (coincident.length === 1) {
+      if (continues || bodyContinues(w, end)) continue;
+      // the one wall ending here carries straight on (by its body): this end butts against it, below
+      const carriedOn = o => bodyContinues(o, dist(o.a, p) <= TOL ? 'a' : 'b');
+      if (coincident.length === 1 && !carriedOn(coincident[0])) {
         const o = coincident[0], g = frames.get(o.id), oStartsHere = dist(o.a, p) <= TOL;
         const chained = (end === 'b') === oStartsHere;
         for (const side of ['left', 'right']) {
@@ -121,17 +142,19 @@ export function wallJoins(walls, level = {}) {
         issues.push({ severity: 'warn', id: w.id, msg: `${coincident.length + 1} walls meet at end ${end} (${coincident.map(o => o.id).join(', ')}); join not resolved, square end used` });
         continue;
       }
-      const host = crossing.filter(o => { const h = hAt(o, sAt(o, p)); return h[0] <= mine[0] + 1 && h[1] >= mine[1] - 1; }).find(o => {
+      const hosts = crossing.filter(o => { const h = hAt(o, sAt(o, p)); return h[0] <= mine[0] + 1 && h[1] >= mine[1] - 1; }).filter(o => {
         const g = frames.get(o.id), q = sub(p, o.a), t = dot(q, g.u), m = dot(q, g.n);
         return t >= -TOL && t <= g.L + TOL && m >= -g.offR - TOL && m <= g.offL + TOL;
       });
-      if (host) {
+      // the end may lie on two bodies (a shared wall and its thicker continuation): it stops at the one that
+      // reaches furthest into it, so it overlaps neither, whatever order the walls come in
+      hosts.forEach((host, k) => {
         const g = frames.get(host.id), hside = dot(uIn, g.n) > 0 ? 'left' : 'right';
         for (const side of ['left', 'right']) {
           const s = intersectS(w, f, side, host, g, hside);
-          if (s !== null) cap[end][side] = s;
+          if (s !== null && (k === 0 || (end === 'a' ? s > cap[end][side] : s < cap[end][side]))) cap[end][side] = s;
         }
-      }
+      });
     }
     caps.set(w.id, cap);
   }

@@ -1,5 +1,5 @@
-// The form controls for a blueprint's parameters (docs/plans/object-templates.md, task 9; first built for the catalog,
-// docs/plans/object-catalog-ux.md). Browser only. Each control is a field: a frame (the name and unit above, the control,
+// The form controls for a blueprint's parameters (docs/archive/2026-10-14-object-templates.md, task 9; first built for the catalog,
+// docs/archive/2026-10-14-object-catalog-ux.md). Browser only. Each control is a field: a frame (the name and unit above, the control,
 // its own message under it, a hint) around one input, with the same small interface:
 //   { wrap, label, key, read(), set(value), check() → message | null, showError(text), focus() }
 // A control calls `onChange()` after every change; it never reads the page. The look is in src/styles.css under .pform.
@@ -199,13 +199,20 @@ export function selectField(d, value, onChange) {
   };
 }
 
+/** Text colour that reads on a background colour (#rrggbb): dark on light, light on dark. */
+function inkOn(hex) {
+  const n = parseInt(hex.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#14161a' : '#f5f5f5';
+}
+
 /**
- * A material: a select of names with a swatch, and a colour box for a custom #rrggbb. `library` is { name: { color, … } }
- * (it also gives the swatches). Without `options` the whole library is offered; with them (a blueprint limits the choice,
- * decision 26) only those names, and "Custom colour…" only when the list has `custom`. `whole` is the whole object's
- * material (empty means its default, `fallback`); otherwise it is a part (empty means the whole object's material).
+ * A material: a select of the names (every library name, or only the `options` of the blueprint, and "Custom colour…" when
+ * they allow `custom`), a colour box for #rrggbb, and a bar under them in the colour that applies, with its name. The bar shows
+ * the default for the whole object (`fallback`), the whole object's material for a part that has no choice of its own
+ * (`inherit()`, a function returning the value the whole object has), or the choice made here.
+ * `effective()` is the value that applies here; `paint()` redraws the bar (the form calls it when the whole object changes).
  */
-export function materialField(spec, { library = {}, options = null, hint, whole, fallback, onChange }) {
+export function materialField(spec, { library = {}, options = null, hint, whole, fallback, inherit = null, onChange }) {
   const names = options ? options.filter(o => o !== 'custom') : Object.keys(library).sort();
   const allowCustom = options ? options.includes('custom') : true;
   const select = document.createElement('select');
@@ -232,17 +239,27 @@ export function materialField(spec, { library = {}, options = null, hint, whole,
   colour.hidden = true;
   colour.setAttribute('aria-label', `${spec.label}: custom colour`);
 
-  const swatch = document.createElement('span');
-  swatch.className = 'swatch';
-
   const row = document.createElement('div');
   row.className = 'mat';
-  row.append(select, colour, swatch);
+  row.append(select, colour);
+
+  const bar = document.createElement('div');
+  bar.className = 'matbar';
+  bar.setAttribute('aria-live', 'polite');
+
+  const control = document.createElement('div');
+  control.append(row, bar);
 
   const read = () => (select.value === 'custom' ? colour.value : select.value);
+  // the value that applies: this field's choice, else the whole object's (a part), else the default
+  const effective = () => read() || (inherit ? inherit() : (whole ? fallback : '')) || '';
   const paint = () => {
-    const v = read();
-    swatch.style.background = library[v]?.color ?? (HEX.test(v) ? v : 'transparent');
+    const choice = read(), v = effective(), entry = library[v];
+    const hex = entry?.color ?? (HEX.test(v) ? v : null);
+    bar.style.background = hex ?? '#2a2f38';
+    bar.style.color = hex ? inkOn(hex) : '#d9dde4';
+    const label = !v ? 'none' : choice ? v : inherit ? `Same as the whole object: ${v}` : `Default: ${v}`;
+    bar.textContent = entry?.texture ? `${label} · texture` : label;
   };
   select.addEventListener('change', () => {
     colour.hidden = select.value !== 'custom';
@@ -254,11 +271,12 @@ export function materialField(spec, { library = {}, options = null, hint, whole,
     onChange();
   });
 
-  const field = makeField(spec, row, { hint });
+  const field = makeField(spec, control, { hint });
   return {
     ...field,
     key: spec.key,
     read,
+    effective,
     set(v) {
       if (v && [...select.options].some(o => o.value === v && v !== 'custom')) {
         select.value = v;

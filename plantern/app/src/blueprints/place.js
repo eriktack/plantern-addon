@@ -1,8 +1,37 @@
-// Placing a blueprint into a house (docs/plans/object-templates.md, T6): what the Objects page offers for a level and
+// Placing a blueprint into a house (docs/archive/2026-10-14-object-templates.md, T6): what the Objects page offers for a level and
 // what it hands to addObject() / setObject(). Pure.
 
 import { labelPoint } from '../geometry/polygon.js';
 import { displayName } from '../model/names.js';
+import { wallInfo } from '../edit/inspect.js';
+import { placementOf } from '../../object-designs/lib/params.js';
+
+/**
+ * Where a new object of a blueprint starts (decision 65, the blueprint's meta.placement, for the chosen variant):
+ * { mount, z }. A ceiling item's z puts its top at the ceiling of `room` (its own ceiling height, else the level's),
+ * from the built height size[2].
+ */
+export function startPlacement(meta, size, level, room, params = {}) {
+  const pl = placementOf(meta, params.variant);
+  if (pl.mount !== 'ceiling') return pl;
+  const ceiling = room?.ceilingHeight ?? level?.ceilingHeight ?? 2400;
+  return { mount: 'ceiling', z: Math.max(0, Math.round(ceiling - (size?.[2] ?? 0))) };
+}
+
+/**
+ * The wall a wall item starts on when it is added from a room: the longest wall face that looks into the room, with the
+ * object in the middle of it. Returns { kind: 'wall', wall, side, offset } or null when the room has no such wall.
+ */
+export function wallInRoom(level, roomId, width = 0) {
+  let best = null;
+  for (const w of level.walls || []) {
+    if (w.kind === 'virtual') continue;
+    const info = wallInfo(level, w.id);
+    const side = info?.sides.right.includes(roomId) ? 'right' : info?.sides.left.includes(roomId) ? 'left' : null;
+    if (side && (!best || info.length > best.length)) best = { wall: w.id, side, length: info.length };
+  }
+  return best && { kind: 'wall', wall: best.wall, side: best.side, offset: Math.max(0, Math.round((best.length - width) / 2)) };
+}
 
 /** Map of blueprint id to meta, for checkObject() and validateModel() (decision 24), from the list the server answers. */
 export function blueprintMap(list) {

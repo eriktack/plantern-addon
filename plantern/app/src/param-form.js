@@ -1,4 +1,4 @@
-// The form of one blueprint (docs/plans/object-templates.md, task 9): a field for every parameter of its meta, a material
+// The form of one blueprint (docs/archive/2026-10-14-object-templates.md, task 9): a field for every parameter of its meta, a material
 // for the whole object, one per part, each checked as it changes with its own message, and a summary of what needs a fix.
 // Shared by the catalog (object-designs/catalog.js) and the Objects page. Browser only; the controls are in src/controls.js.
 //
@@ -78,6 +78,8 @@ export function createParamForm({ container, summary, library = {}, onValid = ()
   // Called after every change: checks the fields, then reports when they are all valid.
   function update() {
     fieldProblems = checkFields();
+    // a part without its own choice shows the whole object's material: its bar follows the whole object
+    for (const [k, f] of fields) if (k.startsWith('part:')) f.paint?.();
     clearTimeout(timer);
     if (fieldProblems.length) {
       buildError = null;
@@ -126,12 +128,13 @@ export function createParamForm({ container, summary, library = {}, onValid = ()
         fields.set(d.key, f);
         container.append(f.wrap);
       }
+      const wholeKey = meta.params.find(d => d.type === 'material')?.key;
       const parts = document.createElement('fieldset');
       const legend = document.createElement('legend');
       legend.textContent = 'Per part (same as the whole object = the whole-object material)';
       parts.append(legend);
       for (const p of meta.parts) {
-        const f = materialField({ key: `part:${p.key}`, label: p.label }, { library: names, options: materialOptions(meta, p.key), whole: false, hint: null, onChange: update });
+        const f = materialField({ key: `part:${p.key}`, label: p.label }, { library: names, options: materialOptions(meta, p.key), whole: false, hint: null, onChange: update, inherit: () => fields.get(wholeKey)?.effective() ?? '' });
         f.set(partMaterials?.[p.key] ?? '');
         fields.set(`part:${p.key}`, f);
         parts.append(f.wrap);

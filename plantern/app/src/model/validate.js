@@ -5,7 +5,8 @@ import { sub, dot, cross, TOL } from '../geometry/vec.js';
 import { isClockwise, convexPenetration, polygonsOverlap, pointInPolygon } from '../geometry/polygon.js';
 import { solveCapture } from '../capture/solve.js';
 import { facePoint, wallProfile, hasBody } from '../geometry/walls.js';
-import { boundEdges } from '../geometry/bound.js';
+import { boundEdges, edgeOfRef } from '../geometry/bound.js';
+import { PAIR_ANGLE, MAX_SHARED_GAP } from '../capture/walls.js';
 import { solidCover } from '../geometry/solids.js';
 import { wallFaceRooms } from '../geometry/paint.js';
 import { collectSnapPoints, collectSnapPointsAround } from '../tools/snap.js';
@@ -98,6 +99,34 @@ function checkBound(w, rooms, out) {
   if (along.some(e => off(first, e.p) > FACADE_TOL || off(first, e.q) > FACADE_TOL)) return bad();
   const ends = along.flatMap(e => [t(e.p), t(e.q)]);
   if (Math.min(t(w.a), t(w.b)) < Math.min(...ends) - TOL || Math.max(t(w.a), t(w.b)) > Math.max(...ends) + TOL) bad();
+}
+
+/**
+ * Why two overlapping walls bound to rooms did not become one shared wall, when it is the angle: an edge of
+ * each (its own, or the next one round its room: the overlap is often at the corner wall beside the slanted
+ * edge) faces the other within MAX_SHARED_GAP but more than PAIR_ANGLE (and at most 10°) off parallel, a room
+ * that does not close square. Returns { kind: 'not-parallel', edges: [refA, refB], angle } or null.
+ */
+function notParallelCause(a, b, roomsById) {
+  const near = w => [...new Set(w.from.flatMap(ref => {
+    const m = /^(.+)#e(\d+)$/.exec(ref), n = m && roomsById.get(m[1])?.polygon.length;
+    return n ? [ref, `${m[1]}#e${(+m[2] + 1) % n}`, `${m[1]}#e${(+m[2] + n - 1) % n}`] : [];
+  }))];
+  for (const ra of near(a)) for (const rb of near(b)) {
+    const A = edgeOfRef(ra, roomsById), B = edgeOfRef(rb, roomsById);
+    if (!A || !B || A.room === B.room || dot(A.u, B.u) >= 0) continue;          // facing edges run opposite ways
+    const angle = Math.acos(Math.min(1, Math.abs(dot(A.u, B.u)))) * 180 / Math.PI;
+    if (angle <= PAIR_ANGLE || angle > 10) continue;
+    const t0 = dot(sub(B.p, A.p), A.u), t1 = dot(sub(B.q, A.p), A.u);
+    const lo = Math.max(0, Math.min(t0, t1)), hi = Math.min(A.L, Math.max(t0, t1));
+    if (hi - lo < 100) continue;
+    // the gap (B on A's wall side, its left) at the middle of the overlap
+    const tm = (lo + hi) / 2, k = (tm - t0) / (t1 - t0), mid = [B.p[0] + (B.q[0] - B.p[0]) * k, B.p[1] + (B.q[1] - B.p[1]) * k];
+    const gap = cross(A.u, sub(mid, A.p));
+    if (gap < -0.5 || gap > MAX_SHARED_GAP) continue;
+    return { kind: 'not-parallel', edges: [ra, rb], angle: Math.round(angle * 10) / 10 };
+  }
+  return null;
 }
 
 /** Validate one level using its derived geometry (from buildLevelGeometry). */
@@ -223,11 +252,17 @@ export function validateLevel(level, geo, below = true, checks = [], blueprints)
   }
   // Overlapping wall volumes (z-fighting): pieces of different walls that intersect in plan and in height.
   const solid = (level.walls || []).filter(hasBody);
+  const roomsById = new Map((level.rooms || []).filter(r => r.polygon?.length >= 3).map(r => [r.id, r]));
   for (let i = 0; i < solid.length; i++) for (let j = i + 1; j < solid.length; j++) {
     const a = solid[i], b = solid[j], pa = wallProfile(a, level), pb = wallProfile(b, level);
     if (Math.min(pa.top, pb.top) - Math.max(pa.base, pb.base) <= TOL) continue;
     const hit = geo.pieces.get(a.id).some(p => geo.pieces.get(b.id).some(q => convexPenetration(p, q) > TOL));
-    if (hit) out.push({ severity: 'warn', id: a.id, msg: `wall volume overlaps ${b.id}` });
+    if (!hit) continue;
+    const cause = a.from?.length && b.from?.length ? notParallelCause(a, b, roomsById) : null;
+    const why = !a.from?.length || !b.from?.length ? ''
+      : cause ? `: room edges ${cause.edges[0]} and ${cause.edges[1]} face each other but are ${cause.angle}° off parallel, so they did not become one shared wall; check their measurements, or lock them to an axis`
+      : ': both follow room edges, so neither can be cut; check the rooms';
+    out.push({ severity: 'warn', id: a.id, pair: [a.id, b.id], ...(cause ? { cause } : {}), msg: `wall volume overlaps ${b.id}${why}` });
   }
   return out;
 }

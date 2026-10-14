@@ -3,12 +3,10 @@
 // (textures included) and downloads the glTF or GLB. Only wiring: the geometry, parameters and glTF come from lib/.
 // The preview is built from the same meshes that go into the file, through the same axis mapping.
 // Each field is checked as it changes and shows its own message; the preview waits for a short pause
-// and builds only what it shows. glTF and GLB are built when the person downloads (docs/plans/object-catalog-ux.md).
+// and builds only what it shows. glTF and GLB are built when the person downloads (docs/archive/2026-10-14-object-catalog-ux.md).
 
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { createPreview } from './preview.js';
 import { buildModel } from './lib/build.js';
-import { toGltfPoint, toGltfNormal } from './lib/gltf-lib.js';
 import { resolveParams } from './lib/params.js';
 import { resolvePartMaterials } from './lib/materials.js';
 import { geomToMesh, addPlanarUvs, triangleCount } from './lib/geom.js';
@@ -48,102 +46,10 @@ async function loadLibrary() {
 
 /* ---------- 2. The 3D preview ---------- */
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(window.devicePixelRatio);
-$('view').appendChild(renderer.domElement);
-
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1d2026);
-const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 100);
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-
-scene.add(new THREE.HemisphereLight(0xffffff, 0x444466, 1.6));
-const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-sun.position.set(3, 5, 4);
-scene.add(sun);
-const grid = new THREE.GridHelper(4, 40, 0x3a404b, 0x2a2f38);
-scene.add(grid);
-
-let shown = null;
-
-// Renders on demand only: after a change, a camera move or a resize (the damping of the orbit
-// controls keeps it going while the camera is still moving). Never in a loop.
-let renderQueued = false;
-function requestRender() {
-  if (renderQueued) return;
-  renderQueued = true;
-  requestAnimationFrame(() => {
-    renderQueued = false;
-    controls.update();
-    renderer.render(scene, camera);
-  });
-}
-controls.addEventListener('change', requestRender);
-
-function resize() {
-  const w = $('view').clientWidth, h = $('view').clientHeight;
-  renderer.setSize(w, h);
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-  requestRender();
-}
-window.addEventListener('resize', resize);
-resize();
-
-// Textures as three.js textures, made once per file. glTF UVs start at the image's top left, so
-// flipY is off, as three's own glTF loader does.
-const textureCache = new Map();
-function threeTexture(path) {
-  if (!textureCache.has(path)) {
-    const { bytes, mime } = textures.get(path);
-    const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
-    const tex = new THREE.TextureLoader().load(url, () => { URL.revokeObjectURL(url); requestRender(); });
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.flipY = false;
-    textureCache.set(path, tex);
-  }
-  return textureCache.get(path);
-}
-
-// Puts the built parts into the scene, in metres, y up, and frames the camera on them.
-function showParts(parts) {
-  if (shown) {
-    scene.remove(shown);
-    shown.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); });
-  }
-  shown = new THREE.Group();
-  for (const part of parts) {
-    const { mesh, material } = part;
-    const pos = [], nrm = [], uv = [];
-    for (const k of mesh.idx) {
-      pos.push(...toGltfPoint(mesh.pos[k]));
-      nrm.push(...toGltfNormal(mesh.nrm[k]));
-      if (mesh.uv) uv.push(...mesh.uv[k]);
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-    if (mesh.uv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    const mat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color().setRGB(material.color[0], material.color[1], material.color[2], THREE.LinearSRGBColorSpace),
-      roughness: material.roughness ?? 0.7,
-      metalness: material.metallic ?? 0,
-      ...(material.texture && { map: threeTexture(material.texture.path) }),
-    });
-    shown.add(new THREE.Mesh(geo, mat));
-  }
-  scene.add(shown);
-
-  const box = new THREE.Box3().setFromObject(shown);
-  const center = box.getCenter(new THREE.Vector3());
-  const size = box.getSize(new THREE.Vector3()).length() || 1;
-  controls.target.copy(center);
-  camera.position.copy(center).add(new THREE.Vector3(size * 0.8, size * 0.6, size * 0.9));
-  controls.update();
-  requestRender();
-}
+// The 3D preview (preview.js, shared with the validator).
+const preview = createPreview($('view'), () => textures);
+const showParts = parts => preview.show(parts);
+const resize = () => preview.resize();
 
 /* ---------- 3. The model, its materials and the form ---------- */
 
@@ -226,7 +132,9 @@ function selectModel(index, values) {
   meshCache = null;
   $('desc').textContent = current.mod.meta.description || '';
   form.show(current.mod.meta, values);
+  for (const f of onSelect) f(current.mod.meta, !!values);
 }
+const onSelect = [];       // the house panel follows the picked blueprint (where it starts: house-context.js)
 
 /* ---------- 4. Download ---------- */
 
@@ -281,6 +189,8 @@ try {
     wireHousePanel(house, {
       form,
       current: () => current,
+      // f(meta, placed) after every pick, and once now for the blueprint shown
+      onSelect(f) { onSelect.push(f); if (current) f(current.mod.meta, false); },
       // picks a blueprint by id and fills its form with the values of a placed object; false when there is no such blueprint
       show(id, values) {
         const i = models.findIndex(m => m.mod.meta.id === id);

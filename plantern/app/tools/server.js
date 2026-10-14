@@ -23,6 +23,7 @@ import { createHaHub, haApi, supervisorFromEnv } from './ha/api.js';
 import { createPublisher, publishDir } from './ha/publish.js';
 import { createGlbCache, readCacheLimit } from './blueprints/cache.js';
 import { glbApi } from './blueprints/api.js';
+import { libraryApi } from './library/api.js';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
@@ -115,6 +116,7 @@ export function createPlanternServer(root, { env = process.env, dataDir = defaul
       if (url.pathname.startsWith('/api/') && !isLocalAddress(req.socket.remoteAddress)) return send(res, 403, { error: 'only from your own network' });
       if (await haApi(ha, req, res, url, { json: send, readJsonBody, writeGuard })) return;
       if (await glbApi(glb, registry, req, res, url)) return;
+      if (await libraryApi(req, res, url)) return;
       if (await houseApi(registry, req, res, url, { ha })) return;
       if (url.pathname === '/api/save') return req.method === 'POST' ? await handleSave(root, req, res) : send(res, 405, { error: 'POST only' });
       if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'method not allowed');

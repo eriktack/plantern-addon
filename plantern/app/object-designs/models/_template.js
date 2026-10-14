@@ -25,6 +25,9 @@ export const meta = {
     { key: 'body', label: 'Body' },
     { key: 'lid', label: 'Lid' },
   ],
+  // Where a new one starts in a house: { mount: 'floor' } (z 0), { mount: 'wall', z: <bottom, mm> } or
+  // { mount: 'ceiling' }; a variant that starts elsewhere has its own entry in `variants` (AGENT_INSTRUCTIONS §3.1).
+  placement: { mount: 'floor' },
 };
 
 // Overlap parts a little where they meet, instead of touching face to face.

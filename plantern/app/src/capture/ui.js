@@ -12,7 +12,7 @@ import { listHouses, openHouse, houseOptions } from '../model/house.js';
 import { askConflict } from './conflict-ui.js';
 import { createAssetCache, listAssetNames } from '../render3d/assets.js';
 import { ASSET_NAME, assetWarnings, assetKey, builtSizeStatus } from '../model/assets.js';
-import { blueprintMap, placeSpec } from '../blueprints/place.js';
+import { blueprintMap, placeSpec, startPlacement, wallInRoom } from '../blueprints/place.js';
 import { defaultsFor } from '../../object-designs/lib/params.js';
 import { createMenu } from '../menu.js';
 import { addEntries } from './add-menu.js';
@@ -44,7 +44,7 @@ import { checkLook } from '../ha/appearance.js';
 import { compassSvg } from '../render2d/compass.js';
 import { roomNameLayout, labelPoint, pointInPolygon } from '../geometry/polygon.js';
 import { cornerAt } from '../edit/inspect.js';
-import { applySolid, removeSolid, newSolidId, joinableWalls, joinWalls, addWall } from '../edit/ops.js';
+import { applySolid, removeSolid, newSolidId, joinableWalls, joinWalls, addWall, cutWall } from '../edit/ops.js';
 import { SOLID_COLOR } from '../model/solids.js';
 import { solidStretches, paintStrip } from '../geometry/solids.js';
 import { wallLookPieces, wallFaceRooms } from '../geometry/paint.js';
@@ -2059,21 +2059,30 @@ async function placeBlueprint(id, where) {
   let built;
   try { built = await assetCache().rebuild({ blueprint: id, params, partMaterials: {} }); }
   catch (e) { setStatus(`${meta.name} cannot be built: ${e.message}`); return; }
-  let place, what;
+  // where it starts comes from the blueprint (meta.placement, decision 65): on the floor, on a wall, or under the ceiling
+  let place, what, room = null;
   if (where === 'wall') {
     const w = wall();
     if (!w) return;
-    const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]);
-    place = { kind: 'wall', wall: w.id, side: wallInfo(level(), w.id)?.sides?.right?.length ? 'right' : 'left', offset: Math.max(0, Math.round((L - built.size[0]) / 2)) };
+    const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), side = wallInfo(level(), w.id)?.sides?.right?.length ? 'right' : 'left';
+    place = { kind: 'wall', wall: w.id, side, offset: Math.max(0, Math.round((L - built.size[0]) / 2)) };
+    room = level().rooms.find(r => wallInfo(level(), w.id)?.sides?.[side]?.includes(r.id)) ?? null;
     what = 'on the wall: drag it along, or set its position';
   } else {
-    const at = placeRoom();
-    if (!at) { setStatus('Add a room first'); return; }
-    const [cx, cy] = labelPoint(at.polygon).pos;
-    place = { kind: 'room', x: cx - built.size[0] / 2, y: cy - built.size[1] / 2, rotationDeg: 0 };
-    what = 'in the middle of the room: drag it where it belongs';
+    room = placeRoom();
+    if (!room) { setStatus('Add a room first'); return; }
+    const onWall = startPlacement(meta, built.size, level(), room, params).mount === 'wall' && wallInRoom(level(), room.id, built.size[0]);
+    if (onWall) {
+      place = onWall;
+      what = 'on the longest wall of the room: drag it along, or set its position';
+    } else {
+      const [cx, cy] = labelPoint(room.polygon).pos;
+      place = { kind: 'room', x: cx - built.size[0] / 2, y: cy - built.size[1] / 2, rotationDeg: 0 };
+      what = 'in the middle of the room: drag it where it belongs';
+    }
   }
-  const r = placeSpec({ blueprint: id, params, partMaterials: {}, size: built.size, z: 0, place });
+  const { z } = startPlacement(meta, built.size, level(), room, params);
+  const r = placeSpec({ blueprint: id, params, partMaterials: {}, size: built.size, z, place });
   if (r.error) { setStatus(r.error); return; }
   placeObject(r.spec, `a ${meta.name} ${what}`);
 }
@@ -3505,7 +3514,9 @@ function showIssues() {
   if (!issues.length) return;
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
   $('valSum').innerHTML = [errs.length ? `<span style="color:var(--bad)">${plural(errs.length, 'error')} (blocks Save)</span>` : '', warns.length ? `<span style="color:var(--warn)">${plural(warns.length, 'warning')}</span>` : ''].filter(Boolean).join(' · ');
-  const item = i => `<div class="iss ${i.severity}" data-iid="${esc(i.id)}" data-ilevel="${esc(i.level || '')}"><b>${esc(nameOf(i.id))}</b>${nameOf(i.id) !== i.id ? ` <small>${esc(i.id)}</small>` : ''}${i.level && i.level !== levelId ? ` <small>${esc(i.level)}</small>` : ''} ${esc(i.msg)}</div>`;
+  // two walls that both follow room edges cannot be cut (the rooms place them): the message says what to check instead
+  const bothBound = pair => { const ws = model.levels.find(l => l.id === pair.level)?.walls || []; return pair.ids.every(id => ws.find(w => w.id === id)?.from?.length); };
+  const item = i => `<div class="iss ${i.severity}" data-iid="${esc(i.id)}" data-ilevel="${esc(i.level || '')}"><b>${esc(nameOf(i.id))}</b>${nameOf(i.id) !== i.id ? ` <small>${esc(i.id)}</small>` : ''}${i.level && i.level !== levelId ? ` <small>${esc(i.level)}</small>` : ''} ${esc(i.msg)}${i.pair && !bothBound({ ids: i.pair, level: i.level || levelId }) ? ` <button type="button" class="cutPair" data-pair="${esc(i.pair.join('|'))}">Cut one of them…</button>` : ''}</div>`;
   $('issues').innerHTML = errs.map(item).join('') + (warns.length ? `<details${errs.length ? '' : ' open'}><summary>${plural(warns.length, 'warning')}</summary>${warns.map(item).join('')}</details>` : '');
   $('issues').querySelectorAll('.iss').forEach(el => (el.onclick = async () => {
     const id = el.dataset.iid;
@@ -3515,6 +3526,28 @@ function showIssues() {
       : lv.openings?.some(o => o.id === id) ? 'opening' : lv.fixtures?.some(x => x.id === id) ? 'fixture' : null;
     if (kind) afterLeave(() => enterEdit(kind, id))();
   }));
+  $('issues').querySelectorAll('.cutPair').forEach(b => (b.onclick = e => { e.stopPropagation(); cutOverlap(b.dataset.pair.split('|'), b.closest('.iss').dataset.ilevel || levelId); }));
+}
+
+/**
+ * Cut one of two overlapping walls (overlapping-walls plan, O3): asks which one, then trims it to the other's face with
+ * cutWall(). A refusal is shown in the status line with its reason; nothing changes.
+ */
+async function cutOverlap([a, b], lvId) {
+  if (isDirty()) { setStatus('Apply or revert your changes first, then cut the wall'); return; }
+  if (lvId !== levelId && !(await goToLevel(lvId))) return;
+  const r = await openDialog({
+    title: 'Cut one of the two walls',
+    message: `${refName(a)} and ${refName(b)} overlap. The wall you cut is trimmed to the face of the other, and the part beyond that face is removed.`,
+    buttons: [{ id: 'a', label: `Cut ${refName(a)}`, primary: true }, { id: 'b', label: `Cut ${refName(b)}` }, { id: 'cancel', label: 'Cancel' }],
+  });
+  if (r.button !== 'a' && r.button !== 'b') return;
+  const [cutId, keepId] = r.button === 'a' ? [a, b] : [b, a];
+  const res = cutWall(model, levelId, cutId, keepId, opts());
+  if (res.report.errors.length) { setStatus(res.report.errors.join('; ')); return; }
+  commit(res.model);
+  const { kept, removed } = res.report.cut;
+  setStatus(`${cutId} is cut at ${keepId}: ${removed} mm removed on the ${kept === 'a' ? 'b' : 'a'} side (not saved yet)`);
 }
 
 init().catch(e => {

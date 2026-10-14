@@ -14,7 +14,7 @@ const settle = p => Promise.resolve(p).then(v => v, () => null);
  * houseBase: the URL of the house folder (with a trailing slash), or null; sharedBase: the URL of the folder with the
  * repo's assets/ ('' on the repo's own pages), or null. onChange(key, status) runs when a model has loaded or failed.
  * house and apiBase are for objects made from a blueprint: the server builds their model (POST api/glb, then GET api/glb/<hash>,
- * docs/plans/object-templates.md T4); house is the house id (for its own blueprints), apiBase the path from the page to the app's root.
+ * docs/archive/2026-10-14-object-templates.md T4); house is the house id (for its own blueprints), apiBase the path from the page to the app's root.
  * store: the browser's own copy of those GLBs (glb-store.js; null for none). fetchImpl and parseImpl stand in for fetch and the
  * GLB reader in tests.
  */

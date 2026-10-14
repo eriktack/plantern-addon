@@ -54,7 +54,7 @@ export function assetWarnings(model, metas) {
   return out;
 }
 
-// ---- objects made from a blueprint (docs/plans/object-templates.md, T7) ----
+// ---- objects made from a blueprint (docs/archive/2026-10-14-object-templates.md, T7) ----
 
 /** A size that differs from the build's by more than this (mm) is reported (decision 25). */
 export const SIZE_TOLERANCE = 0.5;

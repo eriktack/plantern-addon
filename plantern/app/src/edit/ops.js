@@ -1036,3 +1036,97 @@ export function renameFromName(model, levelId, kind, id, options = {}) {
   const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, [coll]: l[coll].map(v => v.id === id ? { ...v, id: next } : v) });
   return { ...finish({ ...model, levels }, levelId, {}, options), id: next, renamed: true };
 }
+
+// ---- cutting one of two overlapping walls (docs/archive/2026-10-14-overlapping-walls.md, O2) ----
+
+/** The part of the segment a→b (t in [0, 1]) inside a convex polygon, as [t0, t1], or null (Cyrus–Beck). */
+function segmentInside(a, b, poly) {
+  // orientation: counter-clockwise, so a point is inside when it lies left of every edge
+  let area = 0;
+  for (let i = 0; i < poly.length; i++) { const p = poly[i], q = poly[(i + 1) % poly.length]; area += p[0] * q[1] - q[0] * p[1]; }
+  const pts = area < 0 ? [...poly].reverse() : poly;
+  const d = [b[0] - a[0], b[1] - a[1]];
+  let t0 = 0, t1 = 1;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], q = pts[(i + 1) % pts.length];
+    const e = [q[0] - p[0], q[1] - p[1]];
+    const num = e[0] * (a[1] - p[1]) - e[1] * (a[0] - p[0]);   // cross(e, a - p)
+    const den = e[0] * d[1] - e[1] * d[0];                     // cross(e, d)
+    if (den === 0) { if (num < 0) return null; continue; }
+    const t = -num / den;
+    if (den > 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
+    if (t0 > t1) return null;
+  }
+  return t1 - t0 > 1e-9 ? [t0, t1] : null;
+}
+
+/** Merges intervals that touch or overlap: [[s0, s1], …] sorted, disjoint. */
+function unionIntervals(list) {
+  const out = [];
+  for (const [s0, s1] of [...list].sort((x, y) => x[0] - y[0])) {
+    const last = out[out.length - 1];
+    if (last && s0 <= last[1] + 1e-9) last[1] = Math.max(last[1], s1); else out.push([s0, s1]);
+  }
+  return out;
+}
+
+/**
+ * Cut the wall `cutId` where it runs into the wall `keepId` (both on `levelId`). The cut wall's reference line is trimmed to
+ * the face of `keepId` and keeps the side it starts from, so its own thickness stops at that face. Refused, with the reason,
+ * when that would lose something silently: a wall bound to its rooms (their edges decide its position), a wall wholly inside
+ * `keepId` (delete it instead), a wall that crosses `keepId` (split it there first), an end that hangs on a room corner
+ * (change its anchor first), or an opening or an attached object that would fall off the part kept. Openings and attached
+ * items move with the start point. Returns { model, report } and report.cut = { kept: 'a' | 'b', removed: mm }.
+ */
+export function cutWall(model, levelId, cutId, keepId, options = {}) {
+  const lv = levelOf(model, levelId);
+  const cut = lv?.walls?.find(x => x.id === cutId), keep = lv?.walls?.find(x => x.id === keepId);
+  if (!cut) return refuse(model, `no wall "${cutId}" on level "${levelId}"`);
+  if (!keep) return refuse(model, `no wall "${keepId}" on level "${levelId}"`);
+  if (cutId === keepId) return refuse(model, 'a wall cannot be cut by itself');
+  if (cut.from?.length) return refuse(model, `${cutId} is bound to its rooms: the rooms decide where it is. Cut ${keepId} instead, or change the rooms`);
+  const L = Math.hypot(cut.b[0] - cut.a[0], cut.b[1] - cut.a[1]);
+  if (!(L > 0)) return refuse(model, `${cutId} has no length`);
+
+  const g = buildLevelGeometry(lv);
+  const runs = unionIntervals((g.pieces.get(keepId) || []).map(p => segmentInside(cut.a, cut.b, p)).filter(Boolean));
+  if (!runs.length) return refuse(model, `${cutId} does not run into ${keepId}`);
+  if (runs.length > 1) return refuse(model, `${cutId} runs into ${keepId} in more than one place: split it at each crossing first (Split wall here), then cut the parts`);
+  const [s0, s1] = runs[0];
+  const eps = 1e-6;
+  if (s0 <= eps && s1 >= 1 - eps) return refuse(model, `${cutId} lies wholly inside ${keepId}: delete it instead`);
+  if (s0 > eps && s1 < 1 - eps) return refuse(model, `${cutId} crosses ${keepId}: split it where it crosses, then cut the part that runs into it`);
+
+  // the start is inside the other wall: the part from s1 to the end is kept and the a end moves; otherwise 0 .. s0 is kept and the b end moves
+  const startInside = s0 <= eps;
+  const end = startInside ? 'a' : 'b';
+  if (cut.anchor?.[end]) return refuse(model, `${cutId}: its ${end === 'a' ? 'start' : 'end'} hangs on a room corner; change its anchor first`);
+  const from = startInside ? s1 : 0, to = startInside ? 1 : s0;                  // the part kept, as t
+  const at = t => [Math.round((cut.a[0] + (cut.b[0] - cut.a[0]) * t) * 10) / 10, Math.round((cut.a[1] + (cut.b[1] - cut.a[1]) * t) * 10) / 10];
+  const shift = startInside ? from * L : 0;                                     // mm the start moves along the wall
+  const keptFrom = from * L, keptTo = to * L;
+
+  // what sits on the wall must stay on the part kept
+  const onWall = [...(lv.openings || []).filter(o => o.wall === cutId).map(o => ({ id: o.id, from: o.offset, to: o.offset + o.width })),
+    ...[...(lv.objects || []), ...(lv.fixtures || [])].filter(x => x.attach?.wall === cutId).map(x => ({ id: x.id, from: x.attach.offset ?? 0, to: (x.attach.offset ?? 0) + (x.kind === 'box' || x.kind === 'asset' ? (x.size?.[0] ?? 0) : 0) }))];
+  const lost = onWall.filter(x => x.from < keptFrom - 1 || x.to > keptTo + 1).map(x => x.id);
+  if (lost.length) return refuse(model, `${cutId}: ${lost.join(', ')} would fall off the part kept; move ${lost.length > 1 ? 'them' : 'it'} first`);
+
+  const newWall = { ...cut, [end]: at(startInside ? from : to) };
+  const shiftAt = o => (startInside ? { ...o, offset: Math.round((o.offset - shift) * 10) / 10 } : o);
+  const levels = model.levels.map(l => {
+    if (l.id !== levelId) return l;
+    return {
+      ...l,
+      walls: l.walls.map(x => (x.id === cutId ? nameFirst(newWall) : x)),
+      ...(startInside ? {
+        openings: (l.openings || []).map(o => (o.wall === cutId ? shiftAt(o) : o)),
+        objects: (l.objects || []).map(o => (o.attach?.wall === cutId ? { ...o, attach: { ...o.attach, offset: Math.round((o.attach.offset - shift) * 10) / 10 } } : o)),
+        fixtures: (l.fixtures || []).map(o => (o.attach?.wall === cutId ? { ...o, attach: { ...o.attach, offset: Math.round((o.attach.offset - shift) * 10) / 10 } } : o)),
+      } : {}),
+    };
+  });
+  const removed = Math.round((L - (keptTo - keptFrom)) * 10) / 10;
+  const r = finish({ ...model, levels }, levelId, { walls: [cutId] }, options);
+  return { ...r, report: { ...r.report, cut: { kept: startInside ? 'b' : 'a', removed } } };
+}

@@ -1,4 +1,4 @@
-// The declarative interpreter (docs/plans/object-templates.md, T2): turns a house blueprint's JSON and its
+// The declarative interpreter (docs/archive/2026-10-14-object-templates.md, T2): turns a house blueprint's JSON and its
 // resolved parameters into { partKey: geom3 }, the same contract as a built-in model's build(), so
 // object-designs/lib/build.js makes its GLB like any model's. Runs the same in Node (the server) and in the
 // browser (the Objects page's preview, with the vendored @jscad/modeling loaded by lib/jscad.js).

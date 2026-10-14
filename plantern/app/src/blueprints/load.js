@@ -1,4 +1,4 @@
-// The blueprint loader (docs/plans/object-templates.md, T1). Pure: it is handed what was read (the built-in
+// The blueprint loader (docs/archive/2026-10-14-object-templates.md, T1). Pure: it is handed what was read (the built-in
 // model modules, and the texts of a house's blueprints/*.json) and returns one list, plus what it refused and why.
 //
 // A house blueprint is declarative JSON with a fixed set of building blocks (object-designs/AGENT_INSTRUCTIONS.md §9):

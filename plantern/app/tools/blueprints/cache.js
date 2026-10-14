@@ -1,4 +1,4 @@
-// The server's GLB cache (docs/plans/object-templates.md, T4; decisions 21, 22, 25).
+// The server's GLB cache (docs/archive/2026-10-14-object-templates.md, T4; decisions 21, 22, 25).
 //
 // A placed object names a blueprint (a built-in model of object-designs/models/ or a house's blueprints/<id>.json), its
 // params and partMaterials. The server resolves the params, hashes everything the output depends on, builds the GLB when
