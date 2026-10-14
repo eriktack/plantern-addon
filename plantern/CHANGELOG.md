@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- **Colour bar on material choices.** Each material choice shows a wide bar in the colour that applies, with its name: the default, the whole object's material for a part, or the choice made. Part bars follow the whole object.
+- **Object size checked against the model.** A blueprint object in the Editor shows the size its build has. A different size says why, and *Use the built size* or *Check the build* fixes or re-checks it. The Save list no longer warns about it.
+- **Cut one of two overlapping walls.** The overlap warning offers *Cut one of them…*, which trims a hand-drawn wall to the face of the other. A cut that would lose something is refused with the reason.
+- **Overlaps of room-bound walls fixed at the source.** Wall generation and joining no longer create the overlaps that two room-bound walls used to get.
+- **Renaming a lamp moves its Home Assistant link.** The link in location.json follows the new id, in the same undo step and save.
+- **Object library tools.** Library models are checked in a browser page, previewed (with a variant selector), compared with their schema and saved into the library from there.
+
 ## 0.3.0
 
 - **Add menu in the Editor.** One *Add ▾* replaces the rows of buttons: in the house view (room, wall, stairs, solid, ceiling lamp, a box, and every blueprint of the library and your house), and in the wall, room and opening panels (door, window, passage, switch, lamps, LED strip, objects on that wall). An entry that cannot be used says why. *Import* is gone: the phone saves rooms into the house itself.

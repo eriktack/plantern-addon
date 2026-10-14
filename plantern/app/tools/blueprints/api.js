@@ -1,4 +1,4 @@
-// The GLB routes of the local server (docs/plans/object-templates.md, T4 and T5; decision 21).
+// The GLB routes of the local server (docs/archive/2026-10-14-object-templates.md, T4 and T5; decision 21).
 //   POST   /api/glb          { house?, blueprint, params?, partMaterials? } → { hash, size }   (builds the GLB when it is not cached)
 //   GET    /api/glb/<hash>   → the GLB (model/gltf-binary); it never changes for a hash, so it is cached for a year
 //   GET    /api/houses/<id>/blueprints → { blueprints: [{ id, source, meta, json? }], refused }: the built-in models and the house's own

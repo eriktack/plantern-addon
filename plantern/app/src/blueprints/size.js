@@ -1,4 +1,4 @@
-// Resizing a blueprint object (docs/plans/object-templates.md, T7 follow-up): the size in the Editor is the outer box of what
+// Resizing a blueprint object (docs/archive/2026-10-14-object-templates.md, T7 follow-up): the size in the Editor is the outer box of what
 // the blueprint builds, so a typed size is turned into the options that ARE that size (`meta.sizeParams`, see
 // object-designs/lib/params.js) and the object is built again; an axis no option sets is read-only. Pure.
 

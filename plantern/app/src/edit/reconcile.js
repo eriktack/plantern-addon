@@ -37,7 +37,7 @@
 
 import { matchOutline, rigidMotion } from './match.js';
 import { pointInPolygon } from '../geometry/polygon.js';
-import { generateWalls } from '../capture/walls.js';
+import { generateWalls, PAIR_ANGLE } from '../capture/walls.js';
 import { generateMissingWalls } from '../capture/edit.js';
 import { mergeFacades } from './facade.js';
 import { boundEdges, edgeOfRef } from '../geometry/bound.js';
@@ -53,7 +53,7 @@ import { collectSnapPoints } from '../tools/snap.js';
 import { DEFAULT_SETTINGS } from '../model/settings.js';
 
 export const SILENT_MOVE = 5;     // mm
-export const PAIR_ANGLE = 2;      // degrees: shared-wall pairing tolerance (a closing wall may tilt a little)
+export { PAIR_ANGLE };
 
 const EDGE_REF = /^(.+)#e(\d+)$/, CORNER_REF = /^(.+)#p(\d+)$/;
 const d2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);

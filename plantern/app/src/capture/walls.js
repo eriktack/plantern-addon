@@ -27,22 +27,14 @@
 import { sub, dot, cross, len } from '../geometry/vec.js';
 import { solidCover, subtractIntervals } from '../geometry/solids.js';
 
+export const PAIR_ANGLE = 2;          // degrees: shared-wall pairing tolerance used by reconcile() (a closing wall may tilt a little)
+export const MAX_SHARED_GAP = 600;    // mm: the largest face distance still treated as one shared wall
+
 const edgeKey = (room, i) => `${room.id}#e${i}`;
 const base = id => id.replace(/^r_/, '');
 
-/** Parameter interval [t0, t1] (mm along edge, 0..L) of an edge that is covered by shared segments. */
-function mergeIntervals(iv) {
-  iv.sort((a, b) => a[0] - b[0]);
-  const out = [];
-  for (const [lo, hi] of iv) {
-    const last = out[out.length - 1];
-    if (last && lo <= last[1] + 1e-6) last[1] = Math.max(last[1], hi); else out.push([lo, hi]);
-  }
-  return out;
-}
-
 export function generateWalls(rooms, options = {}) {
-  const o = { defaultThickness: 200, maxThickness: 600, minOverlap: 100, exteriorKind: 'virtual', angleTol: 0.5, edges: {}, ...options };
+  const o = { defaultThickness: 200, maxThickness: MAX_SHARED_GAP,minOverlap: 100, exteriorKind: 'virtual', angleTol: 0.5, edges: {}, ...options };
   const sinTol = Math.sin(o.angleTol * Math.PI / 180);
   const report = { warnings: [], solo: [] };
 
@@ -115,7 +107,9 @@ export function generateWalls(rooms, options = {}) {
   };
 
   for (const E of edges) {
-    const ivs = mergeIntervals(claimed.get(E).map(x => [...x]));
+    // one segment per claimed stretch, never joined: two neighbours side by side (or a stepped neighbour) each
+    // get their own shared wall, with their own gap as thickness (claims never overlap, free() refuses that)
+    const ivs = claimed.get(E).map(x => [...x]).sort((m, n) => m[0] - n[0]);
     // split the edge into shared and solo segments, in order along the edge
     const segs = []; let at = 0;
     for (const [lo, hi] of ivs) { if (lo > at + 1e-6) segs.push({ lo: at, hi: lo, shared: false }); segs.push({ lo, hi, shared: true }); at = hi; }

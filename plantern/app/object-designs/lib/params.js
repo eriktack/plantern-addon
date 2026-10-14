@@ -13,6 +13,15 @@
 // Variants: an enum parameter with key `variant`, and optionally meta.variantDefaults
 // { <variant>: { <key>: value, … } }. When a variant is picked, its defaults replace the
 // parameter defaults; a value given explicitly still wins.
+//
+// Placement (decision 65): optional meta.placement = { mount: 'floor' | 'wall' | 'ceiling', z? } says where a new
+// object starts when it is placed in a house: on the floor (z 0, or z mm up), on a wall with its bottom z mm above the
+// floor, or hanging from the ceiling (no z: it hangs from the room's ceiling). It is only a start; the house decides
+// (decision 61), so it is not a parameter and never reaches build(). Without it: on the floor. A variant can start
+// elsewhere: placement.variants = { <variant>: { mount, z? } }.
+
+const MOUNTS = new Set(['floor', 'wall', 'ceiling']);
+const MAX_Z = 3000;
 
 const KEY = /^[a-z][A-Za-z0-9]*$/;
 const TYPES = new Set(['number', 'integer', 'boolean', 'enum', 'enum_number', 'material']);
@@ -103,7 +112,7 @@ function checkVariantDefaults(meta, problems) {
   }
 }
 
-// Which parameter sets an outer dimension (`meta.sizeParams`, docs/plans/object-templates.md): { x?, y?, z? }, each a parameter
+// Which parameter sets an outer dimension (`meta.sizeParams`, docs/archive/2026-10-14-object-templates.md): { x?, y?, z? }, each a parameter
 // key (a number or integer parameter whose value IS the dimension in mm), or { <variant>: key | null, default?: key | null }
 // when a shape sets it with another parameter (a round table's width is its length too). An axis that is not named, or that is
 // null for the variant, is set by the build only. The Editor uses it to turn a typed size into options.
@@ -144,6 +153,44 @@ export function sizeParamFor(meta, axis, variant) {
   return (variant !== undefined && Object.hasOwn(spec, variant) ? spec[variant] : spec.default) ?? null;
 }
 
+function checkMount(pl, where, problems) {
+  if (!MOUNTS.has(pl.mount)) { problems.push(`${where}.mount must be floor, wall or ceiling`); return; }
+  if (pl.mount === 'ceiling') { if (pl.z !== undefined) problems.push(`${where}: a ceiling item hangs from the ceiling and has no z`); return; }
+  if (pl.mount === 'wall' && pl.z === undefined) problems.push(`${where}: a wall item needs z, its bottom in mm above the floor`);
+  if (pl.z !== undefined && !(Number.isFinite(pl.z) && pl.z >= 0 && pl.z <= MAX_Z)) problems.push(`${where}.z must be a number from 0 to ${MAX_Z} mm`);
+}
+
+// meta.placement = { mount, z?, variants?: { <variant>: { mount, z? } } }: a variant that starts elsewhere (an upper
+// kitchen cabinet on the wall, the base cabinets on the floor) has its own entry
+function checkPlacement(pl, problems, meta) {
+  if (pl === undefined) return;
+  if (!pl || typeof pl !== 'object' || Array.isArray(pl)) { problems.push('meta.placement must be an object { mount, z }'); return; }
+  for (const k of Object.keys(pl)) if (!['mount', 'z', 'variants'].includes(k)) problems.push(`meta.placement: unknown key "${k}"`);
+  checkMount(pl, 'meta.placement', problems);
+  if (pl.variants === undefined) return;
+  const options = (meta.params || []).find(d => d?.key === 'variant')?.options;
+  if (!Array.isArray(options)) { problems.push('meta.placement.variants needs an enum parameter with key "variant"'); return; }
+  if (!pl.variants || typeof pl.variants !== 'object' || Array.isArray(pl.variants)) { problems.push('meta.placement.variants must be an object of variant to { mount, z }'); return; }
+  for (const [name, v] of Object.entries(pl.variants)) {
+    const where = `meta.placement.variants.${name}`;
+    if (!options.includes(name)) { problems.push(`${where}: "${name}" is not a variant`); continue; }
+    if (!v || typeof v !== 'object' || Array.isArray(v)) { problems.push(`${where} must be an object { mount, z }`); continue; }
+    for (const k of Object.keys(v)) if (k !== 'mount' && k !== 'z') problems.push(`${where}: unknown key "${k}"`);
+    checkMount(v, where, problems);
+  }
+}
+
+/**
+ * Where a new object of this model starts: { mount, z } (z null for a ceiling item), for a variant when it has its own
+ * entry, else the model's. Assumes a meta checkMeta accepts.
+ */
+export function placementOf(meta, variant) {
+  const top = meta?.placement;
+  const pl = (variant !== undefined && top?.variants?.[variant]) || top;
+  if (!pl) return { mount: 'floor', z: 0 };
+  return { mount: pl.mount, z: pl.mount === 'ceiling' ? null : pl.z ?? 0 };
+}
+
 /** Lists problems with a model's meta. An empty list means the descriptor is usable. */
 export function checkMeta(meta) {
   const problems = [];
@@ -166,6 +213,7 @@ export function checkMeta(meta) {
   const variant = (meta.params || []).find(d => d?.key === 'variant');
   if (variant && variant.type !== 'enum') problems.push('param "variant" must be of type enum');
   checkVariantDefaults(meta, problems);
+  checkPlacement(meta.placement, problems, meta);
   checkSizeParams(meta, problems);
 
   const partKeys = new Set();

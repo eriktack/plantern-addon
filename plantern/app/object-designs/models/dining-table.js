@@ -42,6 +42,7 @@ export const meta = {
     y: 'width',
     z: 'height',
   },
+  placement: { mount: 'floor' },
 };
 
 // The legs run this far into the tabletop, so the two parts overlap instead of touching face to face.

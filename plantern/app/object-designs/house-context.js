@@ -1,5 +1,5 @@
 // house-context.js
-// The Objects page in a house (docs/plans/object-templates.md, T6): with Plantern's server and a house (?loc= or the one last
+// The Objects page in a house (docs/archive/2026-10-14-object-templates.md, T6): with Plantern's server and a house (?loc= or the one last
 // picked), the page also offers the house's own blueprints, *Place in house*, and changing the options of an object already
 // placed (?object=<id>). Without a house or without the server none of this shows and the page is the catalog it always was.
 // Only wiring: the rules are in src/blueprints/place.js and src/edit/ops.js.
@@ -7,7 +7,8 @@
 import { listHouses, openHouse, houseOptions, setApiBase } from '../src/model/house.js';
 import { chooseLocation, chooseLevel, remember, linkPages } from '../src/model/current.js';
 import { blueprintModule } from '../src/blueprints/build.js';
-import { placeOptions, placeSpec, optionProps, findObject } from '../src/blueprints/place.js';
+import { placeOptions, placeSpec, optionProps, findObject, startPlacement } from '../src/blueprints/place.js';
+import { placementOf, defaultsFor } from './lib/params.js';
 import { addObject, setObject } from '../src/edit/ops.js';
 import { levelLabel } from '../src/model/names.js';
 
@@ -101,6 +102,26 @@ export function wireHousePanel(ctx, page) {
   fillLevel();
   showKind();
 
+  // where a new object starts comes from the blueprint (meta.placement, decision 65): on a wall at its height, on the
+  // floor, or under the ceiling (the bottom is then worked out from the built height when it is placed)
+  // a bottom the person has not typed follows the blueprint and its chosen variant when Place is pressed
+  let zTyped = false;
+  $('hZ').addEventListener('input', () => { zTyped = $('hZ').value.trim() !== ''; });
+  page.onSelect?.((meta, placed) => {
+    if (placed) return;
+    const pl = placementOf(meta, defaultsFor(meta).variant);
+    zTyped = false;
+    $('hKind').value = pl.mount === 'wall' ? 'wall' : 'room';
+    showKind();
+    $('hZ').value = '';
+    $('hZ').placeholder = pl.mount === 'ceiling' ? 'under the ceiling' : `${pl.z} · ${pl.mount === 'wall' ? 'on the wall' : 'default'}`;
+  });
+  const bottomFor = (size, params) => {
+    if (zTyped) return $('hZ').value;
+    const room = $('hKind').value === 'room' ? level().rooms.find(r => r.id === $('hRoom').value) : null;
+    return startPlacement(page.current().mod.meta, size, level(), room, params).z;
+  };
+
   // What the form says now, as the server builds it: the values, then the size.
   async function builtNow() {
     if (!page.current()) throw new Error('Pick a blueprint first.');
@@ -125,7 +146,7 @@ export function wireHousePanel(ctx, page) {
     try {
       const built = await builtNow();
       const placed = placeSpec({
-        blueprint: page.current().mod.meta.id, params: built.params, partMaterials: built.partMaterials, size: built.size, z: $('hZ').value, name: $('hName').value,
+        blueprint: page.current().mod.meta.id, params: built.params, partMaterials: built.partMaterials, size: built.size, z: bottomFor(built.size, built.params), name: $('hName').value,
         place: $('hKind').value === 'wall'
           ? { kind: 'wall', wall: $('hWall').value, side: $('hSide').value, offset: $('hOffset').value, gap: $('hGap').value }
           : { kind: 'room', x: $('hX').value, y: $('hY').value, rotationDeg: $('hTurn').value },
