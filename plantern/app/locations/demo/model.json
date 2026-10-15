@@ -121,7 +121,19 @@
         }
       ],
       "solids": [],
-      "objects": [],
+      "objects": [
+        {
+          "id": "ob_bookshelf_1",
+          "kind": "asset",
+          "blueprint": "bookshelf",
+          "params": { "variant": "utility", "columns": 1, "rows": 4 },
+          "name": "Storage shelving",
+          "attach": { "side": "right", "offset": 2250, "wall": "w_cellar_e3", "gap": 0 },
+          "size": [970,400,1690],
+          "z": 0,
+          "assumed": ["size"]
+        }
+      ],
       "fixtures": [
         { "id": "f_cellar_lamp", "kind": "lamp", "pos": [1800,1400], "z": 2200, "radius": 3000 },
         {
@@ -145,6 +157,7 @@
       "stairs": [
         {
           "id": "st_cellar",
+          "name": "Cellar stair",
           "to": "ground",
           "start": { "ref": "r_cellar#p0", "offset": [100,0] },
           "heading": 90,
@@ -154,7 +167,9 @@
           ],
           "underside": "sloped",
           "sides": "sloped",
-          "waist": 150
+          "waist": 150,
+          "handrail": "left",
+          "handrailMount": "wall"
         }
       ]
     },
@@ -230,7 +245,8 @@
           "justify": "left",
           "rooms": ["r_studio","r_kitchen","r_living"],
           "sides": { "right": { "color": "#e9dfc9" }, "left": { "color": "#d8d4cc" } },
-          "from": ["r_studio#e5","r_kitchen#e1","r_living#e1"]
+          "from": ["r_studio#e5","r_kitchen#e1","r_living#e1"],
+          "roomSides": { "r_living": { "material": "m_brick_demo" }, "r_studio": { "color": "#9fb8c9" } }
         },
         {
           "id": "w_k_e",
@@ -368,19 +384,78 @@
         }
       ],
       "openings": [
-        { "id": "o_k_win", "wall": "w_k_n", "type": "window", "offset": 3800, "width": 1400, "sill": 900, "head": 2100 },
+        {
+          "id": "o_k_win",
+          "name": "Kitchen window",
+          "wall": "w_k_n",
+          "type": "window",
+          "offset": 3800,
+          "width": 1400,
+          "sill": 900,
+          "head": 2100,
+          "opens": "fixed"
+        },
         { "id": "o_pass", "wall": "w_k_e", "type": "passage", "offset": 1000, "width": 1800, "sill": 0, "head": 2100 },
         { "id": "o_l_win", "wall": "w_l_e", "type": "window", "offset": 1400, "width": 1200, "sill": 900, "head": 2100 },
-        { "id": "o_l_door", "wall": "w_l_s", "type": "door", "offset": 800, "width": 900, "sill": 0, "head": 2100 },
-        { "id": "o_passage_1", "wall": "w_k_w", "type": "passage", "offset": 2900, "width": 900, "sill": 0, "head": 2000 }
+        {
+          "id": "o_l_door",
+          "name": "Entrance door",
+          "wall": "w_l_s",
+          "type": "door",
+          "offset": 800,
+          "width": 900,
+          "sill": 0,
+          "head": 2100,
+          "hinge": "near",
+          "swing": "right"
+        },
+        { "id": "o_passage_1", "wall": "w_k_w", "type": "passage", "offset": 2900, "width": 900, "sill": 0, "head": 2000 },
+        {
+          "id": "o_studio_win",
+          "name": "Studio window",
+          "wall": "w_studio_e4",
+          "type": "window",
+          "offset": 300,
+          "width": 1000,
+          "sill": 900,
+          "head": 2100,
+          "opens": "tilt-turn",
+          "hinge": "near",
+          "swing": "right",
+          "color": "#2f3a4a",
+          "placement": "middle",
+          "sillDepth": 80,
+          "sillColor": "#d8d4cc",
+          "thickness": 70
+        }
       ],
       "solids": [
         {
-          "id": "s_chimney",
           "kind": "chimney",
+          "id": "s_chimney",
           "polygon": [[8500,3300],[8500,4000],[9200,4000],[9200,3300]],
           "base": 0,
-          "color": "#6b4f3a"
+          "color": "#6b4f3a",
+          "name": "Chimney",
+          "sides": { "r_living": { "color": "#8c6a50" } }
+        },
+        {
+          "kind": "pillar",
+          "id": "s_post",
+          "name": "Post",
+          "polygon": [[8150,3600],[8147.1,3570.7],[8138.6,3542.6],[8124.7,3516.7],[8106.1,3493.9],[8083.3,3475.3],[8057.4,3461.4],[8029.3,3452.9],[8000,3450],[7970.7,3452.9],[7942.6,3461.4],[7916.7,3475.3],[7893.9,3493.9],[7875.3,3516.7],[7861.4,3542.6],[7852.9,3570.7],[7850,3600],[7852.9,3629.3],[7861.4,3657.4],[7875.3,3683.3],[7893.9,3706.1],[7916.7,3724.7],[7942.6,3738.6],[7970.7,3747.1],[8000,3750],[8029.3,3747.1],[8057.4,3738.6],[8083.3,3724.7],[8106.1,3706.1],[8124.7,3683.3],[8138.6,3657.4],[8147.1,3629.3]],
+          "base": 0,
+          "color": "#8b8b8b",
+          "capture": { "mode": "circle", "raw": { "diameter": 300, "start": [8000, 3600] } }
+        },
+        {
+          "kind": "box",
+          "id": "s_beam",
+          "name": "Beam",
+          "polygon": [[100,2900],[100,3150],[4900,3150],[4900,2900]],
+          "base": 2200,
+          "height": 300,
+          "color": "#7a5c44"
         }
       ],
       "objects": [
@@ -404,12 +479,408 @@
           "size": [1100,1100,750],
           "z": 0,
           "assumed": ["size"]
+        },
+        {
+          "id": "ob_kitchen_cabinet_1",
+          "kind": "asset",
+          "blueprint": "kitchen-cabinet",
+          "params": { "variant": "tall_pantry", "width": 600 },
+          "name": "Pantry",
+          "attach": { "side": "right", "offset": 2700, "wall": "w_k_n", "gap": 0 },
+          "size": [600,600,2200],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_kitchen_cabinet_2",
+          "kind": "asset",
+          "blueprint": "kitchen-cabinet",
+          "params": { "variant": "base", "width": 600 },
+          "partMaterials": { "top": "stone", "carcass": "white-paint" },
+          "attach": { "side": "right", "offset": 3300, "wall": "w_k_n", "gap": 0 },
+          "size": [600,620,910],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_kitchen_cabinet_3",
+          "kind": "asset",
+          "blueprint": "kitchen-cabinet",
+          "params": { "variant": "base_drawer", "width": 600 },
+          "partMaterials": { "top": "stone", "carcass": "white-paint" },
+          "attach": { "side": "right", "offset": 3900, "wall": "w_k_n", "gap": 0 },
+          "size": [600,620,910],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_kitchen_cabinet_4",
+          "kind": "asset",
+          "blueprint": "kitchen-cabinet",
+          "params": { "variant": "base", "width": 600 },
+          "partMaterials": { "top": "stone", "carcass": "white-paint" },
+          "attach": { "side": "right", "offset": 4500, "wall": "w_k_n", "gap": 0 },
+          "size": [600,620,910],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_kitchen_cabinet_5",
+          "kind": "asset",
+          "blueprint": "kitchen-cabinet",
+          "params": { "variant": "base", "width": 600 },
+          "partMaterials": { "top": "stone", "carcass": "white-paint" },
+          "attach": { "side": "right", "offset": 5100, "wall": "w_k_n", "gap": 0 },
+          "size": [600,620,910],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_kitchen_cabinet_6",
+          "kind": "asset",
+          "blueprint": "kitchen-cabinet",
+          "params": { "variant": "base_drawer", "width": 600 },
+          "partMaterials": { "top": "stone", "carcass": "white-paint" },
+          "attach": { "side": "right", "offset": 5700, "wall": "w_k_n", "gap": 0 },
+          "size": [600,620,910],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_kitchen_cabinet_7",
+          "kind": "asset",
+          "blueprint": "kitchen-cabinet",
+          "params": { "variant": "base", "width": 600 },
+          "partMaterials": { "top": "stone", "carcass": "white-paint" },
+          "attach": { "side": "right", "offset": 6300, "wall": "w_k_n", "gap": 0 },
+          "size": [600,620,910],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_kitchen_cabinet_8",
+          "kind": "asset",
+          "blueprint": "kitchen-cabinet",
+          "params": { "variant": "base", "width": 600 },
+          "partMaterials": { "top": "stone", "carcass": "white-paint" },
+          "attach": { "side": "right", "offset": 6900, "wall": "w_k_n", "gap": 0 },
+          "size": [600,620,910],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_kitchen_cabinet_9",
+          "kind": "asset",
+          "blueprint": "kitchen-cabinet",
+          "params": { "variant": "upper", "width": 600, "glassDoors": false },
+          "attach": { "side": "right", "offset": 5300, "wall": "w_k_n", "gap": 0 },
+          "size": [600,350,800],
+          "z": 1450,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_kitchen_cabinet_10",
+          "kind": "asset",
+          "blueprint": "kitchen-cabinet",
+          "params": { "variant": "upper", "width": 600, "glassDoors": true },
+          "attach": { "side": "right", "offset": 5900, "wall": "w_k_n", "gap": 0 },
+          "size": [600,350,800],
+          "z": 1450,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_kitchen_cabinet_11",
+          "kind": "asset",
+          "blueprint": "kitchen-cabinet",
+          "params": { "variant": "upper", "width": 600, "glassDoors": false },
+          "attach": { "side": "right", "offset": 6500, "wall": "w_k_n", "gap": 0 },
+          "size": [600,350,800],
+          "z": 1450,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_kitchen_cabinet_12",
+          "kind": "asset",
+          "blueprint": "kitchen-cabinet",
+          "params": { "variant": "upper", "width": 450, "glassDoors": false },
+          "attach": { "side": "right", "offset": 7100, "wall": "w_k_n", "gap": 0 },
+          "size": [450,350,800],
+          "z": 1450,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_chair_1",
+          "kind": "asset",
+          "blueprint": "chair",
+          "params": { "variant": "dining" },
+          "partMaterials": { "frame": "oak", "seat": "fabric" },
+          "pos": [2702,1552],
+          "rotationDeg": 180,
+          "size": [450,500,850],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_chair_2",
+          "kind": "asset",
+          "blueprint": "chair",
+          "params": { "variant": "dining" },
+          "partMaterials": { "frame": "oak", "seat": "fabric" },
+          "pos": [2252,2452],
+          "rotationDeg": 0,
+          "size": [450,500,850],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_chair_3",
+          "kind": "asset",
+          "blueprint": "chair",
+          "params": { "variant": "dining" },
+          "partMaterials": { "frame": "oak", "seat": "fabric" },
+          "pos": [2927,2227],
+          "rotationDeg": 270,
+          "size": [450,500,850],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_chair_4",
+          "kind": "asset",
+          "blueprint": "chair",
+          "params": { "variant": "dining" },
+          "partMaterials": { "frame": "oak", "seat": "fabric" },
+          "pos": [2027,1777],
+          "rotationDeg": 90,
+          "size": [450,500,850],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_ceiling_light_1",
+          "kind": "asset",
+          "blueprint": "ceiling-light",
+          "params": { "variant": "pendant", "diameter": 400, "height": 250, "dropLength": 900, "shadeShape": "drum" },
+          "partMaterials": { "shade": "fabric", "fitting": "black-metal" },
+          "pos": [2277,1802],
+          "rotationDeg": 0,
+          "size": [400,400,1150],
+          "z": 1350,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_planter_1",
+          "kind": "asset",
+          "blueprint": "planter",
+          "params": { "variant": "pot" },
+          "pos": [1350,3550],
+          "rotationDeg": 0,
+          "size": [300,300,400],
+          "z": 910,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_table_lamp_1",
+          "kind": "asset",
+          "blueprint": "table-lamp",
+          "params": { "variant": "sill" },
+          "name": "Window lamp (the model)",
+          "pos": [2165,3635],
+          "rotationDeg": 0,
+          "size": [170,170,280],
+          "z": 910,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_coffee_table_1",
+          "kind": "asset",
+          "blueprint": "coffee-table",
+          "params": { "variant": "rectangular" },
+          "pos": [6450,2000],
+          "rotationDeg": 0,
+          "size": [1100,600,450],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_chair_5",
+          "kind": "asset",
+          "blueprint": "chair",
+          "params": { "variant": "lounge" },
+          "name": "Armchair",
+          "pos": [6068,2452],
+          "rotationDeg": 45,
+          "size": [750,800,850],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_chair_6",
+          "kind": "asset",
+          "blueprint": "chair",
+          "params": { "variant": "lounge" },
+          "name": "Armchair",
+          "pos": [7402,3082],
+          "rotationDeg": 315,
+          "size": [750,800,850],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_floor_lamp_1",
+          "kind": "asset",
+          "blueprint": "floor-lamp",
+          "params": { "variant": "standard" },
+          "name": "Floor lamp",
+          "pos": [8650,2100],
+          "rotationDeg": 0,
+          "size": [400,400,1600],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_bookshelf_2",
+          "kind": "asset",
+          "blueprint": "bookshelf",
+          "params": { "variant": "string", "width": 900, "columns": 2, "rows": 4 },
+          "partMaterials": { "wires": "black-metal" },
+          "name": "String shelving",
+          "attach": { "side": "left", "offset": 2850, "wall": "w_k_e", "gap": 0 },
+          "size": [900,300,1370],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_wall_shelf_1",
+          "kind": "asset",
+          "blueprint": "wall-shelf",
+          "params": { "variant": "plain", "width": 800 },
+          "attach": { "side": "right", "offset": 2100, "wall": "w_l_s", "gap": 0 },
+          "size": [800,250,120],
+          "z": 1500,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_ceiling_light_2",
+          "kind": "asset",
+          "blueprint": "ceiling-light",
+          "params": { "variant": "flush", "diameter": 350, "height": 150 },
+          "pos": [6383,1796],
+          "rotationDeg": 0,
+          "size": [350,350,150],
+          "z": 2350,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_wall_sconce_1",
+          "kind": "asset",
+          "blueprint": "wall-sconce",
+          "params": { "variant": "up_down" },
+          "name": "Wall light",
+          "attach": { "side": "right", "offset": 3000, "wall": "w_l_e", "gap": 0 },
+          "size": [200,230,250],
+          "z": 1600,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_planter_2",
+          "kind": "asset",
+          "blueprint": "planter",
+          "params": { "variant": "pot" },
+          "pos": [8850,-750],
+          "rotationDeg": 0,
+          "size": [300,300,400],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_planter_3",
+          "kind": "asset",
+          "blueprint": "planter",
+          "params": { "variant": "pot" },
+          "pos": [8850,-1250],
+          "rotationDeg": 0,
+          "size": [300,300,400],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_bench_1",
+          "kind": "asset",
+          "blueprint": "bench",
+          "params": { "variant": "dining" },
+          "pos": [7900,-1675],
+          "rotationDeg": 180,
+          "size": [1200,350,450],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_desk_1",
+          "kind": "asset",
+          "blueprint": "desk",
+          "params": { "variant": "straight" },
+          "pos": [-800,3970],
+          "rotationDeg": 180,
+          "size": [1400,700,740],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_chair_7",
+          "kind": "asset",
+          "blueprint": "chair",
+          "params": { "variant": "office" },
+          "pos": [-1175,3125],
+          "rotationDeg": 180,
+          "size": [650,650,1050],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_table_lamp_2",
+          "kind": "asset",
+          "blueprint": "table-lamp",
+          "params": { "variant": "desk_arm" },
+          "name": "Desk lamp",
+          "pos": [-700,3892],
+          "rotationDeg": 180,
+          "size": [200,664,400],
+          "z": 750,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_wall_shelf_2",
+          "kind": "asset",
+          "blueprint": "wall-shelf",
+          "params": { "variant": "plain", "width": 1000 },
+          "attach": { "side": "right", "offset": 500, "wall": "w_k_n", "gap": 0 },
+          "size": [1000,250,120],
+          "z": 1500,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_sofa_1",
+          "kind": "asset",
+          "blueprint": "sofa",
+          "params": { "variant": "sofa_bed" },
+          "name": "Sofa bed",
+          "attach": { "side": "left", "offset": 400, "wall": "w_k_w", "gap": 0 },
+          "size": [2000,1050,850],
+          "z": 0,
+          "assumed": ["size"]
         }
       ],
       "fixtures": [
-        { "id": "f_k_lamp", "kind": "lamp", "pos": [2500,2000], "z": 2400, "radius": 3600 },
-        { "id": "f_l_lamp", "kind": "lamp", "pos": [6558,1971], "z": 2400, "radius": 3600 },
-        { "id": "f_k_switch", "kind": "switch", "attach": { "wall": "w_k_n", "side": "right", "offset": 6800 }, "z": 1100 },
+        { "id": "f_k_lamp", "name": "Kitchen ceiling lamp", "kind": "lamp", "pos": [2500,2000], "z": 2400, "radius": 3600 },
+        { "id": "f_l_lamp", "name": "Living room ceiling lamp", "kind": "lamp", "pos": [6558,1971], "z": 2400, "radius": 3600 },
+        {
+          "id": "f_k_switch",
+          "name": "Kitchen switch",
+          "kind": "switch",
+          "attach": { "wall": "w_k_n", "side": "right", "offset": 6800 },
+          "z": 1100
+        },
         {
           "id": "f_t_lamp",
           "kind": "lamp",
@@ -417,12 +888,28 @@
           "z": 2100,
           "radius": 3000
         },
-        { "id": "f_studio_lamp", "kind": "lamp", "pos": [-1000,2000], "z": 2400, "radius": 3600 }
+        { "id": "f_studio_lamp", "name": "Studio ceiling lamp", "kind": "lamp", "pos": [-1000,2000], "z": 2400, "radius": 3600 },
+        {
+          "id": "f_k_counter_strip",
+          "name": "Counter light",
+          "kind": "strip",
+          "attach": { "object": "ob_kitchen_cabinet_10", "edge": 0, "at": "bottom", "inset": 40 },
+          "radius": 1200
+        },
+        {
+          "id": "f_k_window_lamp",
+          "name": "Window lamp",
+          "kind": "lamp",
+          "attach": { "side": "right", "wall": "w_k_n", "offset": 4850, "opening": "o_k_win" },
+          "z": 1140,
+          "radius": 1500
+        }
       ],
       "capture": { "ceilingHeight": 2500, "floorToFloor": 2750 },
       "stairs": [
         {
           "id": "st_main",
+          "name": "Main stair",
           "to": "upper",
           "start": { "ref": "r_living#p1", "offset": [400,0] },
           "heading": 0,
@@ -433,7 +920,10 @@
           ],
           "turn": "R",
           "landing": "square",
-          "underside": "sloped"
+          "underside": "sloped",
+          "handrail": "both",
+          "handrailMount": "poles",
+          "handrailStart": 100
         }
       ]
     },
@@ -478,19 +968,30 @@
               "closure": "square"
             }
           }
+        },
+        {
+          "id": "r_bathroom",
+          "name": "Bathroom",
+          "exterior": false,
+          "polygon": [[-2300,1500],[-2300,3500],[-300,3500],[-300,1500]],
+          "capture": {
+            "mode": "rectilinear",
+            "raw": { "start": [-2300,1500], "heading": 90, "lengths": [2000,2000,2000,2000], "turns": "RRRR", "closure": "square" }
+          },
+          "ceilingHeight": 2200,
+          "floorOffset": 40
         }
       ],
       "walls": [
         {
           "id": "w_bedroom_e0",
           "kind": "wall",
-          "a": [0,0],
-          "b": [0,4000],
+          "a": [0,1500],
+          "b": [0,3500],
           "thickness": 300,
           "justify": "left",
-          "rooms": ["r_bedroom"],
-          "from": ["r_bedroom#e0"],
-          "assumed": ["thickness"]
+          "rooms": ["r_bedroom","r_bathroom"],
+          "from": ["r_bedroom#e0","r_bathroom#e2"]
         },
         {
           "id": "w_bedroom_e1",
@@ -534,18 +1035,77 @@
           "rooms": ["r_landing"],
           "from": ["r_landing#e2"],
           "assumed": ["thickness"]
+        },
+        {
+          "id": "w_bathroom_e0",
+          "kind": "wall",
+          "a": [-2300,1500],
+          "b": [-2300,3500],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_bathroom"],
+          "from": ["r_bathroom#e0"],
+          "assumed": ["thickness"]
+        },
+        {
+          "id": "w_bathroom_e1",
+          "kind": "wall",
+          "a": [-2300,3500],
+          "b": [-300,3500],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_bathroom"],
+          "from": ["r_bathroom#e1"],
+          "assumed": ["thickness"]
+        },
+        {
+          "id": "w_bathroom_e3",
+          "kind": "wall",
+          "a": [-300,1500],
+          "b": [-2300,1500],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_bathroom"],
+          "from": ["r_bathroom#e3"],
+          "assumed": ["thickness"]
+        },
+        {
+          "id": "w_bedroom_e0_1",
+          "kind": "wall",
+          "a": [0,0],
+          "b": [0,1500],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_bedroom"],
+          "from": ["r_bedroom#e0"],
+          "assumed": ["thickness"]
+        },
+        {
+          "id": "w_bedroom_e0_2",
+          "kind": "wall",
+          "a": [0,3500],
+          "b": [0,4000],
+          "thickness": 300,
+          "justify": "left",
+          "rooms": ["r_bedroom"],
+          "from": ["r_bedroom#e0"],
+          "assumed": ["thickness"]
         }
       ],
       "openings": [
         {
           "id": "o_bed_win",
+          "name": "Bedroom window",
           "wall": "w_bedroom_e1",
           "type": "window",
           "offset": 1500,
           "width": 1400,
           "sill": 900,
           "head": 2100,
-          "opens": "fixed"
+          "opens": "fixed",
+          "color": "#e8e4da",
+          "placement": "right",
+          "sillDepth": 60
         },
         { "id": "o_bed_pass", "wall": "w_bedroom_e2", "type": "passage", "offset": 1000, "width": 1000, "sill": 0, "head": 2100 },
         {
@@ -557,6 +1117,43 @@
           "sill": 900,
           "head": 2100,
           "opens": "fixed"
+        },
+        {
+          "id": "o_window_2",
+          "name": "Landing window (sliding)",
+          "wall": "w_bedroom_e3",
+          "type": "window",
+          "offset": 1000,
+          "width": 1400,
+          "sill": 900,
+          "head": 2100,
+          "opens": "sliding"
+        },
+        {
+          "id": "o_bed_doors",
+          "name": "Bedroom doors",
+          "wall": "w_bedroom_e2",
+          "type": "door",
+          "offset": 2400,
+          "width": 1200,
+          "sill": 0,
+          "head": 2100,
+          "hinge": "near",
+          "swing": "left",
+          "leaves": 2
+        },
+        {
+          "id": "o_door_2",
+          "name": "Bathroom door (pocket)",
+          "wall": "w_bedroom_e0",
+          "type": "door",
+          "offset": 1000,
+          "width": 800,
+          "sill": 0,
+          "head": 2100,
+          "opens": "pocket",
+          "slide": "near",
+          "swing": "right"
         }
       ],
       "solids": [
@@ -579,18 +1176,192 @@
           }
         }
       ],
-      "objects": [],
+      "objects": [
+        {
+          "id": "ob_bed_1",
+          "kind": "asset",
+          "blueprint": "bed",
+          "params": { "variant": "standard" },
+          "pos": [1750,1900],
+          "rotationDeg": 0,
+          "size": [1500,2000,800],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_side_table_1",
+          "kind": "asset",
+          "blueprint": "side-table",
+          "params": { "variant": "nightstand" },
+          "pos": [1125,3550],
+          "rotationDeg": 0,
+          "size": [450,400,550],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_side_table_2",
+          "kind": "asset",
+          "blueprint": "side-table",
+          "params": { "variant": "nightstand" },
+          "pos": [3425,3550],
+          "rotationDeg": 0,
+          "size": [450,400,550],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_table_lamp_3",
+          "kind": "asset",
+          "blueprint": "table-lamp",
+          "params": { "variant": "classic", "shadeShape": "empire" },
+          "pos": [1200,3600],
+          "rotationDeg": 0,
+          "size": [300,300,450],
+          "z": 550,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_table_lamp_4",
+          "kind": "asset",
+          "blueprint": "table-lamp",
+          "params": { "variant": "classic", "shadeShape": "empire" },
+          "pos": [3500,3600],
+          "rotationDeg": 0,
+          "size": [300,300,450],
+          "z": 550,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_wardrobe_1",
+          "kind": "asset",
+          "blueprint": "wardrobe",
+          "params": { "variant": "sliding", "width": 1800 },
+          "attach": { "side": "right", "offset": 7100, "wall": "w_bedroom_e3", "gap": 0 },
+          "size": [1800,600,2200],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_chest_of_drawers_1",
+          "kind": "asset",
+          "blueprint": "chest-of-drawers",
+          "params": { "variant": "chest" },
+          "attach": { "side": "right", "offset": 4700, "wall": "w_bedroom_e3", "gap": 0 },
+          "size": [1000,450,900],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_ceiling_light_3",
+          "kind": "asset",
+          "blueprint": "ceiling-light",
+          "params": {
+            "variant": "chandelier",
+            "diameter": 700,
+            "height": 400,
+            "dropLength": 600,
+            "shadeShape": "globe",
+            "arms": 6,
+            "headDirection": "up"
+          },
+          "partMaterials": { "fitting": "black-metal" },
+          "pos": [2150,1187],
+          "rotationDeg": 0,
+          "size": [700,627,1000],
+          "z": 1400,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_planter_4",
+          "kind": "asset",
+          "blueprint": "planter",
+          "params": { "variant": "hanging" },
+          "pos": [4400,3300],
+          "rotationDeg": 0,
+          "size": [200,200,691],
+          "z": 1709,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_bench_2",
+          "kind": "asset",
+          "blueprint": "bench",
+          "params": { "variant": "entry" },
+          "attach": { "side": "right", "offset": 1200, "wall": "w_bedroom_e3", "gap": 0 },
+          "size": [1000,350,450],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_wall_shelf_3",
+          "kind": "asset",
+          "blueprint": "wall-shelf",
+          "params": { "variant": "string", "width": 800, "shelves": 3 },
+          "attach": { "side": "right", "offset": 2300, "wall": "w_bedroom_e3", "gap": 0 },
+          "size": [800,300,700],
+          "z": 900,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_stool_1",
+          "kind": "asset",
+          "blueprint": "stool",
+          "params": { "variant": "step" },
+          "pos": [-1675,2025],
+          "rotationDeg": 0,
+          "size": [350,350,350],
+          "z": 0,
+          "assumed": ["size"]
+        },
+        {
+          "id": "ob_wall_shelf_4",
+          "kind": "asset",
+          "blueprint": "wall-shelf",
+          "params": { "variant": "plain", "width": 800 },
+          "attach": { "side": "right", "offset": 600, "wall": "w_bathroom_e1", "gap": 0 },
+          "size": [800,250,120],
+          "z": 1500,
+          "assumed": ["size"]
+        }
+      ],
       "fixtures": [
         { "id": "f_bed_lamp", "kind": "lamp", "pos": [2500,2000], "z": 2400, "radius": 3600 },
-        { "id": "f_land_lamp", "kind": "lamp", "pos": [6200,1800], "z": 2400, "radius": 3600 }
+        { "id": "f_land_lamp", "kind": "lamp", "pos": [6200,1800], "z": 2400, "radius": 3600 },
+        { "id": "f_bath_lamp", "name": "Bathroom lamp", "kind": "lamp", "pos": [-1300,2500], "z": 2150, "radius": 2200 },
+        {
+          "id": "f_bed_sill_strip",
+          "name": "Window sill light",
+          "kind": "strip",
+          "attach": { "opening": "o_bed_win", "side": "right", "at": "sill" },
+          "radius": 900
+        },
+        {
+          "id": "f_land_switch",
+          "name": "Landing switch",
+          "kind": "switch",
+          "attach": { "side": "right", "wall": "w_bedroom_e3", "offset": 3200 },
+          "z": 1100
+        }
       ],
       "capture": { "ceilingHeight": 2400 }
     }
   ],
-  "anchors": [],
+  "anchors": [
+    { "id": "an_chimney", "name": "Chimney", "points": { "ground": "s_chimney#p0", "upper": "s_chimney_up#p0" } }
+  ],
   "checks": [
     { "id": "c_kitchen_diag", "a": "r_kitchen#p0", "b": "r_kitchen#p2", "measured": 6403, "note": "laser, corner to corner" },
-    { "id": "c_living_diag", "a": "r_living#p0", "b": "r_living#p2", "measured": 5640, "note": "demo: deviates" }
+    { "id": "c_living_diag", "a": "r_living#p0", "b": "r_living#p2", "measured": 5640, "note": "demo: deviates" },
+    { "id": "c_bedroom", "a": "r_bedroom#p0", "b": "r_bedroom#p2", "measured": 6402, "note": "laser, corner to corner" }
   ],
-  "materials": { "m_panel_demo": { "name": "Panel (demo)", "color": "#dcc9a3", "texture": "assets/panel.png", "uvScale": 500 } }
+  "materials": {
+    "m_panel_demo": { "name": "Panel (demo)", "color": "#dcc9a3", "texture": "assets/panel.png", "uvScale": 500 },
+    "m_brick_demo": { "name": "Brick (demo)", "color": "#a65c4a" }
+  },
+  "palette": [
+    { "color": "#e9dfc9", "name": "Warm white" },
+    { "color": "#cfd8dc", "name": "Cool grey" },
+    { "color": "#a65c4a", "name": "Brick" }
+  ]
 }

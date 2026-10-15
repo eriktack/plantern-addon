@@ -91,12 +91,18 @@ export function checkModule({ fileName, source, model, library, textures = new M
   if (problems.length) return result;
   if (model.meta.id !== name) err(`meta.id "${model.meta.id}" must equal the file name "${name}"`);
   if (typeof model.build !== 'function') { err('build() is missing'); return result; }
+  if (model.meta.params.some(d => d.key === 'lightHeight') && typeof model.lightPoint !== 'function') err('a lighting model (it has a lightHeight parameter) must export lightPoint(p), see AGENT_INSTRUCTIONS §3.3');
+  if (model.lightPoint !== undefined && typeof model.lightPoint !== 'function') err('lightPoint, if exported, must be a function');
   if (model.size !== undefined && typeof model.size !== 'function') err('size, if exported, must be a function');
   for (const p of checkLibrary(library, { files: new Set(textures.keys()) })) err(`materials/library.json: ${p}`);
   if (result.errors.length) return result;
 
   const material = model.meta.params.find(d => d.type === 'material');
   try { resolveMaterial(material.default, library, 'default'); } catch (e) { err(e.message); }
+  for (const part of model.meta.parts) {
+    if (part.defaultMaterial === undefined) continue;
+    try { resolveMaterial(part.defaultMaterial, library, `part "${part.label}" defaultMaterial`); } catch (e) { err(e.message); }
+  }
 
   const kinds = kindsOf(model.meta);
   const build = input => buildModel(model, input, library, { textures });
@@ -121,7 +127,19 @@ export function checkModule({ fileName, source, model, library, textures = new M
         }
       });
     }
+    lightCheck(built, bounds, label);
     return bounds;
+  };
+
+  // A lighting model (it has a lightHeight parameter) exports lightPoint(p): [x, y, z] inside the built bounds (AGENT_INSTRUCTIONS §3.3).
+  const hasLight = model.meta.params.some(d => d.key === 'lightHeight');
+  const lightCheck = (built, bounds, label) => {
+    if (!hasLight) return;
+    let at;
+    try { at = model.lightPoint(built.params); } catch (e) { err(`${label}: lightPoint() fails: ${e.message}`); return; }
+    if (!Array.isArray(at) || at.length !== 3 || !at.every(Number.isFinite)) { err(`${label}: lightPoint() must return [x, y, z] in mm`); return; }
+    const outside = [0, 1, 2].filter(k => at[k] < bounds.min[k] - TOLERANCE || at[k] > bounds.max[k] + TOLERANCE);
+    if (outside.length) err(`${label}: lightPoint() [${at.map(v => v.toFixed(1)).join(', ')}] is outside the model on ${outside.map(k => 'xyz'[k]).join(', ')}`);
   };
 
   // Defaults: the full set of checks
@@ -147,7 +165,8 @@ export function checkModule({ fileName, source, model, library, textures = new M
   for (const d of kinds.numbers) {
     for (const v of d.max === undefined ? [d.min] : [d.min, d.max]) {
       try {
-        build({ [d.key]: v });
+        const built = build({ [d.key]: v });
+        if (d.key === 'lightHeight') placement(built, `${d.label} = ${v}`);
       } catch (e) {
         err(`build() fails at ${d.label} = ${v} ${d.unit ?? ''}: ${e.message}`);
       }

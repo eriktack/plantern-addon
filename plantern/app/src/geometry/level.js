@@ -2,6 +2,7 @@ import { add, mul } from './vec.js';
 import { polylineMid } from './strip.js';
 import { fixtureHeight, stripForm } from '../model/fixtures.js';
 import { openingSymbol } from './openings.js';
+import { isHingedDoor, doorOpen } from '../model/doors.js';
 import { wallFrame, wallJoins, wallPieces, hasBody, facePoint, centrePoint, wallProfile } from './walls.js';
 import { cutWallPieces, clipConvex } from './solids.js';
 import { isConvex, signedArea, pointInPolygon, distToOutline, triangulate } from './polygon.js';
@@ -113,7 +114,7 @@ export const isOpaque = w => (w.lightBlocking ? w.lightBlocking === 'opaque' : w
  * Occluder segments for 2D light: opaque wall pieces, solids, and closed openings (windows, doors).
  * A wall or solid above the plan's cut height (a lintel, boxing under the ceiling) lets the light pass in the plan.
  */
-export function occluders(geo, { cutPlane = 1200 } = {}) {
+export function occluders(geo, { cutPlane = 1200, doorStates = null } = {}) {
   const segs = [], ring = r => r.forEach((p, i) => segs.push([p, r[(i + 1) % r.length]]));
   for (const w of geo.walls) if (isOpaque(w) && wallProfile(w, geo.level).base < cutPlane) (geo.pieces.get(w.id) || []).forEach(ring);
   (geo.level.solids || []).filter(s => (s.base ?? 0) < cutPlane && s.polygon?.length >= 3).forEach(s => ring(s.polygon));
@@ -121,6 +122,8 @@ export function occluders(geo, { cutPlane = 1200 } = {}) {
     if (o.type === 'passage') continue;
     const w = geo.wallById.get(o.wall);
     if (!w || !isOpaque(w)) continue;
+    // an open hinged door lets light past its gap: only the leaf, swung out, blocks it (model/doors.js)
+    if (isHingedDoor(o) && doorOpen(o, doorStates)) { segs.push(...openingSymbol(w, geo.frames.get(w.id), o, { open: true }).lines); continue; }
     const l = geo.openingLine(o);
     if (l) segs.push(l);
   }

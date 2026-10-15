@@ -13,7 +13,7 @@ const ID = /^[a-z][a-z0-9-]*$/;
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 const NUMERIC = new Set(['number', 'integer', 'enum_number']);
 const OPS = new Set(['+', '-', '*', '/', 'min', 'max']);
-const TOP_KEYS = new Set(['schema', 'id', 'name', 'description', 'params', 'parts', 'materials', 'variantDefaults', 'sizeParams', 'build']);
+const TOP_KEYS = new Set(['schema', 'id', 'name', 'summary', 'description', 'params', 'parts', 'materials', 'variantDefaults', 'sizeParams', 'build']);
 // block type → the keys it may carry besides `type`
 const BLOCKS = {
   box: ['size'],
@@ -34,6 +34,7 @@ const paramType = d => d.type ?? 'number';
 /** The `meta` of a house blueprint: what the built-in models export as `meta`. */
 export function metaOf(json) {
   const meta = { id: json.id, name: json.name, description: json.description, params: json.params, parts: json.parts };
+  if (json.summary !== undefined) meta.summary = json.summary;
   if (json.variantDefaults !== undefined) meta.variantDefaults = json.variantDefaults;
   if (json.sizeParams !== undefined) meta.sizeParams = json.sizeParams;
   if (json.materials !== undefined) meta.materials = json.materials;
@@ -276,6 +277,7 @@ export function checkHouseBlueprint(json, { file, libraryNames } = {}) {
   if (typeof json.id !== 'string' || !ID.test(json.id)) problems.push('id must be lowercase letters, digits and dashes, starting with a letter');
   else if (file && file.replace(/\.json$/, '') !== json.id) problems.push(`id "${json.id}" must equal the file name "${file.replace(/\.json$/, '')}"`);
   if (typeof json.description !== 'string' || !json.description) problems.push('description must be a non-empty string');
+  if (json.summary !== undefined && (typeof json.summary !== 'string' || !json.summary)) problems.push('summary must be a non-empty string (one short sentence)');
 
   const meta = metaOf(json);
   const metaProblems = checkMeta(meta);

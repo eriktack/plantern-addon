@@ -8,7 +8,7 @@
 //   form.setBuildError(text | null)                a failed build, shown at the field its text names
 // `onValid()` runs a short pause after the last change, and only when every field is valid.
 
-import { defaultsFor, resolveParams } from '../object-designs/lib/params.js';
+import { appliesTo, defaultsFor, partBuilt, resolveParams } from '../object-designs/lib/params.js';
 import { inputFor, materialField } from './controls.js';
 import { materialOptions } from './blueprints/options.js';
 
@@ -36,9 +36,30 @@ export function createParamForm({ container, summary, library = {}, onValid = ()
 
   const fieldFor = message => { for (const f of fields.values()) if (f.label && message.includes(f.label)) return f; return null; };
 
+  // Hides the fields of parameters that do not apply to the chosen variant (variant options). A hidden field keeps its
+  // value, and is not checked: resolveParams() ignores what does not apply.
+  // the yes/no values now in the form, for the parts that need one
+  const valuesNow = () => Object.fromEntries(meta.params.filter(d => d.type === 'boolean').map(d => [d.key, fields.get(d.key).read()]));
+
+  function showApplicable() {
+    const chosen = meta.params.some(d => d.key === 'variant') ? fields.get('variant').read() : undefined;
+    for (const d of meta.params) {
+      if (d.key === 'variant' || d.type === 'material') continue;
+      const f = fields.get(d.key);
+      const on = appliesTo(d, chosen);
+      f.wrap.hidden = !on;
+    }
+    // a part that does not apply to the variant, or that needs an option that is off, has no material of its own to pick
+    for (const part of meta.parts) {
+      const f = fields.get(`part:${part.key}`);
+      if (f) f.wrap.hidden = !partBuilt(part, valuesNow(), chosen);
+    }
+  }
+
   function checkFields() {
     const problems = [];
     for (const f of fields.values()) {
+      if (f.wrap?.hidden) { f.showError(null); continue; }
       const text = f.check();
       f.showError(text);
       if (text) problems.push({ field: f, text: `${f.label}: ${text}` });
@@ -77,6 +98,7 @@ export function createParamForm({ container, summary, library = {}, onValid = ()
 
   // Called after every change: checks the fields, then reports when they are all valid.
   function update() {
+    showApplicable();
     fieldProblems = checkFields();
     // a part without its own choice shows the whole object's material: its bar follows the whole object
     for (const [k, f] of fields) if (k.startsWith('part:')) f.paint?.();
@@ -131,10 +153,10 @@ export function createParamForm({ container, summary, library = {}, onValid = ()
       const wholeKey = meta.params.find(d => d.type === 'material')?.key;
       const parts = document.createElement('fieldset');
       const legend = document.createElement('legend');
-      legend.textContent = 'Per part (same as the whole object = the whole-object material)';
+      legend.textContent = 'Per part (a part with no choice follows its own default, else the whole object)';
       parts.append(legend);
       for (const p of meta.parts) {
-        const f = materialField({ key: `part:${p.key}`, label: p.label }, { library: names, options: materialOptions(meta, p.key), whole: false, hint: null, onChange: update, inherit: () => fields.get(wholeKey)?.effective() ?? '' });
+        const f = materialField({ key: `part:${p.key}`, label: p.label }, { library: names, options: materialOptions(meta, p.key), whole: false, hint: null, onChange: update, partDefault: p.defaultMaterial ?? null, inherit: () => p.defaultMaterial ?? fields.get(wholeKey)?.effective() ?? '' });
         f.set(partMaterials?.[p.key] ?? '');
         fields.set(`part:${p.key}`, f);
         parts.append(f.wrap);

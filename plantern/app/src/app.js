@@ -2,6 +2,7 @@ import { loadLocalConfig } from './model/load.js';
 import { listHouses, openHouse, houseOptions } from './model/house.js';
 import { resolveSettings } from './model/settings.js';
 import { validateModel, validateBindings, validateEntities } from './model/validate.js';
+import { materialTable, setDesignLibrary } from './model/materials.js';
 import { buildModelGeometry } from './geometry/level.js';
 import { levelStack, STACK_MODES } from './geometry/stack.js';
 import { collectSnapPoints } from './tools/snap.js';
@@ -9,9 +10,11 @@ import { createMeasureTool } from './tools/measure.js';
 import { addCheck, deleteCheck } from './edit/ops.js';
 import { createPlanView } from './render2d/plan.js';
 import { createAssetCache } from './render3d/assets.js';
+import { coalesce } from './coalesce.js';
 import { createHaClient, resolveConnection, boundEntities } from './ha/client.js';
 import { appearance } from './ha/appearance.js';
 import { fixtureAppearance as fixtureAppearanceOf, toggleCalls } from './ha/fixture.js';
+import { doorStates, doorEntities } from './ha/door.js';
 import { exportSvg } from './export/svg.js';
 
 const $ = id => document.getElementById(id);
@@ -26,6 +29,14 @@ import { northAngleOf } from './model/orientation.js';
 const params = new URLSearchParams(location.search);
 const status = t => ($('status').textContent = t);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+// The design library's materials (object-designs/materials/library.json): name → entry. Empty when the page cannot read it.
+async function loadDesignLibrary() {
+  try {
+    const res = await fetch('object-designs/materials/library.json', { cache: 'no-store' });
+    return res.ok ? await res.json() : {};
+  } catch { return {}; }
+}
 
 async function main() {
   wirePanelResize($('resizer'), document.querySelector('aside'), 'plantern.viewer.aside', () => window.dispatchEvent(new Event('resize')));
@@ -43,9 +54,17 @@ async function main() {
   house.watch(() => location.reload());
   // asset models (decision 146): the house's own copy first, then the repo's shared assets/; a model that has loaded
   // (or failed) redraws the plan, and the 3D view places it itself
-  const assets = createAssetCache({ houseBase: baseUrl, sharedBase: '', house: house.id, onChange: () => showLevel() });
+  // a model can finish loading before the plan exists: the first showLevel() below draws it then
+  let planReady = false;
+  // Every model that has loaded changes the plan a little (its footprint, its colour). Fifty models loading one after another must not draw
+  // the whole level fifty times, so the plan is drawn again after a quiet moment; the 3D view places each model itself when it arrives.
+  const planAfterAssets = coalesce(() => { if (planReady) drawPlan(); });
+  const assets = createAssetCache({ houseBase: baseUrl, sharedBase: '', house: house.id, onChange: planAfterAssets });
   for (const lv of model.levels) for (const o of lv.objects || []) if (o.kind === 'asset') assets.loadFor(o);
-  const looks = { materials: model.materials || {}, baseUrl, assets, assetStatus: n => assets.status(n), assetColour: n => assets.mainColour(n) };     // wall sides: colours, materials, textures; asset models
+  // the design library's colours (decision 64, materials-library plan): a wall side may name one of them
+  const library = await loadDesignLibrary();
+  setDesignLibrary(library);
+  const looks = { materials: materialTable(model, library), baseUrl, assets, assetStatus: n => assets.status(n), assetColour: n => assets.mainColour(n) };     // wall sides: colours, materials, textures; asset models
   document.title = `Plantern · ${loc.name}`;
   $('compass').innerHTML = compassSvg(northAngleOf(model));
   const bindings = loc.bindings || {};
@@ -56,7 +75,7 @@ async function main() {
   const snapIndex = new Map(allSnaps.map(s => [s.ref, s]));
 
   // ---- validation ----
-  const issues = [...validateModel(model, geos), ...validateBindings(loc, model)];
+  const issues = [...validateModel(model, geos, { library }), ...validateBindings(loc, model)];
   const showIssues = () => {
     $('issues').innerHTML = issues.length
       ? issues.map(i => `<div class="iss ${i.severity}"><b>${esc(i.id)}</b>${i.level ? ` <small>${esc(i.level)}</small>` : ''}<br>${esc(i.msg)}</div>`).join('')
@@ -90,6 +109,9 @@ async function main() {
   ha.onStatus((s, detail) => { $('haStatus').textContent = `${connName || 'no connection'} · ${s}${detail ? ` (${detail})` : ''}${note && s === 'mock' ? ` — ${note}` : ''}`; });
 
   const fixtureAppearance = fx => fixtureAppearanceOf(bindings, id => ha.getState(id), fx);
+  // door states (a binary_sensor per door, PLANTERN.md §6.1): an open door is drawn open and lets light past
+  const doors = () => doorStates(model, bindings, id => ha.getState(id));
+  const doorIds = doorEntities(model, bindings);
   // Both views show the same fixture state; the 3D view exists only after it was first opened.
   let view3d = null;
   function applyFixture(fx) {
@@ -101,7 +123,7 @@ async function main() {
   let stackMode = STACK_MODES.includes(readPrefs().stack) ? readPrefs().stack : 'this', exploded = !!readPrefs().exploded, ceilings = !!readPrefs().ceilings;
   const shownLevels = () => levelStack(model, level, stackMode, exploded).map(s => ({ ...s, geo: geos.get(s.level.id) }));
   const refreshFixtures = () => shownLevels().forEach(s => s.level.fixtures?.forEach(applyFixture));
-  const build3d = () => view3d.build({ level, geo: state().geo, levels: shownLevels(), settings: state().settings, fixtureLabel, ceilings, ...looks });
+  const build3d = () => view3d.build({ level, geo: state().geo, levels: shownLevels(), settings: state().settings, fixtureLabel, ceilings, ...looks, doorStates: doors() });
 
   async function toggleFixture(fx) {
     const r = toggleCalls(bindings, id => ha.getState(id), fx);
@@ -148,8 +170,14 @@ async function main() {
     const b = bindings[fx.id];
     return `${fx.name ? `${fx.name} (${fx.id})` : fx.id} → ${b?.entity || (b?.controls ? 'controls ' + b.controls.join(', ') : 'unbound')}`;
   };
+  // the 2D plan alone, with the lamps as they are (a render draws every lamp as unavailable until they are applied again)
+  function drawPlan() {
+    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors() });
+    refreshFixtures();
+  }
   function showLevel() {
-    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks });
+    planAfterAssets.cancel();                                      // this draws the plan now
+    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors() });
     if (view3d) build3d();
     restoreCamera();
     refreshFixtures();
@@ -242,6 +270,7 @@ async function main() {
     remember(locId, level.id); linkPages(locId, level.id);
     showLevel();
   };
+  planReady = true;
   showLevel();
   setView((params.get('view') || readPrefs().view) === '3d' ? '3d' : '2d');      // the URL, else what was used last
   if (!level) status(`${loc.name}: model has no levels yet`);
@@ -286,6 +315,9 @@ async function main() {
     refreshRow(id);
     const fxs = level?.fixtures || [];
     for (const fxId of affected.get(id) || []) { const fx = fxs.find(f => f.id === fxId); if (fx) applyFixture(fx); }
+    // a door sensor changed: the leaf and the light through the door follow. The whole level is drawn again the way a level change does it, so the
+    // lamps keep their state and the 3D camera stays where it was (a render alone draws every lamp as unavailable)
+    if (level && doorIds.has(id)) showLevel();
   });
 
   ha.connect().then(() => {

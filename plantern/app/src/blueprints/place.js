@@ -7,7 +7,7 @@ import { wallInfo } from '../edit/inspect.js';
 import { placementOf } from '../../object-designs/lib/params.js';
 
 /**
- * Where a new object of a blueprint starts (decision 65, the blueprint's meta.placement, for the chosen variant):
+ * Where a new object of a blueprint starts (decision 230, the blueprint's meta.placement, for the chosen variant):
  * { mount, z }. A ceiling item's z puts its top at the ceiling of `room` (its own ceiling height, else the level's),
  * from the built height size[2].
  */
@@ -33,7 +33,7 @@ export function wallInRoom(level, roomId, width = 0) {
   return best && { kind: 'wall', wall: best.wall, side: best.side, offset: Math.max(0, Math.round((best.length - width) / 2)) };
 }
 
-/** Map of blueprint id to meta, for checkObject() and validateModel() (decision 24), from the list the server answers. */
+/** Map of blueprint id to meta, for checkObject() and validateModel() (decision 188), from the list the server answers. */
 export function blueprintMap(list) {
   return new Map((list?.blueprints ?? []).map(b => [b.id, b.meta]));
 }
@@ -62,7 +62,7 @@ export function placeSpec({ blueprint, params, partMaterials, size, z, name, pla
   if (!Array.isArray(size) || size.length !== 3 || !size.every(v => Number.isFinite(v) && v > 0)) return { error: 'The size of the object is not known yet.' };
   const bottom = num(z ?? 0);
   if (!Number.isFinite(bottom) || bottom < 0) return { error: 'The bottom (mm above the floor) must be 0 or more.' };
-  // the size is the build's bounding box (decision 25); it stays listed as assumed until the person has checked it
+  // the size is the build's bounding box (decision 189); it stays listed as assumed until the person has checked it
   const spec = { blueprint, params: { ...params }, partMaterials: { ...partMaterials }, size, z: bottom, assumed: ['size'] };
   if (name && String(name).trim()) spec.name = String(name).trim();
   if (place?.kind === 'wall') {

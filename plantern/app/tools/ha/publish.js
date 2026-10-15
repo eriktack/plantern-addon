@@ -146,6 +146,10 @@ export function createPublisher({ registry, hub = null, root, target, connection
     for (const dir of ['src', 'vendor']) {
       for (const rel of await listFiles(path.join(target, dir))) if (!files.includes(`${dir}/${rel}`)) await fs.rm(path.join(target, dir, ...rel.split('/')), { force: true });
     }
+    // 1b. the design library's materials and their textures: the card's wall looks read them (object-designs/ under the root)
+    const libraryData = await fs.readFile(path.join(root, 'object-designs', 'materials', 'library.json')).catch(() => null);
+    if (libraryData) await writeIfChanged(path.join(target, 'object-designs', 'materials', 'library.json'), libraryData);
+    await mirrorAssets(path.join(root, 'object-designs', 'textures'), path.join(target, 'object-designs', 'textures'));
     // 2. the houses
     await registry.ready;
     const houses = registry.houses(), listed = [], keep = new Set();

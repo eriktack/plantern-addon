@@ -34,7 +34,7 @@ import { moveCapture, dragCorner, snapMove, dragWallEnd, moveWall, rotateObject 
 import { roundCapture, roundToForm, roundMovedTo, crossWall } from './round.js';
 import { solidCircle, roomEdge } from '../geometry/circle.js';
 import { solveExtra, checkRows, checkCorners } from '../model/checks.js';
-import { suggestEntities, setBinding, sameBinding } from '../ha/suggest.js';
+import { suggestEntities, setBinding, sameBinding, pruneBindings } from '../ha/suggest.js';
 import { serialRunner } from './save-queue.js';
 import { stripForm } from '../model/fixtures.js';
 import { renameId, renameBinding, idFromName, entityName } from '../edit/rename.js';
@@ -60,7 +60,7 @@ import { stairsPlan, totalRisers, stairLayout } from '../geometry/stairs.js';
 import { stepsOf, runOf, outerOf, landingAfter } from './stair-dims.js';
 import { stairSketch } from './stair-sketch.js';
 import { renameFromName, applyRoom, removeRoom, setWallProps, unbindWall, deleteWall, linkWalls, fillWalls, setSite, splitWall, addOpening, setOpening, deleteOpening, addFixture, setFixture, deleteFixture, setMaterial, deleteMaterial, nameColor, materialFromColor } from '../edit/ops.js';
-import { resolveSide, materialUse, usedColors } from '../model/materials.js';
+import { resolveSide, materialUse, usedColors, materialTable, setDesignLibrary } from '../model/materials.js';
 import { sideStrips, wallProfile } from '../geometry/walls.js';
 import { wallInfo, wallToForm, wallPropsFromForm, stillToMeasure, openingInfo, openingToForm, openingPropsFromForm, offsetFrom, offsetTo, measureCorners, defaultCorner } from '../edit/inspect.js';
 import { openingSymbol, arcPathSvg } from '../geometry/openings.js';
@@ -75,6 +75,7 @@ import { peekInfo } from '../edit/inspect.js';
 import { adjacentLevels } from '../tools/snap.js';
 import { readPrefs, writePrefs } from '../model/prefs.js';
 import { levelLabel } from '../model/names.js';
+import { coalesce } from '../coalesce.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -359,9 +360,9 @@ async function renameEditing() {
   if (to === from) return;
   const res = renameId(model, from, to);
   if (res.report.errors.length) { setStatus(res.report.errors.join('; ')); return; }
-  // a fixture's link in location.json moves with it (saved with Save, undone with the rename)
+  // a fixture's link or a door's sensor in location.json moves with it (saved with Save, undone with the rename)
   let moved = { location: loc, moved: false };
-  if (res.report.fixture) {
+  if (res.report.fixture || res.report.opening) {
     moved = renameBinding(loc, from, to);
     if (moved.conflict) {
       const linkOf = b => b?.entity ?? 'no entity';
@@ -473,10 +474,19 @@ function undoRedo(which) {
 }
 const setStatus = t => ($('status').textContent = t);
 
+// The design library's materials (object-designs/materials/library.json): the names a wall side may use besides the house's own.
+async function loadDesignLibrary() {
+  try {
+    const res = await fetch('object-designs/materials/library.json', { cache: 'no-store' });
+    return res.ok ? await res.json() : {};
+  } catch { return {}; }
+}
+
 async function init() {
   const index = await listHouses();
   const locId = chooseLocation(index, params.get('loc'));
   house = await openHouse(index, locId);
+  setDesignLibrary(await loadDesignLibrary());
   entry = house.entry;
   saveMode = house.canSave ? house.saveMode : null;
   remember(locId); linkPages(locId);
@@ -650,6 +660,9 @@ async function init() {
   $('xEntity').addEventListener('input', () => showEntityPick(true));
   $('xEntity').addEventListener('focus', () => showEntityPick(true));
   $('xEntity').addEventListener('blur', () => showEntityPick(false));
+  $('oEntity').addEventListener('input', () => showEntityPick(true, 'o'));
+  $('oEntity').addEventListener('focus', () => showEntityPick(true, 'o'));
+  $('oEntity').addEventListener('blur', () => showEntityPick(false, 'o'));
   $('preview').addEventListener('pointerdown', dragStart);
   addEventListener('pointermove', dragMove);
   addEventListener('pointerup', () => { const was = dragging; if (was?.moved) suppressClick = true; dragging = null; if (was?.moved && ['room', 'corner', 'wall', 'wallend'].includes(was.kind)) { draw(); if (was.msg) setStatus(was.msg); } });
@@ -667,7 +680,7 @@ async function init() {
     if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
     stairsId = null; commit(r.model);
   };
-  for (const id of ['stShape', 'stLanding', 'stRef', 'stUnder', 'stRail', 'stOpenOn']) $(id).onchange = syncStairsRows;
+  for (const id of ['stShape', 'stLanding', 'stRef', 'stUnder', 'stRail', 'stRailMount', 'stOpenOn']) $(id).onchange = syncStairsRows;
   $('stairsPanel').addEventListener('input', updateStairsHints);
   $('obAddStrip').onclick = () => {                               // under the front of the object (the side farthest from its wall)
     const o = object(), fp = o && curGeo.objectFootprint(o);
@@ -700,13 +713,13 @@ async function init() {
     if (!(await askConfirm(`Delete ${fixtureId}? (A Home Assistant binding for it in location.json would then point at nothing.)`, { ok: 'Delete' }))) return;
     const r = deleteFixture(model, levelId, fixtureId, opts());
     if (r.report.errors.length) { $('xErr').textContent = r.report.errors.join('; '); return; }
-    fixtureId = null; commit(r.model);
+    fixtureId = null; loc = pruneBindings(loc, r.model); commit(r.model);
   };
   $('oDelete').onclick = async () => {
     if (!(await askConfirm(`Delete ${openingId}?`, { ok: 'Delete' }))) return;
     const w = opening()?.wall, r = deleteOpening(model, levelId, openingId, opts());
     if (r.report.errors.length) { $('oErr').textContent = r.report.errors.join('; '); return; }
-    commit(r.model); selectWall(w);
+    loc = pruneBindings(loc, r.model); commit(r.model); selectWall(w);
   };
   $('oBack').onclick = afterLeave(() => enterEdit('wall', opening()?.wall));
   for (const id of ['oType', 'oOpens', 'oDoorOpens']) $(id).addEventListener('change', showOpeningRows);
@@ -1776,9 +1789,11 @@ function renderColors() {
     if (!r.report.errors.length) commit(r.model);
   }));
 }
+// The design library's names that this house does not override: listed read-only, picked by name (materials-library plan).
+function libraryMaterials() { return Object.entries(materialTable(model)).filter(([, m]) => m.fromLibrary); }
 function fillMaterialSelects() {
   const mats = Object.entries(model.materials || {});
-  const opts = '<option value="">choose…</option>' + mats.map(([id, m]) => `<option value="${esc(id)}">${esc(m.name || id)}</option>`).join('') + '<option value="+new">+ New material…</option>';
+  const opts = '<option value="">choose…</option>' + mats.map(([id, m]) => `<option value="${esc(id)}">${esc(m.name || id)}</option>`).join('') + libraryMaterials().map(([id, m]) => `<option value="${esc(id)}">${esc(m.name || id)} (library)</option>`).join('') + '<option value="+new">+ New material…</option>';
   for (const S of ['Left', 'Right']) { const keep = $(`w${S}Mat`).value; $(`w${S}Mat`).innerHTML = opts; if ([...$(`w${S}Mat`).options].some(o => o.value === keep)) $(`w${S}Mat`).value = keep; }
 }
 
@@ -1789,6 +1804,11 @@ function renderMaterials() {
   $('matList').innerHTML = mats.map(([id, m]) => `<div class="chk${id === matId ? ' sel' : ''}" data-mat="${esc(id)}"><span class="swatch" style="background:${esc(m.color || '#888')}"></span><span>${esc(m.name || id)} <small>${esc(id)}${m.texture ? ' · texture' : ''}</small></span><small>${use.get(id).length ? `${use.get(id).length} wall${use.get(id).length > 1 ? 's' : ''}` : 'unused'}</small></div>`).join('')
     || '<small>No materials yet. A wall side can have a colour, or a material that several walls share (with a texture image if you like).</small>';
   $('matList').querySelectorAll('[data-mat]').forEach(el => (el.onclick = afterLeave(() => enterEdit('material', el.dataset.mat))));
+  // the library's names: read-only here (change them in object-designs/materials/library.json)
+  const lib = libraryMaterials();
+  if (lib.length) {
+    $('matList').insertAdjacentHTML('beforeend', `<small>From the library (read-only):</small>` + lib.map(([id, m]) => `<div class="chk lib"><span class="swatch" style="background:${esc(m.color || '#888')}"></span><span>${esc(id)} <small>library</small></span></div>`).join(''));
+  }
 }
 function openMaterial(id, forSide) {
   matId = id;
@@ -1879,6 +1899,7 @@ function showOpening() {
     $('oPlace').value = f.placement; $('oSillDepth').value = f.sillDepth; $('oSillColorUse').checked = f.sillColorUse; $('oSillColor').value = f.sillColor || FITTING_DEFAULTS.sill.color;
     $('oMeasured').checked = f.measured; $('oErr').textContent = '';
     openingFormFor = o;
+    if (o.type === 'door') showDoorBinding(o);
     fillCopyInto('opening', o);
   }
   $('oMeasuredRow').hidden = !openingAssumed(o).length;
@@ -1886,6 +1907,8 @@ function showOpening() {
 }
 function showOpeningRows() {
   const t = $('oType').value;
+  $('oBindBox').hidden = t !== 'door' || isFresh();                // a new door gets its sensor after its first Apply (its id is made then)
+  if (t === 'door' && openingFormFor && !entityChoices.o.length) loadDoorChoices(openingFormFor);
   $('oOpensRow').hidden = t !== 'window';
   $('oDoorOpensRow').hidden = t !== 'door';
   $('oLeafRow').hidden = !(t === 'door' || (t === 'window' && ['side-hung', 'tilt-turn'].includes($('oOpens').value)));
@@ -1976,11 +1999,15 @@ function applyOpening() {
   const info = openingInfo(level(), openingId);
   const { props, errors } = openingPropsFromForm(info.opening, openingForm(), info.top, fromOf(openingId, info.wall));
   if (errors.length) { $('oErr').textContent = errors.join('; '); return; }
-  if (!Object.keys(props).length) { $('oErr').textContent = 'Nothing changed.'; return; }
-  const r = setOpening(model, levelId, openingId, props, opts());
+  const bd = isFresh() ? null : doorBindingDraft(info.opening, props.type ?? info.opening.type);
+  if (bd?.error) { $('oErr').textContent = bd.error; return; }
+  const bindingChanged = !!bd && !sameBinding(loc, bd.next, openingId);
+  if (!Object.keys(props).length && !bindingChanged) { $('oErr').textContent = 'Nothing changed.'; return; }
+  const r = Object.keys(props).length ? setOpening(model, levelId, openingId, props, opts()) : { model, report: { errors: [] } };
   if (r.report.errors.length) { $('oErr').textContent = r.report.errors.join('; '); return; }
-  commit(r.model);
-  setStatus(`${openingId}: ${Object.keys(props).join(', ')} changed (not saved yet)`);
+  if (bindingChanged) loc = bd.next;                              // the sensor is stored with the house (Save), undone with the model
+  commit(bindingChanged && r.model === model ? { ...model } : r.model);
+  setStatus(`${openingId}: ${[...Object.keys(props), ...(bindingChanged ? ['sensor'] : [])].join(', ')} changed (not saved yet)`);
 }
 
 // ---- objects: boxes with a size, on a wall or standing in a room ----
@@ -2000,14 +2027,15 @@ let assets = null, assetNameList = [];
 function assetCache() {
   if (!assets) {
     const houseBase = house?.baseUrl ?? null;
-    assets = createAssetCache({ houseBase, sharedBase: '', house: house?.id ?? null, onChange: () => { draw(); showIssues(); showObject(); } });
+    // a model that has loaded redraws the plan and the panels, once after a quiet moment however many arrive in a row
+    assets = createAssetCache({ houseBase, sharedBase: '', house: house?.id ?? null, onChange: coalesce(() => { draw(); showIssues(); showObject(); }) });
     listAssetNames({ houseBase, sharedBase: '' }).then(names => { assetNameList = names; fillAssetNames(); });
     loadBlueprintList();
   }
   return assets;
 }
 
-// The blueprints this house can use (the built-in library and its own blueprints/), for the validator (decision 24): it then
+// The blueprints this house can use (the built-in library and its own blueprints/), for the validator (decision 188): it then
 // checks a blueprint object's values against its blueprint. Only with Plantern's server; without it those checks are skipped.
 let blueprints = null, blueprintList = null;       // id → meta; and the list itself ({ id, source, meta }), for the Add menus
 function loadBlueprintList() {
@@ -2032,7 +2060,7 @@ function addContext(where) {
     roomSelected: shape === 'room' && !!roomId,
     hasRooms: !!lv.rooms?.length,
     levelAbove: model.levels.some(l => l.elevation > lv.elevation && (l.building ?? null) === (lv.building ?? null)),
-    blueprints: blueprintList?.map(b => ({ id: b.id, name: b.meta.name, source: b.source, description: b.meta.description })) ?? null,
+    blueprints: blueprintList?.map(b => ({ id: b.id, name: b.meta.name, source: b.source, description: b.meta.description, summary: b.meta.summary })) ?? null,
     models: assetNameList,
   };
 }
@@ -2059,7 +2087,7 @@ async function placeBlueprint(id, where) {
   let built;
   try { built = await assetCache().rebuild({ blueprint: id, params, partMaterials: {} }); }
   catch (e) { setStatus(`${meta.name} cannot be built: ${e.message}`); return; }
-  // where it starts comes from the blueprint (meta.placement, decision 65): on the floor, on a wall, or under the ceiling
+  // where it starts comes from the blueprint (meta.placement, decision 230): on the floor, on a wall, or under the ceiling
   let place, what, room = null;
   if (where === 'wall') {
     const w = wall();
@@ -2625,6 +2653,7 @@ function showStairs() {
     $('stTurn').value = st.turn ?? 'L'; $('stLanding').value = st.landing ?? 'square'; $('stWinders').value = st.winders ?? 3;
     $('stUnder').value = st.underside ?? 'closed'; $('stSides').value = st.sides ?? 'stepped'; $('stWaist').value = st.waist ?? '';
     $('stRail').value = st.handrail ?? 'none'; $('stRailH').value = st.handrailHeight ?? '';
+    $('stRailMount').value = st.handrailMount ?? ''; $('stRailD').value = st.handrailDiameter ?? ''; $('stRailS').value = st.handrailStart ?? ''; $('stRailE').value = st.handrailEnd ?? '';
     $('stIgnore').checked = st.ignoreDepthWarning === true;
     $('stEdgeOk').checked = st.ignoreEdgeWarning === true;
     const rc = st.openingRect;
@@ -2667,7 +2696,9 @@ function syncStairsRows() {
   $('stThreeRows').hidden = $('stT3Row').hidden = n < 3;
   $('stWindersRow').hidden = n < 2 || $('stLanding').value !== 'winders';
   $('stWaistRow').hidden = $('stUnder').value !== 'sloped';
-  $('stRailHRow').hidden = $('stRail').value === 'none';
+  const railOn = $('stRail').value !== 'none', roundRail = railOn && $('stRailMount').value !== '';
+  $('stRailHRow').hidden = $('stRailMountRow').hidden = !railOn;
+  $('stRailDRow').hidden = $('stRailSRow').hidden = $('stRailERow').hidden = !roundRail;
   $('stOpenRow').hidden = !$('stOpenOn').checked;
   $('stOxLbl').textContent = ref ? 'x offset' : 'x'; $('stOyLbl').textContent = ref ? 'y offset' : 'y';
   updateStairsHints();
@@ -2691,11 +2722,18 @@ function applyStairsForm() {
     if (o === undefined) return;
     f.length = o === null ? 0 : runOf(o, landingAfter(flights, k, next.width));
   });
-  delete next.turn; delete next.landing; delete next.winders; delete next.underside; delete next.sides; delete next.waist; delete next.handrail; delete next.handrailHeight; delete next.ignoreDepthWarning; delete next.ignoreEdgeWarning; delete next.openingRect;
+  delete next.turn; delete next.landing; delete next.winders; delete next.underside; delete next.sides; delete next.waist; delete next.handrail; delete next.handrailHeight; delete next.handrailMount; delete next.handrailDiameter; delete next.handrailStart; delete next.handrailEnd; delete next.ignoreDepthWarning; delete next.ignoreEdgeWarning; delete next.openingRect;
   if (two) { next.turn = $('stTurn').value; next.landing = $('stLanding').value; if (next.landing === 'winders') next.winders = num('stWinders'); }
   if ($('stUnder').value !== 'closed') next.underside = $('stUnder').value;
   if ($('stSides').value === 'sloped') next.sides = 'sloped';
-  if ($('stRail').value !== 'none') { next.handrail = $('stRail').value; if ($('stRailH').value.trim() !== '') next.handrailHeight = num('stRailH'); }
+  if ($('stRail').value !== 'none') {
+    next.handrail = $('stRail').value;
+    if ($('stRailH').value.trim() !== '') next.handrailHeight = num('stRailH');
+    if ($('stRailMount').value !== '') {                          // a round rail on poles or on the wall (stair-handrails plan); empty = the square bar
+      next.handrailMount = $('stRailMount').value;
+      for (const [id, key] of [['stRailD', 'handrailDiameter'], ['stRailS', 'handrailStart'], ['stRailE', 'handrailEnd']]) if ($(id).value.trim() !== '') next[key] = num(id);
+    }
+  }
   if ($('stUnder').value === 'sloped' && $('stWaist').value.trim() !== '') next.waist = num('stWaist');
   if ($('stIgnore').checked) next.ignoreDepthWarning = true;      // the steps were checked (fixes list 28)
   if ($('stEdgeOk').checked) next.ignoreEdgeWarning = true;       // an opening past the rooms' edge is fine (cut there)
@@ -2799,21 +2837,45 @@ async function showBinding(x) {
   const states = await loadHaStates();
   if (fixture() !== x) return;
   const room = (lv.rooms || []).find(r => (x.pos && pointInPolygon(x.pos, r.polygon)) || (x.attach && lv.walls.find(w => w.id === x.attach.wall)?.rooms?.includes(r.id)));
-  entityChoices = suggestEntities(states || [], { kind: x.kind, names: [x.name, room?.name, room && loc.areas?.[room.id]] });
+  entityChoices.x = suggestEntities(states || [], { kind: x.kind, names: [x.name, room?.name, room && loc.areas?.[room.id]] });
   showEntityPick();
 }
-let entityChoices = [];
-/** The entity field: what is chosen (friendly name, id, state), and while typing a list to pick from (name + id). */
-function showEntityPick(open = false) {
-  const v = $('xEntity').value.trim(), st = haStates?.find(s => s.entity_id === v);
-  $('xEntityNow').innerHTML = v ? (st ? `<b>${esc(st.attributes?.friendly_name || v)}</b> <small>${esc(v)} · ${esc(st.state)}</small>` : `<small>${esc(v)}${haStates ? ' · not found in Home Assistant' : ''}</small>`) : '<small>not linked</small>';
-  if (!open || !entityChoices.length) { $('xEntityPick').hidden = true; return; }
-  const q = v.toLowerCase(), shown = entityChoices.filter(e => !q || e.id.toLowerCase().includes(q) || e.label.toLowerCase().includes(q)).slice(0, 40);
-  $('xEntityPick').innerHTML = shown.map(e => { const s = haStates?.find(x => x.entity_id === e.id); return `<div class="pick" data-ent="${esc(e.id)}"><b>${esc(e.label)}</b><small>${esc(e.id)}${s ? ` · ${esc(s.state)}` : ''}</small></div>`; }).join('') || '<div class="help">No entity matches.</div>';
-  $('xEntityPick').hidden = false;
-  $('xEntityNow').innerHTML = '';                                    // while searching, the list is what counts
-  $('xEntityPick').querySelectorAll('[data-ent]').forEach(el => (el.onmousedown = ev => { ev.preventDefault(); $('xEntity').value = el.dataset.ent; showEntityPick(false); $('xEntity').blur(); $('xEntity').dispatchEvent(new Event('input')); }));
+const entityChoices = { x: [], o: [] };
+/** The entity field of a lamp or switch (prefix x) or of a door (prefix o): what is chosen (friendly name, id, state), and while typing a list to pick from (name + id). */
+function showEntityPick(open = false, p = 'x') {
+  const input = $(`${p}Entity`), now = $(`${p}EntityNow`), pick = $(`${p}EntityPick`), choices = entityChoices[p];
+  const v = input.value.trim(), st = haStates?.find(s => s.entity_id === v);
+  now.innerHTML = v ? (st ? `<b>${esc(st.attributes?.friendly_name || v)}</b> <small>${esc(v)} · ${esc(st.state)}</small>` : `<small>${esc(v)}${haStates ? ' · not found in Home Assistant' : ''}</small>`) : '<small>not linked</small>';
+  if (!open || !choices.length) { pick.hidden = true; return; }
+  const q = v.toLowerCase(), shown = choices.filter(e => !q || e.id.toLowerCase().includes(q) || e.label.toLowerCase().includes(q)).slice(0, 40);
+  pick.innerHTML = shown.map(e => { const s = haStates?.find(x => x.entity_id === e.id); return `<div class="pick" data-ent="${esc(e.id)}"><b>${esc(e.label)}</b><small>${esc(e.id)}${s ? ` · ${esc(s.state)}` : ''}</small></div>`; }).join('') || '<div class="help">No entity matches.</div>';
+  pick.hidden = false;
+  now.innerHTML = '';                                                // while searching, the list is what counts
+  pick.querySelectorAll('[data-ent]').forEach(el => (el.onmousedown = ev => { ev.preventDefault(); input.value = el.dataset.ent; showEntityPick(false, p); input.blur(); input.dispatchEvent(new Event('input')); }));
 }
+/** The sensor of a door opening (location.json → bindings[<opening id>].entity): the field and its note, then the sensors that fit. */
+function showDoorBinding(o) {
+  $('oEntity').value = loc.bindings?.[o.id]?.entity || '';
+  entityChoices.o = [];
+  loadDoorChoices(o);
+}
+async function loadDoorChoices(o) {
+  const info = openingInfo(level(), o.id), name = loc.integrations?.ha?.connection;
+  $('oEntityNote').textContent = name ? `in ${name}: a binary_sensor that says open (on) or closed (off); type a name or id, picking one links it when you Apply` : "pick the house's Home Assistant on the Storage page to get a list; or type the entity id (a binary_sensor: on = open)";
+  const states = await loadHaStates();
+  if (opening() !== o) return;
+  const rooms = [...new Set([...(info?.sides?.left || []), ...(info?.sides?.right || [])])].map(id => (level().rooms || []).find(r => r.id === id)).filter(Boolean);
+  entityChoices.o = suggestEntities(states || [], { kind: 'door', names: [o.name, 'door', ...rooms.flatMap(r => [r.name, loc.areas?.[r.id]])] });
+  showEntityPick(false, 'o');
+}
+/** The sensor of a door as its field says it now: { next } is the location with it, or { error } when it is not valid. Written when the opening is applied, with the house's save. */
+function doorBindingDraft(o, type) {
+  if (type !== 'door') return { next: loc.bindings?.[o.id] ? setBinding(loc, o.id, { entity: '' }) : loc };      // not a door any more: no sensor
+  const entity = $('oEntity').value.trim();
+  if (entity && !/^[a-z_]+\.[a-z0-9_]+$/.test(entity)) return { error: 'The Home Assistant sensor looks like binary_sensor.front_door' };
+  return { next: setBinding(loc, o.id, { entity }) };
+}
+
 /**
  * The link of a lamp or switch as its fields say it now (fixes list 34): { next } is the location with it, or { error }
  * when a field is not valid. It is written when the lamp is applied, with the house's save.
@@ -2903,6 +2965,7 @@ async function removeWall() {
   const id = wallId, r = deleteWall(model, levelId, id, opts());
   if (r.report.errors.length) { $('wErr').textContent = r.report.errors.join('; '); return; }
   wallId = null;
+  loc = pruneBindings(loc, r.model);                              // the sensors of the doors in it go too
   commit(r.model);
   setStatus(`deleted ${id} (not saved yet)`);
 }
@@ -3082,7 +3145,7 @@ function draw() {
       out += poly(pc, `fill="${fill}"${overhead ? ` fill-opacity="0.3" stroke-dasharray="${fs / 2} ${fs / 3}"` : low ? ' fill-opacity="0.4"' : ''} ${(overhead || low) && !sel && !bad ? `stroke="${fill === 'url(#hatch)' ? '#6b7482' : fill}" stroke-width="${fs / 10}"` : stroke}`);
       for (const lp of wallLookPieces(w, curGeo.frames.get(w.id), [pc], lv.rooms)) {
         const strips = sideStrips(lp.poly, w.thickness);
-        for (const side of ['left', 'right']) { const look = resolveSide(lp[side], model.materials); if (look?.color) out += poly(strips[side], `fill="${look.color}" pointer-events="none"`); }
+        for (const side of ['left', 'right']) { const look = resolveSide(lp[side], materialTable(model)); if (look?.color) out += poly(strips[side], `fill="${look.color}" pointer-events="none"`); }
       }
     }
     else {
@@ -3098,7 +3161,7 @@ function draw() {
     const look = `fill="${esc(s.color || SOLID_COLOR)}" fill-opacity="${above ? 0.35 : 1}" stroke="${sel ? '#ffb454' : '#999'}" stroke-width="${fs / (sel ? 4 : 10)}"${above ? ` stroke-dasharray="${fs / 2} ${fs / 3}"` : ''}`, circ = solidCircle(s);
     const body = circ ? (([cx, cy]) => `<circle cx="${cx}" cy="${cy}" r="${circ.diameter / 2}" ${look}/>`)(toSvg(circ.center)) : poly(s.polygon, look);   // a round pillar: the true circle
     out += `<g data-kind="solid" data-id="${esc(s.id)}" style="cursor:pointer"><title>${esc(s.name || s.kind || s.id)} (${esc(s.id)})</title>${body}`;
-    if (s.sides) for (const st of solidStretches(s, lv.rooms)) { const look = resolveSide(s.sides[st.room], model.materials); if (look?.color) out += poly(paintStrip(st), `fill="${look.color}" pointer-events="none"`); }
+    if (s.sides) for (const st of solidStretches(s, lv.rooms)) { const look = resolveSide(s.sides[st.room], materialTable(model)); if (look?.color) out += poly(paintStrip(st), `fill="${look.color}" pointer-events="none"`); }
     out += '</g>';
   }
   const curCircle = cur && solved.capture?.mode === 'circle' ? solved.capture.raw : null;
@@ -3293,7 +3356,7 @@ const solidSidesForm = () => readLookRows($('sSides'), room()?.sides);
  * default / colour / material with the palette, like a wall side. rows = [{ key: roomId, label }].
  */
 function fillLookRows(box, rows, looks = {}) {
-  const matOpts = Object.entries(model.materials || {}).map(([id, m]) => `<option value="${esc(id)}">${esc(m.name || id)}</option>`).join('');
+  const matOpts = Object.entries(model.materials || {}).map(([id, m]) => `<option value="${esc(id)}">${esc(m.name || id)}</option>`).join('') + libraryMaterials().map(([id, m]) => `<option value="${esc(id)}">${esc(m.name || id)} (library)</option>`).join('');
   box.innerHTML = rows.map(r => `<div class="sideLook" data-room="${esc(r.key)}"><label>${esc(r.label)}
       <select class="sMode"><option value="">default</option><option value="color">colour</option><option value="material"${matOpts ? '' : ' disabled'}>material</option></select></label>
       <input type="color" class="sCol" title="Colour: ${esc(r.label)}"><select class="sMat">${matOpts}</select></div><div class="swatches"></div>`).join('');

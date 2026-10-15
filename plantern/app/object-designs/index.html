@@ -54,12 +54,14 @@
   <div id="summary" class="psummary" role="alert" hidden></div>
   <div class="row"><select id="picker" aria-label="Model"></select></div>
   <p id="desc" class="help"></p>
+  <details id="descFull" class="help" hidden><summary>Details and assumed values</summary><p id="descText"></p></details>
   <div id="form" class="pform"></div>
   <div class="actions">
     <button id="download" type="button">Download .gltf</button>
     <button id="downloadGlb" class="primary" type="button">Download .glb</button>
   </div>
   <div id="info" class="help info"></div>
+  <p class="help"><a href="validate.html">Validate a model, or copy a brief for an external agent</a></p>
 
   <section id="houseBox" class="housebox" hidden>
     <h2>In a house</h2>
@@ -96,6 +98,11 @@
       <p class="help"><a href="index.html">Back to the catalog</a></p>
     </div>
     <div id="hMsg" class="help" role="status"></div>
+    <div id="hExportBox">
+      <p class="help">Writes a fixed copy of this model, with the options now shown, into the house's <code>assets/</code> folder as a model file and its <code>meta.json</code>. It places nothing in the house, and later changes to the blueprint do not reach the copy. To put an object in the house, use <b>Place in house</b> above. Use this for a model file to take outside Plantern, or for the older asset objects that the Editor places by name.</p>
+      <label>Asset name <small>optional: letters, digits and dashes; default: the blueprint's id</small><input id="hAssetName" autocomplete="off"></label>
+      <div class="actions"><button id="hExport" type="button">Save to this house's assets</button></div>
+    </div>
   </section>
 </aside>
 

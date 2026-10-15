@@ -1,10 +1,12 @@
 import { toSvg, fromSvg, svgPoints } from './coords.js';
+import { DARK_PALETTE } from './palette.js';
 import { occluders, labelObstacles } from '../geometry/level.js';
 import { visibility } from '../geometry/visibility.js';
 import { roomNameLayout } from '../geometry/polygon.js';
 import { openingSymbol, arcPathSvg } from '../geometry/openings.js';
 import { sideStrips, wallCut } from '../geometry/walls.js';
 import { resolveSide } from '../model/materials.js';
+import { doorOpen } from '../model/doors.js';
 import { solidStretches, paintStrip } from '../geometry/solids.js';
 import { solidCircle } from '../geometry/circle.js';
 import { wallLookPieces } from '../geometry/paint.js';
@@ -22,14 +24,13 @@ export const el = (t, a = {}, parent) => {
 
 /** A strip's many overlapping glows are each dimmer than a lamp's, so they add up to about one lamp's light. */
 const STRIP_GLOW = 0.55;
-const OPENING_STYLE = { window: { stroke: '#6cb6ff' }, door: { stroke: '#e0a060' }, passage: { stroke: '#8b93a1' } };
-
 /**
  * SVG plan renderer + pan/zoom. Reads only derived geometry (buildLevelGeometry), never computes its own.
- * hooks: { onFixtureClick(fx, ev), onTap(ev), onHover(ev), onView(), interactive }
+ * hooks: { onFixtureClick(fx, ev), onTap(ev), onHover(ev), onView(), interactive, palette (render2d/palette.js; default dark) }
  * interactive: false = no pan/zoom (and the page keeps its scroll), for a plan inside a dashboard card.
  */
 export function createPlanView(svg, hooks = {}) {
+  const palette = hooks.palette || DARK_PALETTE;     // the colours of the plan (render2d/palette.js)
   const vb = { x: 0, y: 0, w: 1, h: 1 };
   let fixEls = {}, lightEls = {}, overlay = null, bounds = null;
 
@@ -57,7 +58,7 @@ export function createPlanView(svg, hooks = {}) {
     return fromSvg([q.x, q.y]);
   }
 
-  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {}, assetStatus = () => 'unknown', assetColour = () => null }) {
+  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {}, assetStatus = () => 'unknown', assetColour = () => null, doorStates = null }) {
     svg.replaceChildren();
     fixEls = {}; lightEls = {};
     const defs = el('defs', {}, svg), layer = id => el('g', { id }, svg);
@@ -65,17 +66,17 @@ export function createPlanView(svg, hooks = {}) {
     overlay = layer('overlay');
     const all = [];
     if (!level) {
-      el('text', { x: 2000, y: -2000, 'text-anchor': 'middle', 'font-size': 260, fill: '#5d6573' }, gFloor).textContent = 'No levels in this model yet';
+      el('text', { x: 2000, y: -2000, 'text-anchor': 'middle', 'font-size': 260, fill: palette.label }, gFloor).textContent = 'No levels in this model yet';
       bounds = null; fit(); return;
     }
 
     for (const r of level.rooms || []) {
       // no floor (open to the level below): darker, outline dashed
-      el('polygon', { points: svgPoints(r.polygon), fill: r.floor === 'none' ? '#1a1d22' : r.exterior ? '#20252b' : '#262a31', ...(r.floor === 'none' ? { stroke: '#5d6573', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': '6 4' } : {}) }, gFloor);
+      el('polygon', { points: svgPoints(r.polygon), fill: r.floor === 'none' ? palette.floorNone : r.exterior ? palette.floorExterior : palette.floor, ...(r.floor === 'none' ? { stroke: palette.floorNoneOutline, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': '6 4' } : {}) }, gFloor);
       all.push(...r.polygon);
       // the name where the room is widest, sized to fit (two lines when that is bigger)
       const lay = roomNameLayout(r.polygon, r.name || r.id, { avoid: labelObstacles(level, geo) }), c = toSvg(lay.pos);
-      const t = el('text', { x: c[0], y: c[1], 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': lay.size, fill: '#5d6573', class: 'lbl' }, gFloor);
+      const t = el('text', { x: c[0], y: c[1], 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': lay.size, fill: palette.label, class: 'lbl' }, gFloor);
       lay.lines.forEach((line, k) => { el('tspan', { x: c[0], dy: k ? '1.25em' : `${-(lay.lines.length - 1) * 0.625}em` }, t).textContent = line; });
       el('title', {}, t).textContent = [r.floor === 'none' ? 'open to the level below' : '', r.floorOffset ? `floor ${r.floorOffset > 0 ? '+' : ''}${r.floorOffset} mm` : '', r.ceilingHeight ? `ceiling ${r.ceilingHeight} mm` : ''].filter(Boolean).join(' · ') || (r.name || r.id);
     }
@@ -83,24 +84,24 @@ export function createPlanView(svg, hooks = {}) {
     const sp = stairsPlan(geo, settings.cutPlane);
     for (const h of sp.down) {
       const cid = `clip_${h.id}_${gFloor.childNodes.length}`;
-      el('polygon', { points: svgPoints(h.poly), fill: '#14161a', stroke: '#6b7482', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': '6 4' }, gFloor);
+      el('polygon', { points: svgPoints(h.poly), fill: palette.downBg, stroke: palette.downOutline, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': '6 4' }, gFloor);
       const cp = el('clipPath', { id: cid }, defs);
       el('polygon', { points: svgPoints(h.poly) }, cp);
       const g = el('g', { 'clip-path': `url(#${cid})`, opacity: 0.4 }, gFloor);
-      for (const p of h.steps) el('polygon', { points: svgPoints(p), fill: '#2b303a', stroke: '#8b93a1', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }, g);
-      if (h.arrow.length > 1) el('polyline', { points: svgPoints(h.arrow), fill: 'none', stroke: '#c9d1de', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, g);
-      if (h.head) el('polygon', { points: svgPoints(h.head), fill: '#c9d1de' }, g);
+      for (const p of h.steps) el('polygon', { points: svgPoints(p), fill: palette.downStep, stroke: palette.downStepStroke, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }, g);
+      if (h.arrow.length > 1) el('polyline', { points: svgPoints(h.arrow), fill: 'none', stroke: palette.downArrow, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, g);
+      if (h.head) el('polygon', { points: svgPoints(h.head), fill: palette.downArrow }, g);
     }
     for (const s of sp.up) {
       const g = el('g', { class: 'stairs', 'data-id': s.id }, gFloor);
-      for (const st of s.steps) { all.push(...st.poly); el('polygon', st.above ? { points: svgPoints(st.poly), fill: 'none', stroke: '#7d8594', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': '6 4' } : { points: svgPoints(st.poly), fill: '#3a404b', stroke: '#9aa3b2', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }, g); }
-      if (s.arrow.length > 1) el('polyline', { points: svgPoints(s.arrow), fill: 'none', stroke: '#e6ebf3', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, g);
-      if (s.head) el('polygon', { points: svgPoints(s.head), fill: '#e6ebf3' }, g);
+      for (const st of s.steps) { all.push(...st.poly); el('polygon', st.above ? { points: svgPoints(st.poly), fill: 'none', stroke: palette.upAboveOutline, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': '6 4' } : { points: svgPoints(st.poly), fill: palette.upStep, stroke: palette.upStepStroke, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }, g); }
+      if (s.arrow.length > 1) el('polyline', { points: svgPoints(s.arrow), fill: 'none', stroke: palette.upArrow, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, g);
+      if (s.head) el('polygon', { points: svgPoints(s.head), fill: palette.upArrow }, g);
     }
     for (const w of level.walls || []) {
       for (const poly of geo.pieces.get(w.id) || []) {
         all.push(...poly);
-        const fill = w.kind === 'railing' ? '#6d7480' : '#aab0bb';
+        const fill = w.kind === 'railing' ? palette.wallRailing : palette.wall;
         // above the plan's cut height (a lintel): dashed and see-through, like a wall cabinet
         const cut = wallCut(w, level, settings.cutPlane);
         if (cut === 'above') { el('polygon', { points: svgPoints(poly), fill, 'fill-opacity': 0.3, stroke: fill, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': '6 4' }, gWall); continue; }
@@ -119,14 +120,14 @@ export function createPlanView(svg, hooks = {}) {
       }
       if (w.kind === 'virtual') {
         const a = toSvg(w.a), b = toSvg(w.b);
-        el('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: '#3a404b', 'stroke-width': 1, 'stroke-dasharray': '4 4', 'vector-effect': 'non-scaling-stroke' }, gWall);
+        el('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: palette.wallVirtual, 'stroke-width': 1, 'stroke-dasharray': '4 4', 'vector-effect': 'non-scaling-stroke' }, gWall);
       }
     }
     // openings: door leaf and swing, window frame (and leaf when it is side-hung), passage faces dashed
     for (const o of level.openings || []) {
       const w = geo.wallById.get(o.wall);
       if (!w) continue;
-      const sym = openingSymbol(w, geo.frames.get(w.id), o), color = OPENING_STYLE[o.type]?.stroke || '#8b93a1';
+      const sym = openingSymbol(w, geo.frames.get(w.id), o, { open: doorOpen(o, doorStates) }), color = palette.opening[o.type] || palette.opening.passage;
       const line = ([p, q], dash) => { const [a, b] = [toSvg(p), toSvg(q)]; el('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: color, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke', ...(dash ? { 'stroke-dasharray': '4 3' } : {}) }, gWall); };
       sym.lines.forEach(l => line(l, false));
       sym.dashed.forEach(l => line(l, true));
@@ -135,7 +136,7 @@ export function createPlanView(svg, hooks = {}) {
     for (const s of level.solids || []) {
       // above the plan's cut height (a beam, a lintel): dashed, like a wall cabinet
       const above = (s.base ?? 0) >= settings.cutPlane;
-      const style = { fill: s.color || '#6b4f3a', 'fill-opacity': above ? 0.35 : 1, stroke: '#999', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', ...(above ? { 'stroke-dasharray': '6 4' } : {}) }, circle = solidCircle(s);
+      const style = { fill: s.color || palette.solid, 'fill-opacity': above ? 0.35 : 1, stroke: palette.solidStroke, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', ...(above ? { 'stroke-dasharray': '6 4' } : {}) }, circle = solidCircle(s);
       if (circle) { const [cx, cy] = toSvg(circle.center); el('circle', { cx, cy, r: circle.diameter / 2, ...style }, gObj); }   // a round pillar: the true circle
       else el('polygon', { points: svgPoints(s.polygon), ...style }, gObj);
       // painted per room: a strip along each stretch of face that room sees
@@ -151,7 +152,7 @@ export function createPlanView(svg, hooks = {}) {
       // an asset whose model is missing is drawn in red, dashed, so it is seen and fixed (decision 146)
       const missing = o.kind === 'asset' && ['missing', 'broken'].includes(assetStatus(assetKey(o)));
       // a model's footprint takes the colour of its main part (the largest), grey until it has loaded
-      const colour = missing ? '#b00020' : o.color || (o.kind === 'asset' && assetColour(assetKey(o))) || '#888';
+      const colour = missing ? palette.missing : o.color || (o.kind === 'asset' && assetColour(assetKey(o))) || palette.objectDefault;
       const shape = el('polygon', { points: svgPoints(fp), fill: colour, 'fill-opacity': missing ? 0.2 : 0.25, stroke: colour, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': above || missing ? '6 4' : '' }, gObj);
       if (o.kind === 'asset') {
         const what = o.blueprint ? `blueprint "${o.blueprint}"` : `model "${o.asset}"`;
@@ -159,7 +160,7 @@ export function createPlanView(svg, hooks = {}) {
       }
     }
 
-    const occ = occluders(geo, { cutPlane: settings.cutPlane });
+    const occ = occluders(geo, { cutPlane: settings.cutPlane, doorStates });
     for (const fx of level.fixtures || []) {
       const c = geo.fixturePos(fx);
       if (!c) continue;
@@ -172,7 +173,7 @@ export function createPlanView(svg, hooks = {}) {
         const gr = el('radialGradient', { id: 'g_' + fx.id, gradientUnits: 'userSpaceOnUse', cx: s[0], cy: s[1], r: fx.radius }, defs);
         lightEls[fx.id] = {
           stops: [0, 0.45, 1].map(o => el('stop', { offset: o }, gr)),
-          path: el('polygon', { points: svgPoints(visibility(c, fx.radius, occ)), fill: `url(#g_${fx.id})`, style: 'mix-blend-mode:screen' }, gLight),
+          path: el('polygon', { points: svgPoints(visibility(c, fx.radius, occ)), fill: `url(#g_${fx.id})`, style: `mix-blend-mode:${palette.glowBlend}` }, gLight),
         };
       }
       setFixture(fx.id, { available: false, on: false, brightness: 0, rgb: [255, 214, 170] });
@@ -200,7 +201,7 @@ export function createPlanView(svg, hooks = {}) {
       stripSamples(line).forEach((c, i) => {
         const s = toSvg(c), gr = el('radialGradient', { id: `g_${fx.id}_${i}`, gradientUnits: 'userSpaceOnUse', cx: s[0], cy: s[1], r: fx.radius }, defs);
         for (const o of [0, 0.45, 1]) stops.push(el('stop', { offset: o }, gr));
-        el('polygon', { points: svgPoints(visibility(c, fx.radius, occ)), fill: `url(#g_${fx.id}_${i})`, style: 'mix-blend-mode:screen' }, group);
+        el('polygon', { points: svgPoints(visibility(c, fx.radius, occ)), fill: `url(#g_${fx.id}_${i})`, style: `mix-blend-mode:${palette.glowBlend}` }, group);
       });
       lightEls[fx.id] = { stops, path: group, k: STRIP_GLOW };
     }
@@ -212,12 +213,12 @@ export function createPlanView(svg, hooks = {}) {
     if (!sh) return;
     const col = `rgb(${a.rgb.join(',')})`;
     if (sh.tagName === 'polyline') {                                  // an LED strip: a line
-      sh.setAttribute('stroke', !a.available ? '#e5534b' : a.on ? col : '#4a505a');
+      sh.setAttribute('stroke', !a.available ? palette.fixtureUnavailable : a.on ? col : palette.fixtureOff);
       sh.setAttribute('stroke-width', 60);
       sh.setAttribute('stroke-dasharray', a.available ? '' : '120 90');
     } else {
-      sh.setAttribute('fill', !a.available ? 'none' : a.on ? col : '#4a505a');
-      sh.setAttribute('stroke', !a.available ? '#e5534b' : a.on ? '#fff' : '#8b93a1');
+      sh.setAttribute('fill', !a.available ? 'none' : a.on ? col : palette.fixtureOff);
+      sh.setAttribute('stroke', !a.available ? palette.fixtureUnavailable : a.on ? palette.fixtureOn : palette.fixtureOffStroke);
       sh.setAttribute('stroke-width', 24);
       sh.setAttribute('stroke-dasharray', a.available ? '' : '40 30');
     }
@@ -228,11 +229,32 @@ export function createPlanView(svg, hooks = {}) {
     }
   }
 
-  // pan / zoom / tap
+  // pan / zoom / tap. One pointer drags (or taps); two pointers pinch: the view zooms about the point between them
+  // and follows their midpoint, so a pinch can also pan (touch-action: none on the svg leaves the gesture to us).
   if (hooks.interactive !== false) {
-    let drag = null;
-    svg.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, vx: vb.x, vy: vb.y, moved: false, id: e.pointerId }; });
+    let drag = null, pinch = null;
+    const down = new Map();                                  // pointer id → { x, y } of every pointer on the plan now
+    const svgAt = (x, y) => { const pt = svg.createSVGPoint(); pt.x = x; pt.y = y; const q = pt.matrixTransform(svg.getScreenCTM().inverse()); return [q.x, q.y]; };
+    const mid = () => { const [a, b] = [...down.values()]; return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y) || 1 }; };
+    svg.addEventListener('pointerdown', e => {
+      down.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (down.size === 2) {
+        drag = null;
+        const m = mid();
+        pinch = { d: m.d, w: vb.w, at: svgAt(m.x, m.y) };
+      } else if (down.size === 1) drag = { x: e.clientX, y: e.clientY, vx: vb.x, vy: vb.y, moved: false, id: e.pointerId };
+    });
     svg.addEventListener('pointermove', e => {
+      if (down.has(e.pointerId)) down.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch && down.size === 2) {
+        const m = mid(), w = Math.min(Math.max(pinch.w * pinch.d / m.d, 1), 1e9), k = w / vb.w;
+        vb.x = pinch.at[0] - (pinch.at[0] - vb.x) * k; vb.y = pinch.at[1] - (pinch.at[1] - vb.y) * k; vb.w = w;
+        setVB();                                             // the new view first: the midpoint is read through it
+        const now = svgAt(m.x, m.y);                         // keep the start midpoint under the fingers' midpoint
+        vb.x += pinch.at[0] - now[0]; vb.y += pinch.at[1] - now[1];
+        setVB();
+        return;
+      }
       if (drag) {
         const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
         if (!drag.moved && Math.hypot(dx, dy) > 4) { drag.moved = true; svg.setPointerCapture(drag.id); }
@@ -240,7 +262,14 @@ export function createPlanView(svg, hooks = {}) {
       }
       hooks.onHover?.(e);
     });
-    svg.addEventListener('pointerup', e => { const was = drag; drag = null; if (was && !was.moved) hooks.onTap?.(e); });
+    const up = e => {
+      down.delete(e.pointerId);
+      if (down.size < 2) pinch = null;
+      const was = drag; drag = null;
+      if (was && !was.moved && down.size === 0) hooks.onTap?.(e);
+    };
+    svg.addEventListener('pointerup', up);
+    svg.addEventListener('pointercancel', up);
     svg.addEventListener('wheel', e => {
       e.preventDefault();
       const p = toSvg(planPt(e)), f = e.deltaY > 0 ? 1.15 : 1 / 1.15;

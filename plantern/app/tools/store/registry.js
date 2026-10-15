@@ -91,6 +91,13 @@ export class Registry extends EventEmitter {
     return { store, house: store.house(id) };
   }
 
+  /** Write an exported object's files into a house's assets/<name>/ (see the storage's writeAsset). */
+  async writeAsset(id, name, files) {
+    const f = this.find(id);
+    if (!f) throw Object.assign(new Error(`no house "${id}"`), { status: 404 });
+    return f.store.writeAsset(f.house, name, files);
+  }
+
   /** Both files of a house: { id, name, store, readOnly, location: { text, version }, model: { text, version } }. */
   async load(id) {
     const f = this.find(id);

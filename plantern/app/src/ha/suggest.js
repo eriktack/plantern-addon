@@ -2,12 +2,12 @@
 // entities fit a fixture (by kind and by how its name and room read against the entity's id and
 // friendly name), and the binding written into location.json → bindings.
 
-const DOMAINS = { lamp: ['light', 'switch'], strip: ['light', 'switch'], switch: ['switch', 'light', 'input_boolean'] };
+const DOMAINS = { lamp: ['light', 'switch'], strip: ['light', 'switch'], switch: ['switch', 'light', 'input_boolean'], door: ['binary_sensor', 'cover'] };
 const words = s => String(s ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9åäöæø]+/).filter(w => w.length > 1);
 
 /**
  * The entities that fit a fixture, best first: [{ id, label, score }]. kind 'lamp' | 'strip' | 'switch';
- * names: words to match (the fixture's name, its room's name, the room's HA area).
+ * names: words to match (the fixture's name, its room's name, the room's HA area). kind 'door' is a door opening: the sensors that say open or closed.
  */
 export function suggestEntities(states, { kind = 'lamp', names = [] } = {}) {
   const domains = DOMAINS[kind] || DOMAINS.lamp, want = new Set(names.flatMap(words));
@@ -30,6 +30,16 @@ export function setBinding(location, id, { entity, controls, look } = {}) {
   const bindings = { ...(location.bindings || {}) };
   if (Object.keys(b).length) bindings[id] = b; else delete bindings[id];
   return { ...location, bindings };
+}
+
+/**
+ * location.json without the bindings of things that are not in the model any more (a deleted lamp, switch or door): `model` is
+ * the house's model. A binding of something that is still there is kept as it is.
+ */
+export function pruneBindings(location, model) {
+  const ids = new Set((model.levels || []).flatMap(l => [...(l.fixtures || []), ...(l.openings || [])].map(x => x.id)));
+  const bindings = Object.fromEntries(Object.entries(location.bindings || {}).filter(([id]) => ids.has(id)));
+  return Object.keys(bindings).length === Object.keys(location.bindings || {}).length ? location : { ...location, bindings };
 }
 
 const canon = v => (Array.isArray(v) ? `[${v.map(canon)}]` : v && typeof v === 'object' ? `{${Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canon(v[k])}`)}}` : JSON.stringify(v ?? null));

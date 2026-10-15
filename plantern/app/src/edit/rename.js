@@ -28,8 +28,8 @@ export function allIds(model) {
 
 /**
  * Rename `oldId` to `newId` everywhere in the model. Returns { model, report: { errors, issues, changed, fixture } }:
- * `changed` is the number of references updated, `fixture` is true when the id is a fixture (its binding in
- * location.json must be renamed too).
+ * `changed` is the number of references updated, `fixture` is true when the id is a fixture and `opening` when it is an
+ * opening (a door's sensor): their binding in location.json must be renamed too.
  */
 export function renameId(model, oldId, newId) {
   if (typeof newId !== 'string' || !ID.test(newId)) return refuse(model, `"${newId}" is not an id: lowercase letters, digits and _, starting with a letter`);
@@ -54,7 +54,8 @@ export function renameId(model, oldId, newId) {
   const next = rename(model);
   const issues = validateModel(next, buildModelGeometry(next));
   const fixture = (model.levels || []).some(l => (l.fixtures || []).some(f => f.id === oldId));
-  return { model: next, report: { errors: [], issues, changed, fixture } };
+  const opening = (model.levels || []).some(l => (l.openings || []).some(o => o.id === oldId));
+  return { model: next, report: { errors: [], issues, changed, fixture, opening } };
 }
 
 /** The name an entity carries (its own `name`), or '' when it has none. */

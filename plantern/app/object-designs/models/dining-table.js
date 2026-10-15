@@ -8,9 +8,10 @@ import { primitives, booleans } from '../lib/jscad.js';
 export const meta = {
   id: 'dining-table',
   name: 'Dining table',
+  summary: 'A dining table in rectangular, round, oval, pedestal and trestle shapes.',
   description: 'Dining table in five shapes: rectangular, round, oval, pedestal and trestle. Round and pedestal tables use the width as their diameter.',
   params: [
-    { key: 'variant', label: 'Shape', type: 'enum', default: 'rectangular',
+    { key: 'variant', labels: { rectangular: 'Rectangular', round: 'Round', oval: 'Oval', pedestal: 'Pedestal', trestle: 'Trestle' }, label: 'Shape', type: 'enum', default: 'rectangular',
       options: ['rectangular', 'round', 'oval', 'pedestal', 'trestle'] },
     { key: 'length', label: 'Length (X)', unit: 'mm', default: 1800, min: 800, max: 2800, step: 10,
       hint: 'Not used by round and pedestal tables' },

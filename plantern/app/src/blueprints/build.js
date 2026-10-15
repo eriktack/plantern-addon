@@ -7,6 +7,7 @@
 // x and y, standing on z = 0. The file is checked first (load.js); a block that is still wrong at these
 // parameter values (a size of 0 mm, over 5000 mm) throws an Error that names it.
 
+import { appliesTo } from '../../object-designs/lib/params.js';
 import { primitives, booleans, transforms, geometries } from '../../object-designs/lib/jscad.js';
 import { checkHouseBlueprint, metaOf, evalValue, LIMITS } from './load.js';
 
@@ -108,7 +109,12 @@ export function buildBlueprintGeoms(json, p) {
   const problems = checkHouseBlueprint(json);
   if (problems.length) throw new Error(`Blueprint "${json?.id}" is not valid: ${problems.join('; ')}`);
   const made = new Builder(p).parts(json.build, 'build');
-  return Object.fromEntries(json.parts.map(part => [part.key, made[part.key] ?? geometries.geom3.create()]));
+  // A part that does not apply to the chosen variant (its `appliesTo`) is left empty, whatever its group builds, so a
+  // blueprint needs no way to switch a group off: lib/build.js then leaves the part out of the model.
+  return Object.fromEntries(json.parts.map(part => [
+    part.key,
+    appliesTo(part, p.variant) ? (made[part.key] ?? geometries.geom3.create()) : geometries.geom3.create(),
+  ]));
 }
 
 /** A house blueprint as a model module ({ meta, build }), so lib/build.js treats it like a built-in model. */

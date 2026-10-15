@@ -1,12 +1,12 @@
 # Object library: the schemas (corrected)
 
-The schemas of the library items, one generator per queue row (`object-designs/LIBRARY.md`). This is the base that `object-designs/tools/make-briefs.js` reads. It was the original suggestion, converted and corrected in one place (decision 66). Values are in **millimetres**; keys are camelCase.
+The schemas of the library items, one generator per queue row (`object-designs/LIBRARY.md`). This is the base that `object-designs/tools/make-briefs.js` reads. It was the original suggestion, converted and corrected in one place (decision 231). Values are in **millimetres**; keys are camelCase.
 
 Per generator:
 - `parameters`: the table rows, in order. Includes `variant` (an enum of the variants) and `material` (the default material, `type: "material"`). `unit` is `mm` for numbers.
 - `variant_defaults`: the values each variant starts from, in mm.
 - `parts`: the part keys and labels, as `[key, label]`.
-- `placement`: where a new object starts in a house (decision 65). A hint, not a parameter.
+- `placement`: where a new object starts in a house (decision 230). A hint, not a parameter.
 - `notes`: plain facts the agent needs for this item.
 
 ```json
@@ -18,6 +18,7 @@ Per generator:
       "parameters": [
         {
           "key": "variant",
+          "labels": { "dining": "Dining chair", "armchair": "Armchair", "office": "Office chair", "lounge": "Lounge chair" },
           "label": "Variant",
           "type": "enum",
           "options": [
@@ -135,6 +136,7 @@ Per generator:
       "parameters": [
         {
           "key": "variant",
+          "labels": { "two_seat": "Two-seat", "three_seat": "Three-seat", "corner_l": "L-shaped corner", "corner_u": "U-shaped corner", "sofa_bed": "Sofa bed" },
           "label": "Variant",
           "type": "enum",
           "options": [
@@ -200,6 +202,7 @@ Per generator:
         },
         {
           "key": "chaiseSide",
+          "appliesTo": ["two_seat", "three_seat", "sofa_bed", "corner_l"],
           "label": "Chaise side",
           "type": "enum",
           "options": [
@@ -210,7 +213,30 @@ Per generator:
           "default": "none"
         },
         {
+          "key": "chaiseLength",
+          "appliesTo": ["two_seat", "three_seat", "sofa_bed"],
+          "label": "Chaise length",
+          "type": "number",
+          "unit": "mm",
+          "default": 1700,
+          "min": 1000,
+          "max": 2000,
+          "step": 10
+        },
+        {
+          "key": "cornerChaiseLength",
+          "appliesTo": ["corner_l"],
+          "label": "Chaise length (L)",
+          "type": "number",
+          "unit": "mm",
+          "default": 2400,
+          "min": 1000,
+          "max": 3200,
+          "step": 10
+        },
+        {
           "key": "cornerLegLength",
+          "appliesTo": ["corner_l", "corner_u"],
           "label": "Corner leg length",
           "type": "number",
           "unit": "mm",
@@ -270,7 +296,7 @@ Per generator:
         }
       },
       "notes": [
-        "`width` is the length of the back and `depth` the depth of the seat. For `corner_l`, a second seat runs forward from one end of the back to `cornerLegLength` from the back; for `corner_u`, from both ends. `chaiseSide` adds a chaise to a straight sofa only.",
+        "`width` is the length of the back and `depth` the depth of the seat. For `corner_l`, a second seat runs forward from one end of the back to `cornerLegLength` from the back; for `corner_u`, from both ends. `chaiseSide` adds a chaise to a straight sofa on either side; for `corner_l` only on the right, the side opposite its return on the left (decision 235); `corner_u` takes none.",
         "`sofa_bed` (Swedish bäddsoffa) looks like a sofa: model it closed."
       ]
     },
@@ -279,6 +305,7 @@ Per generator:
       "parameters": [
         {
           "key": "variant",
+          "labels": { "bar": "Bar stool", "counter": "Counter stool", "step": "Step stool" },
           "label": "Variant",
           "type": "enum",
           "options": [
@@ -352,6 +379,7 @@ Per generator:
       "parameters": [
         {
           "key": "variant",
+          "labels": { "dining": "Dining bench", "entry": "Entry bench", "upholstered": "Upholstered bench", "kitchen_sofa": "Kitchen settee", "sauna_lave": "Sauna bench (lave)" },
           "label": "Variant",
           "type": "enum",
           "options": [
@@ -400,6 +428,22 @@ Per generator:
           "default": false
         },
         {
+          "key": "arms",
+          "label": "Armrests",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "key": "backrestHeight",
+          "label": "Backrest height",
+          "type": "number",
+          "unit": "mm",
+          "default": 950,
+          "min": 600,
+          "max": 1200,
+          "step": 10
+        },
+        {
           "key": "storageLid",
           "label": "Storage lid",
           "type": "boolean",
@@ -440,13 +484,15 @@ Per generator:
         },
         "upholstered": {
           "backrest": true,
-          "width": 1400
+          "width": 1400,
+          "backrestHeight": 800
         },
         "kitchen_sofa": {
           "width": 1800,
           "depth": 550,
           "height": 450,
           "backrest": true,
+          "arms": true,
           "storageLid": true
         },
         "sauna_lave": {
@@ -476,6 +522,7 @@ Per generator:
       "parameters": [
         {
           "key": "variant",
+          "labels": { "rectangular": "Rectangular", "round": "Round", "nesting_pair": "Nesting pair", "with_shelf": "With lower shelf" },
           "label": "Variant",
           "type": "enum",
           "options": [
@@ -562,6 +609,7 @@ Per generator:
       "parameters": [
         {
           "key": "variant",
+          "labels": { "round_pedestal": "Round pedestal table", "square": "Square table", "nightstand": "Nightstand" },
           "label": "Variant",
           "type": "enum",
           "options": [
@@ -603,6 +651,7 @@ Per generator:
         },
         {
           "key": "drawers",
+          "appliesTo": ["nightstand"],
           "label": "Drawers",
           "type": "integer",
           "default": 0,
@@ -643,6 +692,7 @@ Per generator:
       "parameters": [
         {
           "key": "variant",
+          "labels": { "straight": "Straight desk", "l_shaped": "L-shaped desk", "standing": "Standing desk" },
           "label": "Variant",
           "type": "enum",
           "options": [
@@ -698,6 +748,7 @@ Per generator:
         },
         {
           "key": "cornerSide",
+          "appliesTo": ["l_shaped"],
           "label": "Corner side",
           "type": "enum",
           "options": [
@@ -708,6 +759,7 @@ Per generator:
         },
         {
           "key": "returnLength",
+          "appliesTo": ["l_shaped"],
           "label": "Return length",
           "type": "number",
           "unit": "mm",
@@ -764,6 +816,7 @@ Per generator:
       "parameters": [
         {
           "key": "variant",
+          "labels": { "standard": "Standard bed", "platform": "Platform bed", "storage_bed": "Bed with storage", "bunk": "Bunk bed", "daybed": "Daybed", "cot": "Barred cot" },
           "label": "Variant",
           "type": "enum",
           "options": [
@@ -832,6 +885,7 @@ Per generator:
         },
         {
           "key": "drawers",
+          "appliesTo": ["standard", "platform", "storage_bed", "bunk", "daybed"],
           "label": "Drawers",
           "type": "integer",
           "default": 0,
@@ -907,6 +961,7 @@ Per generator:
             "built_in_closet",
             "narrow"
           ],
+          "labels": { "hinged": "Hinged wardrobe", "sliding": "Sliding-door wardrobe", "open": "Open wardrobe", "built_in_closet": "Built-in closet", "narrow": "Narrow wardrobe" },
           "default": "hinged"
         },
         {
@@ -941,10 +996,11 @@ Per generator:
         },
         {
           "key": "doors",
+          "appliesTo": ["hinged", "sliding", "built_in_closet", "narrow"],
           "label": "Doors",
           "type": "integer",
           "default": 2,
-          "min": 0,
+          "min": 1,
           "max": 6
         },
         {
@@ -993,9 +1049,6 @@ Per generator:
         "sliding": {
           "doors": 2
         },
-        "open": {
-          "doors": 0
-        },
         "built_in_closet": {
           "height": 2400,
           "width": 1500
@@ -1006,7 +1059,7 @@ Per generator:
         }
       },
       "notes": [
-        "The variant says how the doors open: `hinged`, `sliding` (two or more panels in front of each other), `open` (no doors)."
+        "The variant says how the doors open: `hinged`, `sliding` (two or more panels in front of each other), `open` (no doors). The doored variants have at least one door; the doors part exists for them only."
       ]
     },
     {
@@ -1111,16 +1164,59 @@ Per generator:
             "open",
             "glass_door",
             "corner_unit",
+            "corner_glass_door",
+            "string",
             "utility"
           ],
+          "labels": { "open": "Open bookshelf", "glass_door": "Glass-door bookshelf", "corner_unit": "Corner bookshelf", "corner_glass_door": "Glass-door corner bookshelf", "string": "String-style wire shelving", "utility": "Utility shelving" },
           "default": "open"
         },
         {
+          "key": "width",
+          "label": "Width",
+          "type": "number",
+          "unit": "mm",
+          "default": 960,
+          "min": 300,
+          "max": 3000,
+          "step": 10
+        },
+        {
+          "key": "sideWidth",
+          "appliesTo": ["corner_unit", "corner_glass_door"],
+          "label": "Side width",
+          "type": "number",
+          "unit": "mm",
+          "default": 1000,
+          "min": 600,
+          "max": 3000,
+          "step": 10
+        },
+        {
           "key": "columns",
+          "appliesTo": ["open", "glass_door", "string", "utility"],
           "label": "Columns",
           "type": "integer",
           "default": 3,
           "min": 1,
+          "max": 6
+        },
+        {
+          "key": "frontColumns",
+          "appliesTo": ["corner_unit", "corner_glass_door"],
+          "label": "Front columns",
+          "type": "integer",
+          "default": 2,
+          "min": 2,
+          "max": 6
+        },
+        {
+          "key": "sideColumns",
+          "appliesTo": ["corner_unit", "corner_glass_door"],
+          "label": "Side columns",
+          "type": "integer",
+          "default": 2,
+          "min": 2,
           "max": 6
         },
         {
@@ -1130,16 +1226,6 @@ Per generator:
           "default": 5,
           "min": 1,
           "max": 8
-        },
-        {
-          "key": "bayWidth",
-          "label": "Bay width",
-          "type": "number",
-          "unit": "mm",
-          "default": 300,
-          "min": 300,
-          "max": 900,
-          "step": 10
         },
         {
           "key": "shelfSpacing",
@@ -1163,15 +1249,10 @@ Per generator:
         },
         {
           "key": "backPanel",
+          "appliesTo": ["open", "glass_door", "corner_unit", "corner_glass_door"],
           "label": "Back panel",
           "type": "boolean",
           "default": true
-        },
-        {
-          "key": "glassDoors",
-          "label": "Glass doors",
-          "type": "boolean",
-          "default": false
         },
         {
           "key": "material",
@@ -1188,31 +1269,41 @@ Per generator:
         [
           "glass",
           "Glass doors"
+        ],
+        [
+          "wires",
+          "Wire side panels"
         ]
       ],
       "placement": {
         "mount": "floor"
       },
       "variant_defaults": {
-        "glass_door": {
-          "glassDoors": true
-        },
         "corner_unit": {
-          "columns": 2,
+          "width": 1200,
           "rows": 6
         },
+        "corner_glass_door": {
+          "width": 1200,
+          "rows": 6
+        },
+        "string": {
+          "width": 1200,
+          "columns": 2,
+          "rows": 4
+        },
         "utility": {
+          "width": 970,
           "columns": 1,
           "rows": 5,
-          "bayWidth": 900,
           "shelfSpacing": 400,
           "depth": 400,
-          "backPanel": false,
           "material": "pine"
         }
       },
       "notes": [
-        "`utility` is open storage shelving for a cellar or store room (Swedish förrådshylla): uprights at the corners, no back, no sides."
+        "`utility` is open storage shelving for a cellar or store room (Swedish förrådshylla): uprights at the corners, no back, no sides.",
+        "`string` is String-style shelving (as the wall shelf's `string`): boards between wire ladder panels at every bay boundary, standing on the floor; the wires are their own part (`wires`). The bays adapt to the width (fewer columns are used when a bay would be under 150 mm); a corner unit has a front run (`width`, `frontColumns`) and a side run (`sideWidth`, `sideColumns`), at least two columns each. Glass doors are the variants `glass_door` and `corner_glass_door`; there is no separate glass option, because a part that is empty cannot apply to a variant. The glass part has the default material `glass` (`defaultMaterial` on the part), so it does not take the wood of the rest."
       ]
     },
     {
@@ -1431,6 +1522,7 @@ Per generator:
       "parameters": [
         {
           "key": "variant",
+          "labels": { "base": "Base cabinet", "base_drawer": "Base cabinet with drawers", "upper": "Wall (upper) cabinet", "tall_pantry": "Tall pantry" },
           "label": "Variant",
           "type": "enum",
           "options": [
@@ -1481,6 +1573,7 @@ Per generator:
         },
         {
           "key": "plinth",
+          "appliesTo": ["base", "base_drawer", "tall_pantry"],
           "label": "Plinth",
           "type": "number",
           "unit": "mm",
@@ -1513,12 +1606,14 @@ Per generator:
         },
         {
           "key": "worktop",
+          "appliesTo": ["base", "base_drawer"],
           "label": "Worktop",
           "type": "boolean",
           "default": true
         },
         {
           "key": "worktopThickness",
+          "appliesTo": ["base", "base_drawer"],
           "label": "Worktop thickness",
           "type": "number",
           "unit": "mm",
@@ -1537,7 +1632,7 @@ Per generator:
       "parts": [
         [
           "carcass",
-          "Carcass and plinth"
+          "Carcass"
         ],
         [
           "doors",
@@ -1545,7 +1640,11 @@ Per generator:
         ],
         [
           "top",
-          "Worktop"
+          "Top (worktop on base cabinets)"
+        ],
+        [
+          "glass",
+          "Glass panes"
         ]
       ],
       "placement": {
@@ -2781,6 +2880,7 @@ Per generator:
       "parameters": [
         {
           "key": "variant",
+          "labels": { "flush": "Flush ceiling light", "pendant": "Pendant", "chandelier": "Chandelier", "recessed_downlight": "Recessed downlight", "track_light": "Track light" },
           "label": "Variant",
           "type": "enum",
           "options": [
@@ -2814,6 +2914,7 @@ Per generator:
         },
         {
           "key": "dropLength",
+          "appliesTo": ["pendant", "chandelier"],
           "label": "Drop length",
           "type": "number",
           "unit": "mm",
@@ -2821,6 +2922,28 @@ Per generator:
           "min": 0,
           "max": 2000,
           "step": 10
+        },
+        {
+          "key": "arms",
+          "appliesTo": ["chandelier"],
+          "label": "Chandelier arms",
+          "type": "enum_number",
+          "options": [
+            3,
+            6
+          ],
+          "default": 6
+        },
+        {
+          "key": "headDirection",
+          "appliesTo": ["chandelier"],
+          "label": "Chandelier heads point",
+          "type": "enum",
+          "options": [
+            "up",
+            "down"
+          ],
+          "default": "up"
         },
         {
           "key": "shadeShape",
@@ -2831,22 +2954,9 @@ Per generator:
             "cone",
             "globe",
             "bell",
-            "empty"
+            "bare_bulb"
           ],
           "default": "drum"
-        },
-        {
-          "key": "shadeMaterial",
-          "label": "Shade material",
-          "type": "enum",
-          "options": [
-            "fabric",
-            "glass",
-            "metal",
-            "paper",
-            "wood"
-          ],
-          "default": "fabric"
         },
         {
           "key": "material",
@@ -2878,7 +2988,7 @@ Per generator:
         "chandelier": {
           "diameter": 700,
           "dropLength": 800,
-          "shadeShape": "empty"
+          "shadeShape": "bare_bulb"
         },
         "recessed_downlight": {
           "diameter": 90,
@@ -2899,15 +3009,17 @@ Per generator:
       "parameters": [
         {
           "key": "variant",
-          "label": "Variant",
+          "label": "Form",
           "type": "enum",
           "options": [
-            "drum_shade",
-            "cone_shade",
-            "desk_adjustable_arm",
-            "bedside"
+            "classic",
+            "sill",
+            "candlestick",
+            "orb",
+            "desk_arm"
           ],
-          "default": "drum_shade"
+          "labels": { "classic": "Classic table lamp", "sill": "Small sill lamp", "candlestick": "Candlestick lamp", "orb": "Glass orb lamp", "desk_arm": "Adjustable desk lamp" },
+          "default": "classic"
         },
         {
           "key": "height",
@@ -2930,18 +3042,36 @@ Per generator:
           "step": 10
         },
         {
+          "key": "shadeShape",
+          "appliesTo": ["classic", "sill", "candlestick", "desk_arm"],
+          "label": "Shade shape",
+          "type": "enum",
+          "options": [
+            "drum",
+            "cone",
+            "empire",
+            "globe"
+          ],
+          "labels": { "drum": "Drum (straight)", "cone": "Cone (narrow top)", "empire": "Empire (slightly tapered)", "globe": "Globe" },
+          "default": "drum"
+        },
+        {
           "key": "baseShape",
+          "appliesTo": ["classic", "sill", "candlestick", "desk_arm"],
           "label": "Base shape",
           "type": "enum",
           "options": [
             "ceramic",
-            "column",
-            "sphere"
+            "pole",
+            "sphere",
+            "baluster"
           ],
+          "labels": { "ceramic": "Ceramic vase", "pole": "Pole", "sphere": "Ball", "baluster": "Turned baluster" },
           "default": "ceramic"
         },
         {
           "key": "armLength",
+          "appliesTo": ["desk_arm"],
           "label": "Arm length",
           "type": "number",
           "unit": "mm",
@@ -2969,28 +3099,33 @@ Per generator:
       ],
       "placement": {
         "mount": "floor",
-        "z": 720,
-        "variants": {
-          "bedside": {
-            "mount": "floor",
-            "z": 550
-          }
-        }
+        "z": 720
       },
       "variant_defaults": {
-        "desk_adjustable_arm": {
+        "sill": {
+          "height": 280,
+          "shadeDiameter": 170
+        },
+        "candlestick": {
+          "height": 520,
+          "shadeDiameter": 200,
+          "shadeShape": "empire",
+          "baseShape": "baluster"
+        },
+        "orb": {
+          "height": 300,
+          "shadeDiameter": 180
+        },
+        "desk_arm": {
           "armLength": 500,
           "height": 400,
           "shadeDiameter": 200,
-          "baseShape": "column"
-        },
-        "bedside": {
-          "height": 450,
-          "shadeDiameter": 250
+          "shadeShape": "cone",
+          "baseShape": "pole"
         }
       },
       "notes": [
-        "It stands on a table: it starts 720 mm up (on a bedside table, 550)."
+        "The variant is the form of the lamp; the shade shape (drum, cone, empire, globe) is a separate choice. The bedside lamp is the classic form with an empire shade (decision 240). It stands on a table: it starts 720 mm up. The sill form is small enough for a window sill (placement in a window comes from the window, docs/plans)."
       ]
     },
     {
@@ -2998,7 +3133,7 @@ Per generator:
       "parameters": [
         {
           "key": "variant",
-          "label": "Variant",
+          "label": "Form",
           "type": "enum",
           "options": [
             "arc",
@@ -3006,6 +3141,7 @@ Per generator:
             "tripod",
             "standard"
           ],
+          "labels": { "arc": "Arc lamp", "torchiere": "Torchiere (uplighter)", "tripod": "Tripod lamp", "standard": "Standard lamp" },
           "default": "arc"
         },
         {
@@ -3029,6 +3165,19 @@ Per generator:
           "step": 10
         },
         {
+          "key": "shadeShape",
+          "appliesTo": ["arc", "tripod", "standard"],
+          "label": "Shade shape",
+          "type": "enum",
+          "options": [
+            "drum",
+            "cone",
+            "empire"
+          ],
+          "labels": { "drum": "Drum (straight)", "cone": "Cone (narrow top)", "empire": "Empire (slightly tapered)" },
+          "default": "drum"
+        },
+        {
           "key": "baseDiameter",
           "label": "Base diameter",
           "type": "number",
@@ -3040,6 +3189,7 @@ Per generator:
         },
         {
           "key": "arcReach",
+          "appliesTo": ["arc"],
           "label": "Arc reach",
           "type": "number",
           "unit": "mm",
@@ -3072,7 +3222,8 @@ Per generator:
         "arc": {
           "arcReach": 1200,
           "height": 1900,
-          "baseDiameter": 400
+          "baseDiameter": 400,
+          "shadeShape": "cone"
         },
         "torchiere": {
           "shadeDiameter": 350,
@@ -3080,7 +3231,8 @@ Per generator:
         },
         "tripod": {
           "baseDiameter": 500,
-          "height": 1500
+          "height": 1500,
+          "shadeShape": "empire"
         }
       }
     },
@@ -3123,7 +3275,7 @@ Per generator:
           "label": "Projection",
           "type": "number",
           "unit": "mm",
-          "default": 120,
+          "default": 230,
           "min": 50,
           "max": 400,
           "step": 10
@@ -3132,7 +3284,7 @@ Per generator:
           "key": "material",
           "label": "Material (whole object)",
           "type": "material",
-          "default": "black-metal"
+          "default": "white-paint"
         }
       ],
       "parts": [
@@ -3153,7 +3305,10 @@ Per generator:
         "swing_arm": {
           "projection": 350
         }
-      }
+      },
+      "notes": [
+        "The head is always round and as wide as the width; projection (the distance from the wall to the front of the head) only sets the length of the arm, and is raised to the plate plus the head width when it is smaller (a swing arm keeps at least 80 mm of arm)."
+      ]
     }
   ]
 }
@@ -3555,12 +3710,10 @@ Per generator:
           "label": "Variant",
           "type": "enum",
           "options": [
-            "pot_small",
-            "floor_pot",
-            "tree_pot",
+            "pot",
             "hanging"
           ],
-          "default": "pot_small"
+          "default": "pot"
         },
         {
           "key": "diameter",
@@ -3604,14 +3757,6 @@ Per generator:
         }
       },
       "variant_defaults": {
-        "floor_pot": {
-          "diameter": 350,
-          "height": 450
-        },
-        "tree_pot": {
-          "diameter": 450,
-          "height": 600
-        },
         "hanging": {
           "diameter": 200,
           "height": 200

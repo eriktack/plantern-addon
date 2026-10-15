@@ -1,16 +1,17 @@
-// The library route of the local server (object-designs/, decision 68).
+// The library route of the local server (object-designs/, decision 233).
 //   POST /api/library/models  { source } → { file, id, warnings }
+//   GET  /api/library/textures/<file>  the image of a library material (object-designs/textures/), for a house that uses it
 // Adds a generated model to object-designs/models/ and refreshes models/index.json, so the catalog lists it. The file
 // must pass the same checks as the validator page (no errors), and an id already in the library is refused. Same-origin
 // JSON, like the other write routes.
 
 import { randomUUID } from 'node:crypto';
-import { existsSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { extname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readJsonBody, writeGuard } from '../store/api.js';
 import { checkModule } from '../../object-designs/tools/check-core.js';
-import { loadTextures, readLibrary } from '../../object-designs/tools/node-io.js';
+import { DESIGNS_DIR, loadTextures, readLibrary } from '../../object-designs/tools/node-io.js';
 import { MODELS_DIR, indexText } from '../../object-designs/tools/index-models.js';
 
 const json = (res, status, body) => {
@@ -18,8 +19,23 @@ const json = (res, status, body) => {
   res.end(JSON.stringify(body));
 };
 
-/** Handle /api/library/models; false when the path is not ours. `dir` is the models folder (tests use their own). */
-export async function libraryApi(req, res, url, { dir = MODELS_DIR } = {}) {
+const TEXTURE_TYPES = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+
+/** Handle /api/library/models and /api/library/textures/<file>; false when the path is not ours. `dir` is the models folder and `textures` the textures folder (tests use their own). */
+export async function libraryApi(req, res, url, { dir = MODELS_DIR, textures = resolve(DESIGNS_DIR, 'textures') } = {}) {
+  const tex = /^\/api\/library\/textures\/([^/]+)$/.exec(url.pathname);
+  if (tex) {
+    if (req.method !== 'GET') return json(res, 405, { error: 'GET only' }), true;
+    const name = decodeURIComponent(tex[1]);
+    const type = TEXTURE_TYPES[extname(name).toLowerCase()];
+    if (!/^[a-z0-9][a-z0-9._-]*$/i.test(name) || !type) return json(res, 404, { error: 'no such texture' }), true;
+    try {
+      const data = readFileSync(resolve(textures, name));
+      res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-cache' });
+      res.end(data);
+    } catch { json(res, 404, { error: 'no such texture' }); }
+    return true;
+  }
   if (url.pathname !== '/api/library/models') return false;
   if (req.method !== 'POST') return json(res, 405, { error: 'POST only' }), true;
   const bad = writeGuard(req);

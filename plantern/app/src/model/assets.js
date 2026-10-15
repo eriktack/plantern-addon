@@ -40,7 +40,7 @@ export function assetWarnings(model, metas) {
   const out = [];
   for (const level of model.levels || []) {
     for (const o of level.objects || []) {
-      if (o.kind !== 'asset' || o.blueprint !== undefined || !ASSET_NAME.test(o.asset ?? '')) continue;   // a blueprint's size is checked against its build (decision 23)
+      if (o.kind !== 'asset' || o.blueprint !== undefined || !ASSET_NAME.test(o.asset ?? '')) continue;   // a blueprint's size is checked against its build (decision 187)
       const meta = metas.get(o.asset);
       if (!meta) {
         out.push({ id: o.id, msg: `${o.id}: model "${o.asset}" is not in this house's assets/ or the shared assets/ (shown as a marker)` });
@@ -56,7 +56,7 @@ export function assetWarnings(model, metas) {
 
 // ---- objects made from a blueprint (docs/archive/2026-10-14-object-templates.md, T7) ----
 
-/** A size that differs from the build's by more than this (mm) is reported (decision 25). */
+/** A size that differs from the build's by more than this (mm) is reported (decision 189). */
 export const SIZE_TOLERANCE = 0.5;
 
 const canonical = v => Array.isArray(v) ? `[${v.map(canonical).join(',')}]`

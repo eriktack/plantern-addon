@@ -7,7 +7,7 @@
 
 import { createPreview } from './preview.js';
 import { buildModel } from './lib/build.js';
-import { resolveParams } from './lib/params.js';
+import { placementOf, resolveParams } from './lib/params.js';
 import { resolvePartMaterials } from './lib/materials.js';
 import { geomToMesh, addPlanarUvs, triangleCount } from './lib/geom.js';
 import { createParamForm } from '../src/param-form.js';
@@ -48,7 +48,8 @@ async function loadLibrary() {
 
 // The 3D preview (preview.js, shared with the validator).
 const preview = createPreview($('view'), () => textures);
-const showParts = parts => preview.show(parts);
+// frameKey: the view re-frames only when it changes (a model or a variant), so a value change resizes the object in place
+const showParts = (parts, mount, view, frameKey) => preview.show(parts, { mount, view, frameKey });
 const resize = () => preview.resize();
 
 /* ---------- 3. The model, its materials and the form ---------- */
@@ -103,22 +104,27 @@ function buildPreview(model, input) {
   return model.meta.parts.map((part, i) => {
     const material = materials[part.key];
     let mesh = meshCache.meshes[i];
+    if (mesh.idx.length === 0) return null;   // a part this variant does not build (its appliesTo): not shown
     if (material.texture) {
       const path = material.texture.path;
       if (!textures.has(path)) throw new Error(`Texture file "${path}" is not loaded (it must be in textures/)`);
       mesh = addPlanarUvs(mesh, material.texture.uvScale);
     }
     return { label: part.label, mesh, material, triangles: triangleCount(mesh), name: material.name };
-  });
+  }).filter(p => p !== null);
 }
 
 // Previews the form as it is now. Called after a short pause, and only when every field is valid.
 function refresh() {
   if (!current) return;
   try {
-    const parts = buildPreview(current.mod, form.read());
+    const input = form.read();
+    const parts = buildPreview(current.mod, input);
     form.setBuildError(null);
-    showParts(parts.map(p => ({ mesh: p.mesh, material: p.material })));
+    // a wall or ceiling model is shown on the wall or ceiling it hangs from
+    // a model whose variant wants its front in view starts straight on at it (meta.frontView)
+    const view = current.mod.meta.frontView?.includes(input.variant) ? 'front' : null;
+    showParts(parts.map(p => ({ mesh: p.mesh, material: p.material })), placementOf(current.mod.meta, input.variant), view, `${current.mod.meta.id}|${input.variant ?? ''}`);
     lastInfo = parts.map(p => `${p.label}: ${p.triangles} triangles, ${p.name}`).join('<br>');
     $('info').innerHTML = lastInfo;
   } catch (e) {
@@ -130,7 +136,11 @@ function refresh() {
 function selectModel(index, values) {
   current = models[index];
   meshCache = null;
-  $('desc').textContent = current.mod.meta.description || '';
+  // the short summary is shown; the full description (with the assumed values) folds out below it
+  const meta = current.mod.meta;
+  $('desc').textContent = meta.summary || meta.description || '';
+  $('descFull').hidden = !meta.summary;
+  $('descText').textContent = meta.description || '';
   form.show(current.mod.meta, values);
   for (const f of onSelect) f(current.mod.meta, !!values);
 }

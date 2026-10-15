@@ -1,11 +1,16 @@
-// The GLB routes of the local server (docs/archive/2026-10-14-object-templates.md, T4 and T5; decision 21).
+// The GLB routes of the local server (docs/archive/2026-10-14-object-templates.md, T4 and T5; decision 185).
 //   POST   /api/glb          { house?, blueprint, params?, partMaterials? } → { hash, size }   (builds the GLB when it is not cached)
 //   GET    /api/glb/<hash>   → the GLB (model/gltf-binary); it never changes for a hash, so it is cached for a year
 //   GET    /api/houses/<id>/blueprints → { blueprints: [{ id, source, meta, json? }], refused }: the built-in models and the house's own
 //   DELETE /api/glb-cache    → { objects, bytes }: empties the cache (*Clear cache* on the Storage page)
+//   POST   /api/houses/<id>/export-asset { blueprint, params?, partMaterials?, name? } → { name, path, size, sync }
+//            writes the model and its meta.json into the house's own assets/<name>/ (default name: the blueprint id;
+//            an existing one is replaced), in whatever storage the house is (decision 225)
 // Only from your own network (checked before the routes run) and as same-origin JSON, like the other write routes.
 
 import { readJsonBody, writeGuard } from '../store/api.js';
+import { ASSET_NAME } from '../../src/model/assets.js';
+import { formatMeta } from '../../object-designs/lib/asset-meta.js';
 
 const json = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
 
@@ -28,6 +33,26 @@ export async function glbApi(cache, registry, req, res, url) {
       if (!house) return json(res, 404, { error: `there is no house "${id}"` }), true;
       return json(res, 200, await cache.list(house.dir)), true;
     } catch (e) { return json(res, 500, { error: e.message }), true; }
+  }
+  const exported = /^\/api\/houses\/([^/]+)\/export-asset$/.exec(p);
+  if (exported) {
+    if (req.method !== 'POST') return json(res, 405, { error: 'POST only' }), true;
+    const bad = writeGuard(req);
+    if (bad) return json(res, 403, { error: bad }), true;
+    try {
+      await registry.ready;
+      const id = decodeURIComponent(exported[1]), found = registry.find(id);
+      if (!found) return json(res, 404, { error: `there is no house "${id}"` }), true;
+      const body = await readJsonBody(req);
+      if (typeof body.blueprint !== 'string') return json(res, 400, { error: 'blueprint must be a blueprint id' }), true;
+      const name = body.name ?? body.blueprint;
+      if (typeof name !== 'string' || !ASSET_NAME.test(name)) return json(res, 400, { error: `the asset name "${name}" must be lower-case letters, digits and dashes` }), true;
+      const r = await cache.exportAsset({ houseDir: found.house.dir, blueprint: body.blueprint, params: body.params, partMaterials: body.partMaterials });
+      const w = await registry.writeAsset(id, name, { 'model.glb': r.glb, 'meta.json': formatMeta(r.meta) });
+      return json(res, 200, { name, path: `assets/${name}`, size: r.size, sync: w.sync }), true;
+    } catch (e) {
+      return json(res, e.status || 500, { error: e.message }), true;
+    }
   }
   if (p !== '/api/glb' && !p.startsWith('/api/glb/')) return false;
   try {

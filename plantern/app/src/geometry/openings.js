@@ -13,9 +13,13 @@
 
 import { facePoint, centrePoint } from './walls.js';
 import { unitSpan } from './fittings.js';
+import { isHingedDoor } from '../model/doors.js';
 
-/** { lines: [[p, q]], dashed: [[p, q]], arcs: [{ c, r, from, to, dashed }] } for opening o on wall w (frame f). */
-export function openingSymbol(w, f, o) {
+/**
+ * { lines: [[p, q]], dashed: [[p, q]], arcs: [{ c, r, from, to, dashed }] } for opening o on wall w (frame f).
+ * `open` (a hinged door): drawn open, the default; false draws it shut (doorOpen() in model/doors.js).
+ */
+export function openingSymbol(w, f, o, { open = true } = {}) {
   const s0 = o.offset, s1 = o.offset + o.width, out = { lines: [], dashed: [], arcs: [] };
   const face = side => [facePoint(w, f, side, s0), facePoint(w, f, side, s1)];
   const side = o.swing === 'left' ? 'left' : 'right', into = side === 'left' ? f.n : [-f.n[0], -f.n[1]];
@@ -42,7 +46,11 @@ export function openingSymbol(w, f, o) {
   if (o.type === 'door' && (o.opens === 'sliding' || o.opens === 'pocket')) {
     if (o.leaves === 2) { const m = (s0 + s1) / 2; slider([[s0, m, 'near'], [m, s1, 'far']]); }
     else slider([[s0, s1, o.slide === 'far' ? 'far' : 'near']]);
-  } else if (o.type === 'door') leaf(false);
+  } else if (o.type === 'door') {
+    // a closed hinged door is a line across the opening (its leaf shut); open, the leaf and its arc
+    if (open || !isHingedDoor(o)) leaf(false);
+    else out.lines.push([centrePoint(w, f, s0), centrePoint(w, f, s1)]);
+  }
   else if (o.type === 'window') {
     const c0 = centrePoint(w, f, s0), c1 = centrePoint(w, f, s1);
     if (o.thickness || o.placement) {

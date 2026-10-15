@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "demo",
   "name": "Demo (prototype data)",
-  "_comment": "Made-up geometry and entity ids from prototype A. Used for development and tests; not a real place.",
+  "_comment": "Made-up geometry and entity ids. Used for development and tests; not a real place. It shows most of what the tool can do, with objects from the shared library.",
   "model": "model.json",
   "integrations": { "ha": { "connection": "demo_mock" } },
   "bindings": {
@@ -10,12 +10,31 @@
     "f_l_lamp": { "entity": "light.living" },
     "f_k_switch": { "controls": ["f_l_lamp"] },
     "f_t_lamp": { "entity": "light.terrace" },
-    "f_studio_lamp": { "entity": "light.studio" },
+    "f_studio_lamp": { "entity": "light.studio", "look": { "brightness": 80, "kelvin": 2700 } },
     "f_cellar_lamp": { "entity": "light.cellar" },
     "f_bed_lamp": { "entity": "light.bedroom" },
     "f_land_lamp": { "entity": "light.landing" },
     "f_boiler_strip_h": { "entity": "light.boiler_strips" },
-    "f_boiler_strip_v": { "entity": "light.boiler_strips" }
+    "f_boiler_strip_v": { "entity": "light.boiler_strips" },
+    "f_k_counter_strip": { "entity": "light.kitchen_counter" },
+    "f_k_window_lamp": { "entity": "light.kitchen_window" },
+    "f_bath_lamp": { "entity": "light.bathroom" },
+    "f_bed_sill_strip": { "entity": "light.bedroom_window" },
+    "f_land_switch": { "controls": ["f_land_lamp","f_bath_lamp"] },
+    "o_l_door": { "entity": "binary_sensor.entrance_door" },
+    "o_bed_doors": { "entity": "binary_sensor.bedroom_doors" }
   },
-  "settings": { "cutPlane": 1200, "checkTolerance": { "ok": 5, "warn": 15 } }
+  "settings": {
+    "cutPlane": 1200,
+    "checkTolerance": { "ok": 5, "warn": 15 },
+    "render3d": { "shadows": { "desktop": "average", "mobile": "few" }, "nightLight": 0.3 }
+  },
+  "areas": {
+    "r_kitchen": "kitchen",
+    "r_living": "living_room",
+    "r_studio": "studio",
+    "r_bedroom": "bedroom",
+    "r_landing": "hallway",
+    "r_cellar": "cellar"
+  }
 }

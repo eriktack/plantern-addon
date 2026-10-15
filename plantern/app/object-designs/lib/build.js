@@ -3,7 +3,7 @@
 // the texture files are passed in. This is the glue between the model file contract
 // (AGENT_INSTRUCTIONS.md §3) and the libraries; agents never call it from a model file.
 
-import { resolveParams } from './params.js';
+import { partBuilt, resolveParams } from './params.js';
 import { resolvePartMaterials } from './materials.js';
 import { geomToMesh, addPlanarUvs, triangleCount } from './geom.js';
 import { buildGltfParts, toGltfText, toGlb } from './gltf-lib.js';
@@ -23,10 +23,18 @@ export function buildModel(model, input = {}, library = {}, { textures = new Map
   const geoms = model.build(params);
 
   const images = new Map();
+  // The variant the part list depends on (a part with its own appliesTo, see AGENT_INSTRUCTIONS §3.1).
+  const variant = model.meta.params.some(d => d.key === 'variant') ? params.variant : undefined;
   const parts = model.meta.parts.map(part => {
     if (!(part.key in geoms)) throw new Error(`build() returned no geometry for part "${part.key}"`);
     const material = materials[part.key];
     let mesh = geomToMesh(geoms[part.key]);
+    if (mesh.idx.length === 0) {
+      // a part with no geometry is only allowed where it is not built for these values (it does not apply to the variant, or the
+      // yes/no parameter it `needs` is off, like the glass of doors that are not glazed); it is then left out of the model
+      if (partBuilt(part, params, variant)) throw new Error(`part "${part.label}" has no geometry`);
+      return null;
+    }
     if (material.texture) {
       const path = material.texture.path;
       if (!textures.has(path)) throw new Error(`Texture file "${path}" is not loaded (it must be in textures/)`);
@@ -34,7 +42,7 @@ export function buildModel(model, input = {}, library = {}, { textures = new Map
       mesh = addPlanarUvs(mesh, material.texture.uvScale);
     }
     return { key: part.key, label: part.label, mesh, material };
-  });
+  }).filter(p => p !== null);
 
   const assembled = buildGltfParts(
     parts.map(p => ({ name: p.label, mesh: p.mesh, material: p.material })),
