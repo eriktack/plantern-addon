@@ -102,7 +102,7 @@ export function wireHousePanel(ctx, page) {
   fillLevel();
   showKind();
 
-  // where a new object starts comes from the blueprint (meta.placement, decision 65): on a wall at its height, on the
+  // where a new object starts comes from the blueprint (meta.placement, decision 230): on a wall at its height, on the
   // floor, or under the ceiling (the bottom is then worked out from the built height when it is placed)
   // a bottom the person has not typed follows the blueprint and its chosen variant when Place is pressed
   let zTyped = false;
@@ -158,6 +158,28 @@ export function wireHousePanel(ctx, page) {
       const editor = `../room-editor.html?${new URLSearchParams({ loc: house.id, level: levelId })}`;
       say(`Placed as ${r.object.id} (${built.size.join(' × ')} mm) and saved. `);
       $('hMsg').insertAdjacentHTML('beforeend', `<a href="${esc(editor)}">Open the Editor</a> · <a href="?${new URLSearchParams({ loc: house.id, object: r.object.id })}">edit its options</a>`);
+    } catch (e) {
+      say(e.message, true);
+    } finally { button.disabled = false; }
+  });
+
+  // Export: the model with the options now shown, written into the house's own assets/ folder (decision 234). It is a
+  // file for use outside a placed object; the object itself keeps its blueprint and options.
+  $('hExport').addEventListener('click', async () => {
+    const button = $('hExport');
+    button.disabled = true;
+    say('Exporting…');
+    try {
+      if (!page.current()) throw new Error('Pick a blueprint first.');
+      if (!page.form.valid) throw new Error('Some values need a fix first (see the top of the panel).');
+      const { params, partMaterials } = page.form.readForObject();
+      const name = $('hAssetName').value.trim();
+      const r = await fetch(`../api/houses/${encodeURIComponent(house.id)}/export-asset`, POST({
+        blueprint: page.current().mod.meta.id, params, partMaterials, ...(name ? { name } : {}),
+      }));
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `the server answered ${r.status}`);
+      say(`Saved to ${j.path} in ${house.name} (${j.size.join(' × ')} mm).`);
     } catch (e) {
       say(e.message, true);
     } finally { button.disabled = false; }

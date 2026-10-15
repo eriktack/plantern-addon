@@ -37,6 +37,23 @@ export function prismGeometry(THREE, poly, z0, z1, slope = null, holes = null) {
   return g;
 }
 
+/** A round bar: a smooth cylinder between two points [x, y, z] (plan mm, z up) of the given diameter (a round handrail member, a bracket). */
+export function barGeometry(THREE, a, b, diameter) {
+  const pa = new THREE.Vector3(...toThree([a[0], a[1]], a[2])), pb = new THREE.Vector3(...toThree([b[0], b[1]], b[2]));
+  const dir = pb.clone().sub(pa), length = Math.max(dir.length(), 1e-6);
+  const g = new THREE.CylinderGeometry(diameter / 2 * MM, diameter / 2 * MM, length, 24);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize()));
+  g.translate((pa.x + pb.x) / 2, (pa.y + pb.y) / 2, (pa.z + pb.z) / 2);
+  return g;
+}
+
+/** A ball (a joint of a round handrail): centre [x, y, z] in plan mm, diameter mm. */
+export function ballGeometry(THREE, center, diameter) {
+  const g = new THREE.SphereGeometry(diameter / 2 * MM, 24, 16);
+  g.translate(...toThree([center[0], center[1]], center[2]));
+  return g;
+}
+
 /** A round solid: a smooth upright cylinder (centre in plan mm, radius mm) from z0 to z1 mm. */
 export function cylinderGeometry(THREE, center, radius, z0, z1) {
   const h = Math.max(z1 - z0, 0.1);

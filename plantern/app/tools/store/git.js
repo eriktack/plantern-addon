@@ -225,6 +225,15 @@ export class GitStore extends FolderStore {
     return { ...w, sync: this.status };
   }
 
+  /** An exported object's files in assets/<name>/ (folder.js): committed and pushed like a house save. */
+  async writeAsset(h, name, files) {
+    const w = await super.writeAsset(h, name, files);
+    const rel = path.relative(this.root, path.join(h.dir, 'assets', name));
+    await this.serial(async () => { if (await this.commit([rel], `Plantern: ${h.name} asset ${name}`)) this.setStatus('pending'); });
+    if (this.cfg.url) this.serial(() => this.push()).catch(() => {});
+    return { ...w, sync: this.status };
+  }
+
   async createHouse(folder, locationText, modelText, { message } = {}) {
     const dir = await super.createHouse(folder, locationText, modelText);
     await this.added(path.relative(this.root, dir) || '.', message || `New house ${folder}`);

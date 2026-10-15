@@ -370,6 +370,12 @@
         </div>
       </div>
     </div>
+    <div id="oBindBox">
+      <label>Door sensor in Home Assistant <small id="oEntityNote">a binary_sensor that says open (on) or closed (off); picking one links it when you Apply</small><input id="oEntity" autocomplete="off" spellcheck="false" placeholder="type to search: name or entity id"></label>
+      <div id="oEntityPick" class="entpick" hidden></div>
+      <div id="oEntityNow" class="help"></div>
+      <div class="help" id="oBindHint">Without a sensor the door is drawn open, and light passes it. A closed sensor shuts it. Sliding and pocket doors do not change with the sensor.</div>
+    </div>
     <div id="oErr" class="help" style="color:var(--bad)"></div>
     <div class="row btns">
       <button class="moved" id="oApply">Apply opening changes</button>
@@ -498,6 +504,10 @@
       <label>Sides <select id="stSides"><option value="stepped">stepped</option><option value="sloped">sloped panels</option></select></label>
       <label>Handrail <small>walking up</small><select id="stRail"><option value="none">none</option><option value="left">on the left</option><option value="right">on the right</option><option value="both">on both sides</option></select></label>
       <label id="stRailHRow">Rail height <small>mm above the steps' noses, empty = 900</small><input id="stRailH" inputmode="numeric" placeholder="900" autocomplete="off"></label>
+      <label id="stRailMountRow">Rail <small>how it is made and held</small><select id="stRailMount"><option value="">square bar with posts</option><option value="poles">round, on poles</option><option value="wall">round, on the wall (brackets)</option></select></label>
+      <label id="stRailDRow">Rail diameter <small>mm, empty = 60</small><input id="stRailD" inputmode="numeric" placeholder="60" autocomplete="off"></label>
+      <label id="stRailSRow">Rail starts <small>mm up the first flight, empty = at its front edge; negative = before it</small><input id="stRailS" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+      <label id="stRailERow">Rail ends <small>mm short of the last flight's end, empty = at it; negative = past it</small><input id="stRailE" inputmode="numeric" placeholder="0" autocomplete="off"></label>
       <label id="stWaistRow">Thickness under the steps <small>mm, sloped underside</small><input id="stWaist" inputmode="numeric" placeholder="150" autocomplete="off"></label>
     </div>
     <label class="check"><input type="checkbox" id="stIgnore"> Steps checked: no warning for their depth <small>tick when the steps are right although they are outside 220–300 mm</small></label>

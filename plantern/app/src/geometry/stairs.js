@@ -14,6 +14,7 @@
 
 import { add, mul } from './vec.js';
 import { pointInPolygon, distToSegment, signedArea } from './polygon.js';
+import { roundRails } from './stair-rails-round.js';
 
 const r1 = v => Math.round(v * 100) / 100;
 const pt = p => [r1(p[0]), r1(p[1])];
@@ -413,6 +414,7 @@ export const STAIR_RAIL = Object.freeze({ height: 900, rail: 45, depth: 40, post
 export function stairRails(layout, st, { dz = 0 } = {}) {
   const mode = st.handrail;
   if (mode !== 'left' && mode !== 'right' && mode !== 'both') return [];
+  if (st.handrailMount === 'wall' || st.handrailMount === 'poles') return roundRails(layout, st, { dz, defaultHeight: STAIR_RAIL.height });
   const H = Number(st.handrailHeight) > 0 ? Number(st.handrailHeight) : STAIR_RAIL.height, riser = layout.riser, { rail: RW, depth: RD, post: PW } = STAIR_RAIL;
   const out = [], posts = new Map();
   const nose = (f, s) => f.h0 + riser + (riser / f.d) * s + dz;                      // the line through the noses of a flight, at s from its front edge

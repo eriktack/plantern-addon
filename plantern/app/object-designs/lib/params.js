@@ -2,22 +2,22 @@
 // Checks a model's meta descriptor and validates parameter values against it. Pure.
 // Errors name the parameter by its label and give the unit, so the message is readable in the catalog.
 //
-// Parameter types (LIBRARY.md decision 1):
+// Parameter types (LIBRARY.md Q1):
 //   number (type omitted)  key, label, unit, default, min, max, step
 //   integer                key, label, default, min, max?, step? (default 1), unit? (none for a count)
 //   boolean                key, label, default (true / false)
 //   enum                   key, label, default, options: [string, …]
-//   enum_number            key, label, unit, default, options: [number, …]
+//   enum_number            key, label, default, options: [number, …], unit? (none for a count, like integer)
 //   material               key, label, default (a library name or #rrggbb)
 //
 // Variants: an enum parameter with key `variant`, and optionally meta.variantDefaults
 // { <variant>: { <key>: value, … } }. When a variant is picked, its defaults replace the
 // parameter defaults; a value given explicitly still wins.
 //
-// Placement (decision 65): optional meta.placement = { mount: 'floor' | 'wall' | 'ceiling', z? } says where a new
+// Placement (decision 230): optional meta.placement = { mount: 'floor' | 'wall' | 'ceiling', z? } says where a new
 // object starts when it is placed in a house: on the floor (z 0, or z mm up), on a wall with its bottom z mm above the
 // floor, or hanging from the ceiling (no z: it hangs from the room's ceiling). It is only a start; the house decides
-// (decision 61), so it is not a parameter and never reaches build(). Without it: on the floor. A variant can start
+// (decision 226), so it is not a parameter and never reaches build(). Without it: on the floor. A variant can start
 // elsewhere: placement.variants = { <variant>: { mount, z? } }.
 
 const MOUNTS = new Set(['floor', 'wall', 'ceiling']);
@@ -68,8 +68,18 @@ function checkParam(d, where, problems) {
       problems.push(`${where}: every option must be a ${want}`);
     }
     if (new Set(d.options).size !== d.options.length) problems.push(`${where}: duplicate option`);
-    if (type === 'enum_number' && typeof d.unit !== 'string') problems.push(`${where}: unit is missing`);
+    if (type === 'enum_number' && d.unit !== undefined && typeof d.unit !== 'string') problems.push(`${where}: unit must be a string`);
     if (!d.options.includes(d.default)) problems.push(`${where}: default is not one of the options`);
+    if (d.labels !== undefined) {
+      if (!d.labels || typeof d.labels !== 'object' || Array.isArray(d.labels)) {
+        problems.push(`${where}: labels must be an object of option to display name`);
+      } else {
+        for (const [k, v] of Object.entries(d.labels)) {
+          if (!d.options.some(o => String(o) === k)) problems.push(`${where}: label for "${k}", which is not an option`);
+          else if (typeof v !== 'string' || !v.trim()) problems.push(`${where}: the label for "${k}" must be a non-empty string`);
+        }
+      }
+    }
     return;
   }
   // number and integer
@@ -192,6 +202,49 @@ export function placementOf(meta, variant) {
 }
 
 /** Lists problems with a model's meta. An empty list means the descriptor is usable. */
+/**
+ * The name to show for one option of an enum parameter: its `labels` entry (the display name), else the option itself.
+ */
+export function labelOf(d, option) {
+  return d?.labels?.[String(option)] ?? String(option);
+}
+
+/**
+ * Whether a parameter applies to a variant (variant options). A parameter without `appliesTo` applies to every variant;
+ * with it, only to the listed ones. Without a variant (a model with no variant parameter) every parameter applies.
+ */
+export function appliesTo(d, variant) {
+  if (!Array.isArray(d?.appliesTo) || variant === undefined) return true;
+  return d.appliesTo.includes(variant);
+}
+
+/**
+ * Whether a part is built for these values: it applies to the variant, and the yes/no parameter it `needs` (the glass of doors
+ * that may or may not be glazed) is on. A part that is not built has no geometry, no material and no material selector.
+ */
+export function partBuilt(part, params, variant) {
+  return appliesTo(part, variant) && (!part?.needs || params?.[part.needs] === true);
+}
+
+function checkAppliesTo(d, where, meta, problems) {
+  if (d.key === 'variant' || d.type === 'material') {
+    problems.push(`${where}: appliesTo is not allowed on the variant or the material`);
+    return;
+  }
+  const variant = (meta.params || []).find(x => x?.key === 'variant');
+  if (!variant || !Array.isArray(variant.options)) {
+    problems.push(`${where}: appliesTo needs an enum parameter with key "variant"`);
+    return;
+  }
+  if (!Array.isArray(d.appliesTo) || d.appliesTo.length === 0) {
+    problems.push(`${where}: appliesTo must be a non-empty list of variants`);
+    return;
+  }
+  for (const name of d.appliesTo) {
+    if (!variant.options.includes(name)) problems.push(`${where}: appliesTo "${name}" is not a variant`);
+  }
+}
+
 export function checkMeta(meta) {
   const problems = [];
   if (!meta || typeof meta !== 'object') return ['meta is missing'];
@@ -209,6 +262,7 @@ export function checkMeta(meta) {
     if (!d) continue;
     if (typeof d.label !== 'string' || !d.label) problems.push(`${where}: label is missing`);
     checkParam(d, where, problems);
+    if (d.appliesTo !== undefined) checkAppliesTo(d, where, meta, problems);
   }
   const variant = (meta.params || []).find(d => d?.key === 'variant');
   if (variant && variant.type !== 'enum') problems.push('param "variant" must be of type enum');
@@ -222,6 +276,9 @@ export function checkMeta(meta) {
     if (partKeys.has(p.key)) problems.push(`part "${p.key}": duplicate key`);
     partKeys.add(p.key);
     if (typeof p.label !== 'string' || !p.label) problems.push(`part "${p.key}": label is missing`);
+    if (p.needs !== undefined && (meta.params || []).find(d => d?.key === p.needs)?.type !== 'boolean') problems.push(`part "${p.key}": needs must be the key of a yes/no (boolean) parameter`);
+    if (p.defaultMaterial !== undefined && (typeof p.defaultMaterial !== 'string' || !p.defaultMaterial.trim())) problems.push(`part "${p.key}": defaultMaterial must be a material name or #rrggbb`);
+    if (p.appliesTo !== undefined) checkAppliesTo(p, `part "${p.key}"`, meta, problems);
   }
   if (!(meta.params || []).some(d => d?.type === 'material')) {
     problems.push('meta.params needs one material parameter (type: "material") for the whole object');
@@ -266,9 +323,13 @@ export function resolveParams(meta, input = {}) {
   const variant = variantParam && input.variant !== undefined && !checkValue(variantParam, input.variant)
     ? input.variant : undefined;
   const defaults = defaultsFor(meta, variant);
+  // The variant the options are read for. A parameter that does not apply to it takes the value that variant has for it
+  // (its variantDefaults, else the parameter's default); a value given for it is not used and not checked, since the forms
+  // keep the value of a hidden option.
+  const active = variant ?? (variantParam ? variantParam.default : undefined);
 
   for (const d of meta.params) {
-    const v = input[d.key] ?? defaults[d.key];
+    const v = appliesTo(d, active) ? (input[d.key] ?? defaults[d.key]) : defaults[d.key];
     const err = checkValue(d, v);
     if (err) { errors.push(err); continue; }
     out[d.key] = typeOf(d) === 'material' ? v.trim() : v;
@@ -283,7 +344,9 @@ export function resolveParams(meta, input = {}) {
     for (const [k, v] of Object.entries(given)) {
       if (!partKeys.has(k)) { errors.push(`unknown part "${k}" in partMaterials`); continue; }
       if (typeof v !== 'string') { errors.push(`partMaterials.${k} must be a string`); continue; }
-      if (v.trim()) partMaterials[k] = v.trim(); // empty means "use the whole-object material"
+      // empty means "use the whole-object material"; a part that does not apply to the variant takes no material of its own
+      const part = meta.parts.find(p => p.key === k);
+      if (v.trim() && partBuilt(part, out, active)) partMaterials[k] = v.trim();
     }
   }
   out.partMaterials = partMaterials;

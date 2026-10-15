@@ -1,4 +1,4 @@
-// The browser's own copy of the GLBs of placed objects (object-templates T8, decision 21): a file is kept under its hash, and
+// The browser's own copy of the GLBs of placed objects (object-templates T8, decision 185): a file is kept under its hash, and
 // a link from an object's settings (the same key the asset cache uses) to that hash, so an object can be shown without the
 // server. IndexedDB. Where the browser has none (a private window, an old browser) every call answers null and the page
 // asks the server as before. Browser only; nothing here runs at import time.

@@ -6,7 +6,7 @@
 //                                                                       w along the direction rotationDeg (0 = east)
 // kind "asset" (decision 145) is the same placement with a model: asset: "table" names assets/table/model.glb, which
 // is drawn in place of the box (a marker when it is missing). Its size is the model's size (see src/model/assets.js).
-// An asset may instead be made from a blueprint (decisions 23, 24, 29): blueprint: "dining-table" with params (the
+// An asset may instead be made from a blueprint (decisions 187, 188, 193): blueprint: "dining-table" with params (the
 // values chosen) and partMaterials (a material per part); `asset` is then optional. The blueprint's rules are checked
 // only when the caller passes the blueprints (a Map of id to meta, from src/blueprints/load.js).
 // `z` is the bottom above the floor (a wall cabinet at 1400, furniture on the floor at 0). The plan draws objects
@@ -14,7 +14,7 @@
 
 import { pointInPolygon } from '../geometry/polygon.js';
 import { ASSET_NAME } from './assets.js';
-import { resolveParams } from '../../object-designs/lib/params.js';
+import { resolveParams, appliesTo } from '../../object-designs/lib/params.js';
 import { materialOptions, materialAllowed } from '../blueprints/options.js';
 
 export const OBJECT_KINDS = ['box', 'asset'];
@@ -72,6 +72,22 @@ function blueprintValueProblems(meta, o) {
   return out;
 }
 
+// Values stored for an option or a part that does not apply to the object's variant (appliesTo): the library ignores them,
+// so they are only reported, as the forms keep the value of a hidden option and a person may want to clear it.
+function ignoredValueWarnings(meta, o) {
+  const variantParam = meta.params.find(d => d.key === 'variant');
+  const active = o.params?.variant ?? variantParam?.default;
+  if (active === undefined) return [];
+  const out = [];
+  for (const d of meta.params) {
+    if (o.params && d.key in o.params && !appliesTo(d, active)) out.push(`${d.label} is set but does not apply to the ${active} variant (ignored)`);
+  }
+  for (const part of meta.parts) {
+    if (o.partMaterials && part.key in o.partMaterials && !appliesTo(part, active)) out.push(`${part.label} material is set but the ${active} variant has no such part (ignored)`);
+  }
+  return out;
+}
+
 /**
  * Problems with an object: { errors, warnings }. `level` is the level it stands on. `blueprints` is optional: a Map of
  * blueprint id to its meta. Without it the blueprint's own rules are not checked (only the shape of its keys).
@@ -85,7 +101,10 @@ export function checkObject(o, level, blueprints) {
   if (blueprints && typeof o.blueprint === 'string' && ASSET_NAME.test(o.blueprint)) {
     const meta = blueprints.get(o.blueprint);
     if (!meta) warnings.push(`blueprint "${o.blueprint}" is not in this house or the built-in library (shown as a marker)`);
-    else if (isPlainObject(o.params ?? {}) && (o.partMaterials === undefined || isPlainObject(o.partMaterials))) errors.push(...blueprintValueProblems(meta, o));
+    else if (isPlainObject(o.params ?? {}) && (o.partMaterials === undefined || isPlainObject(o.partMaterials))) {
+      errors.push(...blueprintValueProblems(meta, o));
+      warnings.push(...ignoredValueWarnings(meta, o));
+    }
   }
   if (!Array.isArray(o.size) || o.size.length !== 3 || !o.size.every(v => Number.isFinite(v) && v > 0)) errors.push('size must be [width, depth, height] in mm, all more than 0');
   if (!Number.isFinite(o.z) || o.z < 0) errors.push('z (the bottom above the floor) must be 0 or more');

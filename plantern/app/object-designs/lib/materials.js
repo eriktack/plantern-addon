@@ -86,7 +86,8 @@ export function resolveMaterial(ref, library, where = 'material') {
 }
 
 /**
- * The material of every part of a model, from resolved params: partMaterials[key] when set,
+ * The material of every part of a model, from resolved params: partMaterials[key] when set, otherwise the part's own
+ * default (`defaultMaterial` in meta.parts, for a part that should not follow the whole object, such as glass),
  * otherwise the whole-object material. Returns { [partKey]: material }.
  */
 export function resolvePartMaterials(meta, params, library) {
@@ -94,7 +95,7 @@ export function resolvePartMaterials(meta, params, library) {
   const whole = params[materialParam.key];
   const out = {};
   for (const part of meta.parts) {
-    const ref = params.partMaterials?.[part.key] ?? whole;
+    const ref = params.partMaterials?.[part.key] ?? part.defaultMaterial ?? whole;
     out[part.key] = resolveMaterial(ref, library, `part "${part.label}"`);
   }
   return out;

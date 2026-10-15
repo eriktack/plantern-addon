@@ -1,6 +1,11 @@
 // The pure parts of the Lovelace card (docs/archive/ha-11-12.md S14): its config, where the files of a house
 // are, and which level it opens on. No DOM, so Node tests cover them; the element is plantern-card.js.
 
+import { levelStack, STACK_MODES } from '../geometry/stack.js';
+import { SHADOW_LEVELS } from '../model/shadows.js';
+
+export const STACK_CHOICES = STACK_MODES;
+
 /** Where the add-on mirrors the houses (S15); the editor looks here for the list of houses. */
 export const DEFAULT_INDEX = '/local/plantern/locations/index.json';
 
@@ -24,7 +29,10 @@ export function cardConfig(config) {
     .map(x => String(x).trim()).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i);
   const cycle = config.cycle === undefined || config.cycle === '' || config.cycle === null ? undefined : Number(config.cycle);
   if (cycle !== undefined && !(cycle >= 2 && cycle <= 3600)) throw new Error('cycle is the seconds each floor stays on show, between 2 and 3600.');
+  const shadows = config.shadows === undefined || config.shadows === '' ? undefined : String(config.shadows).toLowerCase();
+  if (shadows !== undefined && !SHADOW_LEVELS.includes(shadows)) throw new Error(`shadows is one of ${SHADOW_LEVELS.join(', ')}, not "${config.shadows}".`);
   return {
+    ...(shadows ? { shadows } : {}),
     location,
     ...(levels.length ? { levels } : {}),
     ...(cycle !== undefined ? { cycle } : {}),
@@ -79,4 +87,25 @@ export function nextLevel(levels, current) {
   if (!levels?.length) return null;
   const i = levels.indexOf(current);
   return levels[(i + 1) % levels.length];
+}
+
+/** The floor one step away (dir +1 or −1, wrapping), for the arrows and swipes. From nowhere: the first or the last. */
+export function stepLevel(levels, current, dir) {
+  if (!levels?.length) return null;
+  const n = levels.length, i = levels.indexOf(current);
+  if (i < 0) return dir > 0 ? levels[0] : levels[n - 1];
+  return levels[(i + (dir > 0 ? 1 : n - 1)) % n];
+}
+
+/**
+ * The stack shown in the card's 3D view (CD4). `choice` is the header's switch ('this' | 'below' | 'all', remembered in
+ * the browser) or undefined: then one floor is shown alone and several are pulled apart, as they always were.
+ * With a choice, the floors stack as chosen; with several floors on show only those are kept.
+ */
+export function cardStack(model, levels, choice) {
+  const first = levels?.[0];
+  if (!first) return [];
+  if (!choice) return levels.length > 1 ? levelStack(model, first, 'all', true).filter(st => levels.includes(st.level)) : levelStack(model, first, 'this', false);
+  const stack = levelStack(model, first, choice, choice !== 'this');
+  return levels.length > 1 ? stack.filter(st => levels.includes(st.level)) : stack;
 }

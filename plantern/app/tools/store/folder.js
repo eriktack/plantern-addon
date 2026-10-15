@@ -109,6 +109,16 @@ export class FolderStore {
     return { version: versionOf(text) };
   }
 
+  /**
+   * An exported object's files, written into the house's own assets/<name>/ folder (decision 225): `files` maps a file
+   * name to its text or bytes. Replaces what was there.
+   */
+  async writeAsset(h, name, files) {
+    if (this.readOnly) throw Object.assign(new Error(`${this.cfg.name || this.id} is read-only`), { status: 403 });
+    for (const [file, data] of Object.entries(files)) await writeAtomic(path.join(h.dir, 'assets', name, file), data);
+    return {};
+  }
+
   /** Stat of the house files, cheap enough to poll: 'mtime:size' per file. */
   async stamp(h) {
     const one = async f => { try { const s = await fs.stat(path.join(h.dir, this.fileName(h, f))); return `${s.mtimeMs}:${s.size}`; } catch { return 'missing'; } };

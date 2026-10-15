@@ -19,6 +19,10 @@
   .note { color: #8b93a1; }
   li { margin: 3px 0; }
   ul { padding-left: 20px; margin: 6px 0; }
+  .split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 24px; align-items: start; }
+  .split > * { min-width: 0; }
+  .split .preview { position: sticky; top: 16px; }
+  @media (max-width: 760px) { .split { grid-template-columns: 1fr; } .split .preview { position: static; } }
 </style>
 <script type="importmap">
 { "imports": { "three": "../vendor/three/three.module.js", "three/addons/": "../vendor/three/addons/" } }
@@ -26,6 +30,8 @@
 <script src="vendor/jscad/jscad-modeling.min.js"></script>
 </head>
 <body>
+<div class="split">
+<div class="inputs">
 <h1>Brief for an external agent</h1>
 <p>Pick an item. Its brief is joined with the shared instructions into one text, ready to copy.</p>
 <select id="item" style="background:#14161a;color:#d9dde4;border:1px solid #3a404b;border-radius:6px;padding:6px;min-width:260px"></select>
@@ -39,15 +45,19 @@
 <div id="result"></div>
 <div style="margin-top:10px"><button id="save" disabled>Save to library</button> <span id="saved" class="note"></span></div>
 
-<h2 style="font-size:15px;margin:22px 0 6px">Preview</h2>
+</div>
+<div class="preview">
+<h2 style="font-size:15px;margin:0 0 6px">Preview</h2>
 <div id="variantRow" hidden style="margin-bottom:8px">Variant <select id="variant" style="background:#14161a;color:#d9dde4;border:1px solid #3a404b;border-radius:6px;padding:4px"></select></div>
 <div id="pv" style="position:relative;height:380px;border-radius:8px;overflow:hidden;background:#1d2026"></div>
 <div id="pvInfo" class="note" style="margin-top:6px;font-size:12px"></div>
+</div>
+</div>
 
 <script type="module">
 import { checkModule } from './tools/check-core.js';
 import { buildModel } from './lib/build.js';
-import { defaultsFor } from './lib/params.js';
+import { defaultsFor, labelOf, placementOf } from './lib/params.js';
 import { createPreview } from './preview.js';
 
 const $ = id => document.getElementById(id);
@@ -89,10 +99,14 @@ function show(r) {
 const BRIEFS = '../docs/handoffs/object-library/';
 const ITEM_MARK = '<<ITEM>>';
 const items = await (await fetch(BRIEFS + 'index.json')).json();
+// The library's model files (models/index.json). An item is in the library when its model file is listed there:
+// the brief id with dashes for underscores, e.g. coffee_table → coffee-table.js.
+const inLibrary = new Set((await (await fetch('models/index.json')).json()).models);
 for (const it of items) {
+  const done = inLibrary.has(it.id.replace(/_/g, '-') + '.js');
   const o = document.createElement('option');
   o.value = it.file;
-  o.textContent = `${it.n}. ${it.name}`;
+  o.textContent = `${done ? '✓ ' : ''}${it.n}. ${it.name}${done ? ' (in library)' : ''}`;
   $('item').append(o);
 }
 async function showBrief() {
@@ -125,7 +139,7 @@ function schemaDiffs(model) {
     const d = mine.get(row.key);
     if (!d) { out.push(`schema: parameter "${row.key}" is missing`); continue; }
     if ((d.type ?? 'number') !== row.type) out.push(`schema: "${row.key}" is ${row.type} in the schema, ${d.type ?? 'number'} in the model`);
-    for (const f of ['default', 'min', 'max', 'options']) {
+    for (const f of ['default', 'min', 'max', 'options', 'appliesTo', 'labels']) {
       const want = f === 'default' ? row.default : row[f], got = f === 'default' ? d.default : d[f];
       if (!same(want, got)) out.push(`schema: "${row.key}" ${f} is ${JSON.stringify(got)}, the schema says ${JSON.stringify(want)}`);
     }
@@ -153,7 +167,7 @@ function buildPreview() {
   if (!loaded) return;
   try {
     const built = buildModel(loaded, variantInput(), library, { textures });
-    pv.show(built.parts.map(p => ({ mesh: p.mesh, material: built.resolved[p.key] })));
+    pv.show(built.parts.map(p => ({ mesh: p.mesh, material: built.resolved[p.key] })), { mount: placementOf(loaded.meta, variantInput().variant) });
     $('pvInfo').textContent = built.parts.map(p => `${p.label}: ${p.triangles} triangles, ${p.material}`).join(' · ');
   } catch (e) {
     pv.clear();
@@ -164,13 +178,13 @@ function previewModel(model) {
   loaded = model;
   const variant = model.meta?.params?.find(d => d.key === 'variant');
   $('variantRow').hidden = !variant;
-  $('variant').innerHTML = variant ? variant.options.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('') : '';
+  $('variant').innerHTML = variant ? variant.options.map(o => `<option value="${esc(o)}">${esc(labelOf(variant, o))}</option>`).join('') : '';
   if (variant) $('variant').value = variant.default;
   buildPreview();
 }
 $('variant').addEventListener('change', buildPreview);
 
-// Save to library: the server checks the file again and refuses an id that is already there (decision 68).
+// Save to library: the server checks the file again and refuses an id that is already there (decision 233).
 $('save').addEventListener('click', async () => {
   $('save').disabled = true;
   $('saved').textContent = 'Saving…';

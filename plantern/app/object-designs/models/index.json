@@ -1,5 +1,25 @@
 {
   "models": [
-    "dining-table.js"
+    "bed.js",
+    "bench.js",
+    "bookshelf.js",
+    "ceiling-light.js",
+    "chair.js",
+    "chest-of-drawers.js",
+    "coffee-table.js",
+    "desk.js",
+    "dining-table.js",
+    "floor-lamp.js",
+    "hallway-unit.js",
+    "kitchen-cabinet.js",
+    "planter.js",
+    "side-table.js",
+    "sideboard.js",
+    "sofa.js",
+    "stool.js",
+    "table-lamp.js",
+    "wall-sconce.js",
+    "wall-shelf.js",
+    "wardrobe.js"
   ]
 }

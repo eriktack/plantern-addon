@@ -44,7 +44,16 @@ export function createAssetCache({
     return new Promise((resolve, reject) => loader.parse(buffer, '', gltf => resolve(gltf.scene), reject));
   }
 
-  const readGlb = parseImpl ?? parse;
+  // Reading a GLB is work for the page's one thread. Models arrive all at once (a house with fifty objects asks for them together), so they are read one
+  // at a time and the page is let breathe between them: it keeps drawing and answering while they load, instead of freezing until the last is read.
+  const breathe = () => new Promise(resolve => (globalThis.scheduler?.yield ? globalThis.scheduler.yield().then(resolve, resolve) : setTimeout(resolve, 0)));
+  let reading = Promise.resolve();
+  function parseInTurn(buffer) {
+    const mine = reading.then(() => parse(buffer));
+    reading = mine.then(breathe, breathe);
+    return mine;
+  }
+  const readGlb = parseImpl ?? parseInTurn;
 
   /** Starts loading the model of `name` (once). The entry's `ready` resolves when its status is known. */
   function load(name) {
@@ -63,7 +72,7 @@ export function createAssetCache({
         if (!res.ok) continue;
         entry.meta = await readMeta(url);
         try {
-          entry.scene = await parse(await res.arrayBuffer());
+          entry.scene = await readGlb(await res.arrayBuffer());
           entry.status = 'ok';
         } catch (e) {
           entry.status = 'broken';
@@ -79,7 +88,7 @@ export function createAssetCache({
   }
 
   /**
-   * Starts loading the model of an object made from a blueprint (once per blueprint and values). Three steps (decision 21, T8):
+   * Starts loading the model of an object made from a blueprint (once per blueprint and values). Three steps (decision 185, T8):
    *  1. the copy this browser kept for these settings is shown at once, with no server needed;
    *  2. the server is asked for the current hash (it changes with the code and the blueprint file), and the GLB is fetched and
    *     kept when that hash is not the one shown;

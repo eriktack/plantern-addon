@@ -382,11 +382,11 @@ function validateLevels(model, geos) {
  * `options.blueprints`: optional Map of blueprint id to its meta (from src/blueprints/load.js). Without it, the
  * blueprint rules of objects are skipped, so the card and a plain static server validate the same model.
  */
-export function validateModel(model, geos, { blueprints } = {}) {
+export function validateModel(model, geos, { blueprints, library } = {}) {
   const out = [];
   if (model.units && model.units !== 'mm') out.push({ severity: 'error', id: 'model', msg: `units must be "mm" (got "${model.units}")` });
   checkIds(model, out);
-  out.push(...checkMaterials(model), ...checkPalette(model), ...checkSite(model.site));
+  out.push(...checkMaterials(model, library), ...checkPalette(model), ...checkSite(model.site));
   for (const lv of model.levels) out.push(...validateLevel(lv, geos.get(lv.id), model.levels.some(l => l.id !== lv.id && l.elevation < lv.elevation && (l.building ?? null) === (lv.building ?? null)), model.checks, blueprints).map(x => ({ ...x, level: lv.id })));
   out.push(...validateLevels(model, geos), ...validateStairs(model, geos), ...checkAnchors(model, geos));
   const rooms = model.levels.flatMap(l => l.rooms || []);
@@ -398,11 +398,14 @@ export function validateModel(model, geos, { blueprints } = {}) {
   return out;
 }
 
-/** Bindings (location.json) must reference existing fixtures. */
+/** Bindings (location.json) must reference existing fixtures, or doors (their sensor, PLANTERN.md §6.1). */
 export function validateBindings(location, model) {
   const out = [], fx = new Set(model.levels.flatMap(l => (l.fixtures || []).map(f => f.id)));
+  const openings = new Map(model.levels.flatMap(l => (l.openings || []).map(o => [o.id, o])));
   for (const [id, b] of Object.entries(location.bindings || {})) {
-    if (!fx.has(id)) out.push({ severity: 'error', id, msg: 'binding references a fixture that does not exist in the model' });
+    const op = openings.get(id);
+    if (op && op.type !== 'door') out.push({ severity: 'error', id, msg: 'only a door can be bound to a Home Assistant sensor' });
+    else if (!op && !fx.has(id)) out.push({ severity: 'error', id, msg: 'binding references a fixture or door that does not exist in the model' });
     for (const c of b.controls || []) if (!fx.has(c)) out.push({ severity: 'error', id, msg: `controls missing fixture "${c}"` });
     if (b.entity && !/^[a-z_]+\.[a-z0-9_]+$/.test(b.entity)) out.push({ severity: 'warn', id, msg: `"${b.entity}" does not look like an HA entity id` });
     for (const m of checkLook(b.look)) out.push({ severity: 'error', id, msg: m });

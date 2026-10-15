@@ -1,4 +1,4 @@
-// The material choices of a blueprint (object-templates T9, decision 26). One rule, used by the validator (src/model/objects.js),
+// The material choices of a blueprint (object-templates T9, decision 190). One rule, used by the validator (src/model/objects.js),
 // the Objects page's form (src/param-form.js) and the tests. Pure.
 //
 //   A part's own `options` in parts[] come first; otherwise the blueprint's material parameter's `options`; a null result

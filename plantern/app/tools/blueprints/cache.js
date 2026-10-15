@@ -1,4 +1,4 @@
-// The server's GLB cache (docs/archive/2026-10-14-object-templates.md, T4; decisions 21, 22, 25).
+// The server's GLB cache (docs/archive/2026-10-14-object-templates.md, T4; decisions 185, 186, 189).
 //
 // A placed object names a blueprint (a built-in model of object-designs/models/ or a house's blueprints/<id>.json), its
 // params and partMaterials. The server resolves the params, hashes everything the output depends on, builds the GLB when
@@ -18,6 +18,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildModel } from '../../object-designs/lib/build.js';
 import { resolveParams } from '../../object-designs/lib/params.js';
 import { meshBounds } from '../../object-designs/lib/geom.js';
+import { assetMeta } from '../../object-designs/lib/asset-meta.js';
 import { parseHouseBlueprint, loadBlueprints } from '../../src/blueprints/load.js';
 import { blueprintModule } from '../../src/blueprints/build.js';
 import { renameRetry } from '../store/settings.js';
@@ -141,7 +142,7 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
     return { kind: 'house', text, model: blueprintModule(parsed.json), extraMaterials: parsed.json.materials ?? {} };
   }
 
-  /** Resolve a request and its hash (decision 22) without building. */
+  /** Resolve a request and its hash (decision 186) without building. */
   async function resolve({ houseDir, blueprint, params, partMaterials } = {}) {
     if (params !== undefined && (typeof params !== 'object' || params === null || Array.isArray(params))) throw new GlbError(400, 'params must be an object');
     if (partMaterials !== undefined && (typeof partMaterials !== 'object' || partMaterials === null || Array.isArray(partMaterials))) throw new GlbError(400, 'partMaterials must be an object');
@@ -154,13 +155,18 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
     return { hash, found, resolved, library };
   }
 
-  async function build({ hash, found, resolved, library }, blueprint) {
+  /** The built model (GLB, parts, params) for a resolved request; nothing is written. */
+  async function buildOnly({ found, resolved, library }) {
     if ((await started) !== (await codeDigest())) {
       throw new GlbError(503, 'the code that builds objects (object-designs/lib, the vendored jscad or src/blueprints/load.js and build.js) changed since the server started: restart Plantern');
     }
-    let built;
-    try { built = buildModel(found.model, resolved, { ...library, ...found.extraMaterials }, { textures: await loadTextures(library) }); }
+    try { return buildModel(found.model, resolved, { ...library, ...found.extraMaterials }, { textures: await loadTextures(library) }); }
     catch (e) { throw new GlbError(400, e.message); }
+  }
+
+  async function build(r, blueprint) {
+    const { hash } = r;
+    const built = await buildOnly(r);
     const bounds = meshBounds({ pos: built.parts.flatMap(p => p.mesh.pos), nrm: [], idx: [] });
     const size = bounds ? [0, 1, 2].map(k => round1(bounds.max[k] - bounds.min[k])) : [0, 0, 0];
     await fs.mkdir(dir, { recursive: true });
@@ -206,7 +212,7 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
 
     /**
      * Every blueprint a house can use: the built-in models and the house's blueprints/*.json, as loadBlueprints() lists them
-     * ({ blueprints: [{ id, source, meta, json? }], refused }). For the Objects page and the validator (decision 24).
+     * ({ blueprints: [{ id, source, meta, json? }], refused }). For the Objects page and the validator (decision 188).
      */
     async list(houseDir) {
       const library = await readLibrary();
@@ -229,6 +235,17 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
 
     /** The hash a request would have, without building it. */
     async key(request) { return (await resolve(request)).hash; },
+
+    /**
+     * The files of an exported asset (decision 225): the GLB the placed object uses and its meta.json (assetMeta: the size,
+     * the parameters and the parts). Built now, not cached, since it is written into the house's own assets/ folder.
+     */
+    async exportAsset(request) {
+      const r = await resolve(request);
+      const built = await buildOnly(r);
+      const meta = assetMeta(r.found.model, built, { source: `${r.found.kind}: ${request.blueprint}` });
+      return { glb: built.glb, meta, size: meta.size };
+    },
 
     /** The hash and size of the request's GLB, built (and cached) when it is not there yet. */
     async ensure(request) {

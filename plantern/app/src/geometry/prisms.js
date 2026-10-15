@@ -7,6 +7,7 @@ import { wallLookPieces } from './paint.js';
 import { pointInPolygon } from './polygon.js';
 import { stairSolids, stairRails } from './stairs.js';
 import { openingFittings } from './fittings.js';
+import { doorOpen } from '../model/doors.js';
 import { roomCeiling } from '../model/rooms.js';
 
 /** Default colours; model colours (sides.*.color, solid/object color) win. */
@@ -26,6 +27,8 @@ const PAINT = 3;       // mm: the paint skin on a solid's face where a room has 
  * Prism: { id, kind, poly, z0, z1, color, sides?: { left, right, other, n, u, tex? }, slope?, opacity? }
  *   slope (sloped walls): { top?, bottom? }, each { origin, u, L, a, b }: the height runs straight from
  *   a (at origin) to b (L mm along u); z0 / z1 are then the lowest and highest points.
+ *   bar: { a, b, diameter } a round cylinder between two 3D points, ball: { center, diameter }, circle: { center, diameter } an upright round solid
+ *   (round handrails, round pillars): the renderer draws those, `poly` and z0 / z1 are their outline in plan and their extent.
  *   kind: floor | ceiling | wall | railing | rail | glass | frame | leaf | sill | handrail | post | solid | paint | object
  *   frame, leaf, sill, glass: what fills an opening (geometry/fittings.js)
  *   paint: a thin skin on the stretch of a solid's face along a room painted for that room (solids[].sides)
@@ -141,7 +144,7 @@ export function levelPrisms(level, geo, materials = {}, options = {}) {
       else if (z0 < base) P({ id: o.id, kind: 'floor', poly: quad, z0, z1: base, color: DEFAULT_COLORS.floor });
       if (head < highAt || (prof.sloped && head < top)) for (const lp of looks([quad])) for (const sp of slopeParts([lp.poly])) P({ id: o.id, kind: 'wall', poly: sp.poly, z0: head, z1: top, color: lp.sides.right, sides: lp.sides, ...(prof.sloped ? { slope: { top: lineOf('top', sp.s) } } : {}) });
       // what fills the opening: a window's frame, sash, glass and sill board; a door's casing and closed leaf (geometry/fittings.js)
-      for (const fit of openingFittings(w, f, { ...o, sill, head })) P(fit);
+      for (const fit of openingFittings(w, f, { ...o, sill, head }, { open: doorOpen(o, options.doorStates) })) P(fit);
     }
   }
 

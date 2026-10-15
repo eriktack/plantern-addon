@@ -1,11 +1,14 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { levelPrisms } from '../geometry/prisms.js';
-import { MM, toThree, dirToThree, prismGeometry, cylinderGeometry } from './coords.js';
+import { MM, toThree, dirToThree, prismGeometry, cylinderGeometry, barGeometry, ballGeometry } from './coords.js';
 import { pointAlong, polylineLength } from '../geometry/strip.js';
 import { pickShadowLamps, SHADOW_COUNT } from '../model/shadows.js';
+import { lampReach } from '../geometry/leak.js';
+import { installLampMask, setLampMasks, packMasks, decayFor, MAX_MASKS } from './lamp-mask.js';
 import { DEFAULT_NIGHT_LIGHT } from '../model/night.js';
 import { assetPlacement } from '../model/assets.js';
+import { textureUrl } from '../model/materials.js';
 
 /**
  * three.js view of one level. Geometry comes only from levelPrisms() (pure, tested);
@@ -26,6 +29,7 @@ export function createView3d(container, hooks = {}) {
   const sun = new THREE.DirectionalLight(0xfff4e0, 0);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.autoUpdate = false;                  // drawn when something changed (flushShadows), not on every frame
   sun.shadow.bias = -0.0005;
   scene.add(hemi, sun, sun.target);
 
@@ -44,10 +48,45 @@ export function createView3d(container, hooks = {}) {
   let settings = {};
   let transparent = false;   // setBackground: nothing behind the house (the page shows through), only its shadows on the ground
   let shadowBudget = SHADOW_COUNT.average;   // lamps that may cast shadows (setShadows)
+  const leakOf = new Map();                  // lamp id → mm² of its reach that walls hide (geometry/leak.js), set by build
+  const maskInput = [];                      // the lamps a mask is made for: { id, reach, group, level }, set by build (lamp-mask.js)
+  const maskUniforms = installLampMask(THREE);   // null when this three.js is not the one the shader patch is for: the lights stay as they are
   let nightLight = DEFAULT_NIGHT_LIGHT;      // the ambient light with daylight off (setNightLight)
   let buildGen = 0;
 
-  const render = () => renderer.render(scene, camera);
+  // Light counts stay the same whatever is on. Three compiles a shader for every material for every number of lights and of
+  // shadow casters, so lamps that were switched off and on (visible = false / true) recompiled every shader the first time each new
+  // count was reached: a stall on the first change, none on the second, and one that depended on which other lamps were on. A lamp that is
+  // off now keeps its light in the scene at no intensity, and the lamps that cast shadows are chosen when the house is built, not by what is on.
+  // Their shadow maps are then drawn when something changed (a lamp turned on, a model arrived), not on every frame. A house with
+  // more lights than STEADY_LIGHTS_MAX (every light is in every shader, and the GPU has a limit) keeps the old way.
+  const STEADY_LIGHTS_MAX = 40, SHADOWS_PER_FRAME = 6;
+  let steadyLights = true;
+  const shadowDirty = new Set();             // lamp ids whose shadow map is out of date
+  let sunShadowDirty = true;
+  const markShadowsDirty = id => { if (id === undefined) { for (const [k, f] of fixtures) if (f.kind === 'lamp') shadowDirty.add(k); sunShadowDirty = true; } else shadowDirty.add(id); };
+  // the shadow maps that are out of date, for the lamps that are on and cast one: a few per frame, the rest on the next
+  function flushShadows() {
+    if (!steadyLights) return;
+    let done = 0, waiting = false;
+    for (const id of shadowDirty) {
+      const f = fixtures.get(id);
+      if (!f || !f.light.castShadow) { shadowDirty.delete(id); continue; }
+      if (!f.state?.on) continue;                                        // an off lamp's map is made when it goes on
+      if (done >= SHADOWS_PER_FRAME) { waiting = true; continue; }
+      f.light.shadow.needsUpdate = true; shadowDirty.delete(id); done++;
+    }
+    if (sunShadowDirty) { sun.shadow.needsUpdate = true; sunShadowDirty = false; }
+    if (waiting) renderSoon();
+  }
+  const render = () => { flushShadows(); renderer.render(scene, camera); };
+  // a change of state (a lamp, the shadows, the light) asks for one frame, not one each: a loop that sets 30 lamps draws once.
+  // A frame per lamp was the slow start of a house with many lights: each frame compiled the shaders for the lights on so far.
+  let frameQueued = false;
+  // models arrive one after another, each in a task of its own: one frame after the last of a quiet stretch, not a full render for each
+  let frameWanted = false;
+  const renderSoon = () => { if (frameWanted) return; frameWanted = true; requestAnimationFrame(() => { frameWanted = false; render(); }); };
+  const requestRender = () => { if (frameQueued) return; frameQueued = true; queueMicrotask(() => { frameQueued = false; render(); }); };
   function makeControls() {
     controls?.dispose();
     controls = new OrbitControls(camera, renderer.domElement);
@@ -160,7 +199,7 @@ export function createView3d(container, hooks = {}) {
     groups.forEach((gr, i) => { out.addGroup(at, gr.length * 3, i); at += gr.length * 3; });
     const face = side => {
       const t = p.sides.tex?.[side];
-      return t ? new THREE.MeshStandardMaterial({ map: texture(baseUrl + t.texture), roughness: 0.85, metalness: 0 }) : base;
+      return t ? new THREE.MeshStandardMaterial({ map: texture(textureUrl(t.texture, baseUrl)), roughness: 0.85, metalness: 0 }) : base;
     };
     return { geometry: out, materials: [base, face('left'), face('right')] };
   }
@@ -170,6 +209,7 @@ export function createView3d(container, hooks = {}) {
     root.clear();
     fixtures.clear();
     pickables = [];
+    maskInput.length = 0;
   }
 
   /**
@@ -177,7 +217,7 @@ export function createView3d(container, hooks = {}) {
    * a level up, shift [dx, dy] sideways in the plan, for the exploded view). Lamps and switches of every shown level are live; the number of lamps casting
    * shadows is shared between them.
    */
-  function build({ level, geo, levels, settings: s, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', ceilings = false, assets = null }) {
+  function build({ level, geo, levels, settings: s, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', ceilings = false, assets = null, doorStates = null }) {
     const gen = ++buildGen;     // asset models that finish loading after a newer build are dropped
     clear();
     settings = s;
@@ -213,7 +253,8 @@ export function createView3d(container, hooks = {}) {
           outline.rotation.y = heading;
           g.add(outline);
         }
-        render();
+        markShadowsDirty();
+        renderSoon();
       });
     }
 
@@ -224,9 +265,15 @@ export function createView3d(container, hooks = {}) {
     g.position.x = shift[0] * MM; g.position.z = -shift[1] * MM;      // plan (x, y) → three (x, -y)
     root.add(g);
 
+    // the shadows go to the lamps whose light the walls would otherwise let through (a shadowless lamp lights through walls)
+    for (const [id, reach] of lampReach(geo, (level.fixtures || []).filter(f => f.kind === 'lamp'), { cutPlane: settings?.cutPlane ?? 1200, doorStates })) {
+      leakOf.set(id, reach.leak);
+      maskInput.push({ id, reach, group: g, level });
+    }
+
     const objectMeshes = new Map();
-    for (const p of levelPrisms(level, geo, materials, { ceilings })) {
-      let geom = p.circle ? cylinderGeometry(THREE, p.circle.center, p.circle.diameter / 2, p.z0, p.z1) : prismGeometry(THREE, p.poly, p.z0, p.z1, p.slope, p.holes), mat;
+    for (const p of levelPrisms(level, geo, materials, { ceilings, doorStates })) {
+      let geom = p.bar ? barGeometry(THREE, p.bar.a, p.bar.b, p.bar.diameter) : p.ball ? ballGeometry(THREE, p.ball.center, p.ball.diameter) : p.circle ? cylinderGeometry(THREE, p.circle.center, p.circle.diameter / 2, p.z0, p.z1) : prismGeometry(THREE, p.poly, p.z0, p.z1, p.slope, p.holes), mat;
       if (p.sides) paintSides(geom, p.sides);
       mat = material(p);
       if (p.sides?.tex) ({ geometry: geom, materials: mat } = texturedWall(geom, p, baseUrl, mat));
@@ -251,7 +298,8 @@ export function createView3d(container, hooks = {}) {
         bulb.position.copy(at);
         bulb.name = fx.id;
         bulb.userData = { fixture: fx, label: fixtureLabel(fx) };
-        const light = new THREE.PointLight(0xffffff, 0, (fx.radius || 3000) * MM * 1.8, 2);
+        // the light stops at the lamp's radius, as the plan's glow does (it used to reach 1.8 times as far, through walls)
+        const light = new THREE.PointLight(0xffffff, 0, (fx.radius || 3000) * MM, 2);
         light.position.copy(at);
         light.name = `${fx.id}:light`;
         // whether it casts a shadow is decided by assignShadows(): lamps that are on, brightest first, up to the budget
@@ -329,27 +377,63 @@ export function createView3d(container, hooks = {}) {
     sun.target.position.copy(c);
     Object.assign(sun.shadow.camera, { left: -r, right: r, top: r, bottom: -r, near: 0.1, far: r * 4 });
     sun.shadow.camera.updateProjectionMatrix();
+    // every light in every shader, or the old way for a house with very many lights
+    const lights = [...fixtures.values()].reduce((n, f) => n + (f.kind === 'lamp' ? 1 : f.kind === 'strip' ? f.lights.length : 0), 0);
+    steadyLights = lights <= STEADY_LIGHTS_MAX;
+    renderer.shadowMap.needsUpdate = true;
+    makeLampMasks();
     assignShadows();
+    markShadowsDirty();
     resetView();
     }
   }
 
+  // Each lamp whose light walls would let through gets a mask of where its light may go (lamp-mask.js), so it does not shine through them
+  // whether or not it casts a shadow. Lamps with nothing in the way need none. `settings.render3d.lampMask: false` turns it off.
+  function makeLampMasks() {
+    if (!maskUniforms) return;
+    const on = settings?.render3d?.lampMask !== false;
+    root.updateMatrixWorld(true);
+    const v = new THREE.Vector3(), picked = [];
+    for (const m of maskInput) {
+      const f = fixtures.get(m.id);
+      if (!f || f.kind !== 'lamp') continue;
+      f.light.decay = 2;
+      const disc = Math.PI * m.reach.radius * m.reach.radius;
+      if (!on || m.reach.leak < disc * 0.03 || picked.length >= MAX_MASKS) continue;     // nothing much in the way: no mask
+      f.light.getWorldPosition(v);
+      const floorY = m.group.position.y;
+      picked.push({ id: m.id, polygon: m.reach.polygon, centre: m.reach.centre, radius: m.reach.radius, world: [v.x, v.z], yMin: floorY - 0.03, yMax: floorY + (m.level.ceilingHeight ?? 2400) * MM + 0.06 });
+    }
+    const packed = packMasks(picked);
+    picked.forEach((p, i) => { fixtures.get(p.id).light.decay = decayFor(i); });
+    setLampMasks(THREE, maskUniforms, packed);
+  }
+
   /** How many lamps may cast shadows (shadows.js); the lit ones get them, brightest first. */
-  function setShadows(count) { shadowBudget = count; assignShadows(); render(); }
+  function setShadows(count) { shadowBudget = count; assignShadows(); requestRender(); }
   function assignShadows() {
-    const lamps = [...fixtures].filter(([, f]) => f.kind === 'lamp').map(([id, f]) => ({ id, f, on: !!f.state?.on, brightness: f.state?.brightness ?? 1 }));
-    const chosen = pickShadowLamps(lamps, shadowBudget);
-    for (const l of lamps) if (l.f.light.castShadow !== chosen.has(l.id)) l.f.light.castShadow = chosen.has(l.id);   // changes only: each one rebuilds shaders
+    // steady: the lamps that cast shadows are the ones with the most to hide behind walls, whatever is on (the count never changes);
+    // otherwise only the lamps that are on count
+    const lamps = [...fixtures].filter(([, f]) => f.kind === 'lamp').map(([id, f]) => ({ id, f, on: steadyLights || !!f.state?.on, brightness: steadyLights ? 1 : (f.state?.brightness ?? 1), leak: leakOf.get(id) ?? 1 }));
+    // every shadow map and the two lamp masks take a texture unit of the shader (a GPU has sixteen, and the materials need some)
+    const chosen = pickShadowLamps(lamps, Math.min(shadowBudget, Math.max(0, renderer.capabilities.maxTextures - 6)));
+    for (const l of lamps) {
+      const cast = chosen.has(l.id);
+      if (l.f.light.castShadow !== cast) { l.f.light.castShadow = cast; if (cast) shadowDirty.add(l.id); }   // changes only: each one rebuilds shaders
+      l.f.light.shadow.autoUpdate = !steadyLights;
+    }
   }
 
   /** a = appearance(state): { available, on, brightness 0..1, rgb } */
   function setFixture(id, a) {
     const f = fixtures.get(id);
     if (!f) return;
+    const prev = f.state;
     f.state = a;
     const col = new THREE.Color(`rgb(${a.rgb.join(',')})`);
     if (f.kind === 'strip') {
-      for (const L of f.lights) { L.visible = a.on; L.color.copy(col); L.intensity = (settings.render3d?.lampIntensity ?? 80) * a.brightness * 0.5; }
+      for (const L of f.lights) { L.visible = steadyLights || a.on; L.color.copy(col); L.intensity = a.on || !steadyLights ? (settings.render3d?.lampIntensity ?? 80) * a.brightness * 0.5 : 0; }
       for (const m of f.meshes) {
         m.material.color.set(a.available ? (a.on ? col : 0x555555) : 0x7a2a2a);
         m.material.emissive.copy(a.on ? col : new THREE.Color(0));
@@ -357,9 +441,10 @@ export function createView3d(container, hooks = {}) {
       }
       for (const h of f.halos) { h.material.color.copy(col); h.material.opacity = a.on ? 0.25 * a.brightness : 0; }
     } else if (f.kind === 'lamp') {
-      f.light.visible = a.on;
+      if (a.on && !prev?.on) shadowDirty.add(id);                        // its shadow map is made when it goes on
+      f.light.visible = steadyLights || a.on;
       f.light.color.copy(col);
-      f.light.intensity = (settings.render3d?.lampIntensity ?? 80) * a.brightness;
+      f.light.intensity = a.on || !steadyLights ? (settings.render3d?.lampIntensity ?? 80) * a.brightness : 0;
       f.bulb.material.color.set(a.available ? (a.on ? col : 0x555555) : 0x7a2a2a);
       f.bulb.material.emissive.copy(a.on ? col : new THREE.Color(0));
       f.bulb.material.emissiveIntensity = a.on ? 2 : 0;
@@ -369,14 +454,14 @@ export function createView3d(container, hooks = {}) {
       f.box.material.emissive.copy(a.on ? col : new THREE.Color(0));
       f.box.material.emissiveIntensity = a.on ? 0.6 : 0;
     }
-    render();
+    requestRender();
   }
 
   /** The light the house has at night (daylight off), 0 to 1 (night.js): the slider in the viewer. */
   function setNightLight(v) {
     nightLight = v;
     if (!daylight) hemi.intensity = v;
-    render();
+    requestRender();
   }
 
   function setDaylight(on) {
@@ -384,7 +469,7 @@ export function createView3d(container, hooks = {}) {
     hemi.intensity = on ? 1.1 : nightLight;
     sun.intensity = on ? 2.2 : 0;
     scene.background = transparent ? null : new THREE.Color(on ? 0xb9cde0 : 0x14161a);
-    render();
+    requestRender();
     return daylight;
   }
 

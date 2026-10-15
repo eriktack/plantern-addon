@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.1
+
+- Fix: the release checks now wait for the git storage sync state to settle (a test sampled it too early on a busy machine). No change to the add-on itself.
+
+## 0.5.0
+
+- **Door sensors.** A door can be linked to a Home Assistant door sensor (`binary_sensor`). The viewer and the card draw an open door with its leaf swung out, and light passes an open door. A door with no sensor is shown open.
+- **Faster first 3D view.** The 3D view draws once per change instead of once per lamp. A house with many lamps no longer freezes on the first open.
+- **Lamp light stops at walls.** The 3D view masks each lamp's light at the walls its plan visibility hides, and the shadows go first to the lamps that would leak. A lamp's light reaches its radius, as the plan's glow does. The first switch of a lamp no longer stalls.
+- **Card.** On a light dashboard the card's plan goes light. A *This floor / Below too / All floors* switch in 3D, arrows and swipes between floors, and a `shadows` option.
+- **Plan on a touch screen.** Two fingers pinch to zoom and pan the 2D plan.
+- **Stair handrails** can be round, on poles or on the wall.
+- **Object library:** more models (sideboard, hallway unit, wall shelf, planter, chest of drawers, wardrobe, bookshelf).
+
 ## 0.4.3
 
 - Fix: 0.4.1 still did not start. The library route's checks (in `object-designs/tools/`) were not picked up by the add-on snapshot, because the snapshot scan did not reach that folder. They are included now, and a test checks what the snapshot really takes.

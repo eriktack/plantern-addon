@@ -27,11 +27,14 @@ export function levelForCount(n) {
 }
 
 /**
- * Which lamps cast shadows: up to `count` of the lamps that are on, brightest first (in file order when
- * equally bright). lamps = [{ id, on, brightness }]; returns a Set of ids.
+ * Which lamps cast shadows: up to `count` of the lamps that are on. They are ranked by what a shadow stops: the part of
+ * the lamp's reach that walls hide (`leak`, mm², geometry/leak.js) times its brightness, then brightness, then file order.
+ * A lamp with no leak (no wall in its way) comes after the lamps whose light goes through walls. Without `leak` the
+ * ranking is brightness alone. lamps = [{ id, on, brightness, leak? }]; returns a Set of ids.
  */
 export function pickShadowLamps(lamps, count) {
+  const score = l => (l.leak ?? 1) * (l.brightness ?? 1);
   return new Set(lamps.map((l, i) => ({ ...l, i })).filter(l => l.on)
-    .sort((a, b) => (b.brightness ?? 1) - (a.brightness ?? 1) || a.i - b.i)
+    .sort((a, b) => score(b) - score(a) || (b.brightness ?? 1) - (a.brightness ?? 1) || a.i - b.i)
     .slice(0, Math.max(0, count)).map(l => l.id));
 }

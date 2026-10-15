@@ -9,10 +9,16 @@ import { primitives, booleans } from '../lib/jscad.js';
 export const meta = {
   id: 'template',                    // the file name without the leading _ (rule: meta.id = file name)
   name: 'Template block',
-  description: 'A box with a lid. Copy this file as the starting point for a new model.',
+  summary: 'A box with a lid.',
+  description: 'A box with a lid. Copy this file as the starting point for a new model. Assumed: none.',
   params: [
     // A variant: an enum with key 'variant'. Its defaults are below; the library applies them when it is picked.
-    { key: 'variant', label: 'Variant', type: 'enum', default: 'low', options: ['low', 'tall'] },
+    // `labels` gives each variant its display name (a variant without one shows its own name).
+    { key: 'variant', label: 'Variant', type: 'enum', default: 'low', options: ['low', 'tall'],
+      labels: { low: 'Low block', tall: 'Tall block' } },
+    // A parameter that only some variants use: add `appliesTo: ['tall']` (AGENT_INSTRUCTIONS §3.1). The form hides it for
+    // the other variants and the library uses its default there. Leave it out when every variant uses the parameter.
+    // A `hint` (optional) is shown under the field.
     { key: 'width', label: 'Width (X)', unit: 'mm', default: 600, min: 100, max: 2000, step: 10 },
     { key: 'depth', label: 'Depth (Y)', unit: 'mm', default: 400, min: 100, max: 2000, step: 10 },
     { key: 'height', label: 'Height', unit: 'mm', default: 300, min: 50, max: 1500, step: 5 },
