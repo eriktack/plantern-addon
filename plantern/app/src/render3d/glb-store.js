@@ -41,7 +41,7 @@ export function glbStore() {
   const quiet = p => p.catch(() => null);
   return {
     getLink: key => quiet(run('links', 'readonly', s => s.get(key))).then(v => v ?? null),
-    putLink: (key, hash, size) => quiet(run('links', 'readwrite', s => s.put({ key, hash, size }))),
+    putLink: (key, hash, size, light = null) => quiet(run('links', 'readwrite', s => s.put({ key, hash, size, light }))),
     getFile: hash => quiet(run('files', 'readonly', s => s.get(hash))).then(v => v?.bytes ?? null),
     putFile: (hash, bytes) => quiet(run('files', 'readwrite', s => s.put({ hash, bytes }))),
   };

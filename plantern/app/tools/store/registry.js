@@ -23,11 +23,12 @@ export async function makeStore(cfg, ctx) {
 
 export class Registry extends EventEmitter {
   /** appRoot: the app folder (its locations/ is the built-in storage); dataDir: Plantern's settings folder. */
-  constructor({ appRoot, dataDir }) {
+  constructor({ appRoot, dataDir, watch = true }) {
     super();
     this.setMaxListeners(200);                       // one per open page (server-sent events)
     this.appRoot = appRoot;
     this.dataDir = dataDir;
+    this.watching = watch;                           // false: no file watching, polling or fetch timers (tests, which refresh by hand)
     this.stores = [];
     this.known = new Map();                          // `${houseId}/${file}` → version last seen or written
     this.stamps = new Map();                         // houseId → cheap stat stamp, to read files only when they change
@@ -47,7 +48,7 @@ export class Registry extends EventEmitter {
     this.stores = stores;
     for (const s of stores) {
       try { await s.open(); } catch (e) { s.status = { state: 'error', error: e.message }; }
-      s.watch?.(() => this.poke(s));
+      if (this.watching) s.watch?.(() => this.poke(s));
     }
     await this.rememberAll();
   }
@@ -185,7 +186,7 @@ export class Registry extends EventEmitter {
     const store = await makeStore(clean, this.ctx());
     if (Object.keys(secrets).length) { this.secrets[id] = { ...(this.secrets[id] || {}), ...secrets }; await saveSecrets(this.dataDir, this.secrets); }
     await store.open();
-    store.watch?.(() => this.poke(store));
+    if (this.watching) store.watch?.(() => this.poke(store));
     this.stores.push(store);
     this.settings.stores.push(clean);
     await saveSettings(this.dataDir, this.settings);
@@ -203,7 +204,7 @@ export class Registry extends EventEmitter {
     if (secrets && Object.keys(secrets).length) { this.secrets[id] = { ...(this.secrets[id] || {}), ...secrets }; await saveSecrets(this.dataDir, this.secrets); }
     const store = await makeStore(this.settings.stores[i], this.ctx());
     await store.open();
-    store.watch?.(() => this.poke(store));
+    if (this.watching) store.watch?.(() => this.poke(store));
     this.stores = this.stores.map(s => (s.id === id ? store : s));
     await saveSettings(this.dataDir, this.settings);
     await this.rememberAll();

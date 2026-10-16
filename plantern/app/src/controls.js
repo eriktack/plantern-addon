@@ -238,7 +238,9 @@ export function materialField(spec, { library = {}, options = null, hint, whole,
   const colour = document.createElement('input');
   colour.type = 'color';
   colour.value = '#b08040';
-  colour.hidden = true;
+  // hidden with an inline display, not only the attribute: a page style can give an input a display, and then the box shows
+  const showColour = on => { colour.hidden = !on; colour.style.display = on ? '' : 'none'; };
+  showColour(false);
   colour.setAttribute('aria-label', `${spec.label}: custom colour`);
 
   const row = document.createElement('div');
@@ -264,7 +266,7 @@ export function materialField(spec, { library = {}, options = null, hint, whole,
     bar.textContent = entry?.texture ? `${label} · texture` : label;
   };
   select.addEventListener('change', () => {
-    colour.hidden = select.value !== 'custom';
+    showColour(select.value === 'custom');
     paint();
     onChange();
   });
@@ -282,14 +284,14 @@ export function materialField(spec, { library = {}, options = null, hint, whole,
     set(v) {
       if (v && [...select.options].some(o => o.value === v && v !== 'custom')) {
         select.value = v;
-        colour.hidden = true;
+        showColour(false);
       } else if (HEX.test(v ?? '') && allowCustom) {
         select.value = 'custom';
         colour.value = v.toLowerCase();
-        colour.hidden = false;
+        showColour(true);
       } else {
         select.value = '';
-        colour.hidden = true;
+        showColour(false);
       }
       paint();
     },

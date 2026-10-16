@@ -1,6 +1,7 @@
 import { add, mul } from './vec.js';
 import { polylineMid } from './strip.js';
 import { fixtureHeight, stripForm } from '../model/fixtures.js';
+import { isHosted, hostedPlacement } from '../model/hosted.js';
 import { openingSymbol } from './openings.js';
 import { isHingedDoor, doorOpen } from '../model/doors.js';
 import { wallFrame, wallJoins, wallPieces, hasBody, facePoint, centrePoint, wallProfile } from './walls.js';
@@ -63,7 +64,9 @@ export function buildLevelGeometry(level) {
     }
     return null;
   }
-  const fixtureZ = fx => fixtureHeight(fx, level);
+  // an object hosted by an opening is where the opening is (hosted.js); the strips on objects read the heights of the level as it is
+  const levelZ = { ...level, objects: (level.objects || []).map(o => (isHosted(o) ? { ...o, z: objectZ(o) } : o)) };
+  const fixtureZ = fx => fixtureHeight(fx, levelZ);
   const fixturePos = fx => (fx.kind === 'strip' ? (fixtureLine(fx) && polylineMid(fixtureLine(fx))) : fx.attach ? resolveAttach(fx.attach)?.p : fx.pos) ?? null;
 
   /** Footprint of an attached box object: width along the wall, depth away from the face. */
@@ -72,10 +75,21 @@ export function buildLevelGeometry(level) {
       const [w, d] = o.size, r = (o.rotationDeg || 0) * Math.PI / 180, c = Math.cos(r), s = Math.sin(r), p = o.pos;
       return [[0, 0], [w, 0], [w, d], [0, d]].map(([x, y]) => [p[0] + x * c - y * s, p[1] + x * s + y * c]);
     }
-    const a = resolveAttach(o.attach);
+    const attach = isHosted(o) ? hostedOf(o)?.attach : o.attach;
+    const a = attach && resolveAttach(attach);
     if (!a) return null;
     const [w, d] = o.size, p1 = add(a.p, mul(a.frame.u, w));
     return [a.p, p1, add(p1, mul(a.dir, d)), add(a.p, mul(a.dir, d))];
+  }
+
+  /** The place of an object hosted by an opening, or null (hosted.js). */
+  function hostedOf(o) {
+    return hostedPlacement(o, (level.openings || []).find(x => x.id === o.attach.opening), level.ceilingHeight);
+  }
+
+  /** The bottom of an object above the floor: its own z, or where its opening puts it. */
+  function objectZ(o) {
+    return isHosted(o) ? hostedOf(o)?.z ?? 0 : o.z ?? 0;
   }
 
   function openingLine(o) {
@@ -85,7 +99,7 @@ export function buildLevelGeometry(level) {
     return [centrePoint(w, f, o.offset), centrePoint(w, f, o.offset + o.width)];
   }
 
-  return { level, walls, wallById, frames, caps, pieces, issues, resolveAttach, fixturePos, fixtureLine, fixtureZ, objectFootprint, openingLine };
+  return { level, walls, wallById, frames, caps, pieces, issues, resolveAttach, fixturePos, fixtureLine, fixtureZ, objectFootprint, objectZ, openingLine };
 }
 
 /**

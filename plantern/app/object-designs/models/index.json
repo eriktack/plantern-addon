@@ -1,5 +1,6 @@
 {
   "models": [
+    "appliance.js",
     "bed.js",
     "bench.js",
     "bookshelf.js",
@@ -12,12 +13,18 @@
     "floor-lamp.js",
     "hallway-unit.js",
     "kitchen-cabinet.js",
+    "mirror.js",
     "planter.js",
+    "shower.js",
     "side-table.js",
     "sideboard.js",
+    "sink.js",
     "sofa.js",
     "stool.js",
     "table-lamp.js",
+    "toilet.js",
+    "tv.js",
+    "vanity.js",
     "wall-sconce.js",
     "wall-shelf.js",
     "wardrobe.js"

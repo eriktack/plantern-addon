@@ -146,7 +146,7 @@ export const meta = {
       baseShape: 'pole',
     },
   },
-  placement: { mount: 'floor', z: 720 },
+  placement: { mount: 'floor', z: 720, hosts: ['room', 'sill'] },
 };
 
 const PROFILES = {

@@ -47,17 +47,21 @@ export function placeOptions(level) {
     const where = (w.rooms || []).map(id => roomName.get(id) ?? id).join(' / ');
     return { id: w.id, length, label: `${displayName(w)}${where ? ` · ${where}` : ''} · ${length} mm` };
   });
-  return { rooms, walls };
+  const openings = (level.openings || []).map(o => {
+    const w = (level.walls || []).find(x => x.id === o.wall), where = (w?.rooms || []).map(id => roomName.get(id) ?? id).join(' / ');
+    return { id: o.id, label: `${displayName(o)} · ${o.type}${where ? ` · ${where}` : ''} · ${Math.round(o.width ?? 0)} mm wide` };
+  });
+  return { rooms, walls, openings };
 }
 
 const num = v => (typeof v === 'string' ? (v.trim() === '' ? NaN : Number(v)) : v);
 
 /**
  * The spec for addObject() from the Place form. `place` is { kind: 'room', x, y, rotationDeg } (standing in the plan) or
- * { kind: 'wall', wall, side, offset, gap } (on a wall face); `z` is the bottom above the floor, `size` the built size
+ * { kind: 'wall', wall, side, offset, gap } (on a wall face) or { kind: 'opening', opening, at: 'sill' | 'head', offset?, depth? } (hosted by an opening); `z` is the bottom above the floor, `size` the built size
  * [w, d, h] the server answered. Returns { spec } or { error } with a message for the form.
  */
-export function placeSpec({ blueprint, params, partMaterials, size, z, name, place }) {
+export function placeSpec({ blueprint, params, partMaterials, size, z, name, place, light }) {
   if (!blueprint) return { error: 'Pick a blueprint first.' };
   if (!Array.isArray(size) || size.length !== 3 || !size.every(v => Number.isFinite(v) && v > 0)) return { error: 'The size of the object is not known yet.' };
   const bottom = num(z ?? 0);
@@ -65,6 +69,18 @@ export function placeSpec({ blueprint, params, partMaterials, size, z, name, pla
   // the size is the build's bounding box (decision 189); it stays listed as assumed until the person has checked it
   const spec = { blueprint, params: { ...params }, partMaterials: { ...partMaterials }, size, z: bottom, assumed: ['size'] };
   if (name && String(name).trim()) spec.name = String(name).trim();
+  if (Array.isArray(light) && light.length === 3 && light.every(Number.isFinite)) spec.light = light;   // the built light point (LA2)
+  if (place?.kind === 'opening') {
+    // hosted by an opening (hosted.js): on its sill or hanging from its head; its place and height come from the opening, so no z is stored
+    if (!place.opening) return { error: 'Pick the opening.' };
+    const at = place.at === 'head' ? 'head' : place.at === 'frame' ? 'frame' : 'sill', blank = v => v === undefined || (typeof v === 'string' && v.trim() === '');
+    const offset = blank(place.offset) ? undefined : num(place.offset), depth = blank(place.depth) ? undefined : num(place.depth);
+    if (offset !== undefined && !(offset >= 0)) return { error: 'The distance along the opening must be 0 or more (empty: centred).' };
+    if (depth !== undefined && !(depth >= 0)) return { error: 'The depth out from the wall must be 0 or more.' };
+    spec.attach = { opening: place.opening, at, ...(place.side ? { side: place.side === 'left' ? 'left' : 'right' } : {}), ...(offset !== undefined ? { offset } : {}), ...(depth !== undefined ? { depth } : {}) };
+    delete spec.z;
+    return { spec };
+  }
   if (place?.kind === 'wall') {
     const blank = v => v === undefined || (typeof v === 'string' && v.trim() === '');   // an empty box means 0
     const offset = blank(place.offset) ? 0 : num(place.offset), gap = blank(place.gap) ? 0 : num(place.gap);

@@ -4,6 +4,7 @@
 // model unchanged with `report.errors`.
 
 import { checkCheck, checkCorners, solveExtra } from '../model/checks.js';
+import { freedPlacement } from '../model/hosted.js';
 import { solveCapture } from '../capture/solve.js';
 import { reconcile } from './reconcile.js';
 import { nameFirst } from '../model/names.js';
@@ -297,7 +298,7 @@ export function deleteWall(model, levelId, wallId, options = {}) {
   const lv = levelOf(model, levelId), w = lv?.walls?.find(x => x.id === wallId);
   if (!w) return refuse(model, `no wall "${wallId}" on level "${levelId}"`);
   const gone = new Set((lv.openings || []).filter(o => o.wall === wallId).map(o => o.id));
-  const held = [...(lv.objects || []), ...(lv.fixtures || [])].filter(x => x.attach?.wall === wallId || (x.kind === 'strip' && gone.has(x.attach?.opening))).map(x => x.id);
+  const held = [...(lv.objects || []), ...(lv.fixtures || [])].filter(x => x.attach?.wall === wallId || gone.has(x.attach?.opening) || (x.kind === 'strip' && gone.has(x.attach?.opening))).map(x => x.id);
   if (held.length) return refuse(model, `${wallId}: ${held.join(', ')} ${held.length > 1 ? 'are' : 'is'} attached to it; move or delete ${held.length > 1 ? 'them' : 'it'} first`);
   const removedOpenings = (lv.openings || []).filter(o => o.wall === wallId).map(o => o.id);
   const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, walls: l.walls.filter(x => x.id !== wallId), ...(l.openings ? { openings: l.openings.filter(o => o.wall !== wallId) } : {}) });
@@ -768,11 +769,14 @@ export function deleteOpening(model, levelId, id, options = {}) {
   if (held.length) return refuse(model, `${id}: ${held.join(', ')} ${held.length > 1 ? 'are' : 'is'} attached to it; delete ${held.length > 1 ? 'them' : 'it'} first`);
   // lamps that stood in it stay on the wall face (they only lose the "stands in" link)
   const freed = (lv.fixtures || []).filter(x => x.attach?.opening === id).map(x => x.id);
+  // an object hosted by it (hosted.js) keeps its place on the wall, as a wall object: it is not deleted
+  const op = lv.openings.find(x => x.id === id), hostedObjects = (lv.objects || []).filter(o => o.attach?.opening === id).map(o => o.id);
   const levels = model.levels.map(l => l.id !== levelId ? l : {
     ...l, openings: l.openings.filter(x => x.id !== id),
+    ...(hostedObjects.length ? { objects: l.objects.map(o => { if (o.attach?.opening !== id) return o; const p = freedPlacement(o, op, lv.ceilingHeight); return { ...o, attach: p.attach, z: p.z }; }) } : {}),
     ...(freed.length ? { fixtures: l.fixtures.map(x => { if (x.attach?.opening !== id) return x; const { opening: _o, ...attach } = x.attach; return { ...x, attach }; }) } : {}),
   });
-  return finish({ ...model, levels }, levelId, {}, options, { freed });
+  return finish({ ...model, levels }, levelId, {}, options, { freed, hostedFreed: hostedObjects });
 }
 
 // ---- fixtures (lamps, switches; PLANTERN.md §6.1) ----------------------------------------------
@@ -830,12 +834,14 @@ export function addObject(model, levelId, spec = {}, options = {}) {
     ...(spec.blueprint ? { blueprint: String(spec.blueprint), params: { ...spec.params }, ...(spec.partMaterials && Object.keys(spec.partMaterials).length ? { partMaterials: { ...spec.partMaterials } } : {}) } : {}),
     ...(spec.name ? { name: spec.name } : {}),
   };
-  if (wall) o.attach = { side: 'right', offset: 0, ...spec.attach };
+  // a hosted object keeps its attachment as given: no offset 0 (that would not centre it on its opening)
+  if (wall) o.attach = spec.attach?.opening !== undefined ? { ...spec.attach } : { side: 'right', offset: 0, ...spec.attach };
   else if (spec.pos) { o.pos = spec.pos.map(Number); o.rotationDeg = Number(spec.rotationDeg ?? 0); }
   o.size = (spec.size ?? d.size).map(Number);
-  o.z = Number(spec.z ?? d.z);
+  const hosted = spec.attach?.opening !== undefined;   // hosted by an opening: its height is the opening's, nothing is stored (hosted.js)
+  if (!hosted) o.z = Number(spec.z ?? d.z);
   if (spec.color) o.color = spec.color;
-  const assumed = Array.isArray(spec.assumed) ? spec.assumed : [...(spec.size ? [] : ['size']), ...(spec.z === undefined && wall ? ['z'] : [])];
+  const assumed = Array.isArray(spec.assumed) ? spec.assumed : [...(spec.size ? [] : ['size']), ...(spec.z === undefined && wall && !hosted ? ['z'] : [])];
   if (assumed.length) o.assumed = assumed;
   const { errors } = checkObject(o, lv);
   if (errors.length) return refuse(model, ...errors.map(e => `${o.id}: ${e}`));

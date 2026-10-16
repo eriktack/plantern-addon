@@ -5,6 +5,7 @@ import { validateModel, validateBindings, validateEntities } from './model/valid
 import { materialTable, setDesignLibrary } from './model/materials.js';
 import { buildModelGeometry } from './geometry/level.js';
 import { levelStack, STACK_MODES } from './geometry/stack.js';
+import { addLitLamps } from './model/lit.js';
 import { collectSnapPoints } from './tools/snap.js';
 import { createMeasureTool } from './tools/measure.js';
 import { addCheck, deleteCheck } from './edit/ops.js';
@@ -71,6 +72,9 @@ async function main() {
 
   // ---- derived geometry for all levels (checks and snap refs may span levels) ----
   const geos = buildModelGeometry(model, { headroom: l => resolveSettings(loc, l).stairHeadroom });
+  // a lit object is a lamp: its light comes from the server's build (assets.light), and is shown as a lamp of its level (lit.js)
+  const refreshLit = () => addLitLamps(model, geos, o => assets.light(o) ?? o.light);
+  refreshLit();
   const allSnaps = model.levels.flatMap(l => collectSnapPoints(model, l, geos.get(l.id)));
   const snapIndex = new Map(allSnaps.map(s => [s.ref, s]));
 
@@ -172,10 +176,12 @@ async function main() {
   };
   // the 2D plan alone, with the lamps as they are (a render draws every lamp as unavailable until they are applied again)
   function drawPlan() {
+    refreshLit();                                                  // a light that has just arrived from the server shows now
     view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors() });
     refreshFixtures();
   }
   function showLevel() {
+    refreshLit();
     planAfterAssets.cancel();                                      // this draws the plan now
     view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors() });
     if (view3d) build3d();
@@ -313,7 +319,8 @@ async function main() {
   }
   ha.subscribe(id => {
     refreshRow(id);
-    const fxs = level?.fixtures || [];
+    // every level on show, not only the selected one: the 3D view can show the floors below and above too (stack setting)
+    const fxs = level ? shownLevels().flatMap(s => s.level.fixtures || []) : [];
     for (const fxId of affected.get(id) || []) { const fx = fxs.find(f => f.id === fxId); if (fx) applyFixture(fx); }
     // a door sensor changed: the leaf and the light through the door follow. The whole level is drawn again the way a level change does it, so the
     // lamps keep their state and the 3D camera stays where it was (a render alone draws every lamp as unavailable)

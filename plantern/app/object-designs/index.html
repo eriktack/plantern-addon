@@ -70,7 +70,7 @@
     <div id="hPlaceBox">
       <label>Level <select id="hLevel"></select></label>
       <label>It stands
-        <select id="hKind"><option value="room">in a room</option><option value="wall">on a wall</option></select>
+        <select id="hKind"><option value="room">in a room</option><option value="wall">on a wall</option><option value="opening">in an opening</option></select>
       </label>
       <div id="hRoomRows">
         <label>Room <select id="hRoom"></select></label>
@@ -88,7 +88,16 @@
           <label>Gap to the wall <small>mm</small><input id="hGap" value="0" inputmode="numeric" autocomplete="off"></label>
         </div>
       </div>
-      <label>Bottom <small>mm above the floor</small><input id="hZ" value="0" inputmode="numeric" autocomplete="off"></label>
+      <div id="hOpeningRows" hidden>
+        <label>Opening <select id="hOpening"></select></label>
+        <label>It <select id="hAt"><option value="sill">stands on the sill</option><option value="head">hangs from the head</option></select></label>
+        <div class="two">
+          <label>From the opening's start <small>mm, empty: centred</small><input id="hOpOffset" inputmode="numeric" autocomplete="off"></label>
+          <label>Out from the wall <small>mm, empty: the sill board</small><input id="hOpDepth" inputmode="numeric" autocomplete="off"></label>
+        </div>
+      </div>
+      <p id="hKindNote" class="help" hidden></p>
+      <label id="hZRow">Bottom <small>mm above the floor</small><input id="hZ" value="0" inputmode="numeric" autocomplete="off"></label>
       <label>Name <small>optional</small><input id="hName" autocomplete="off"></label>
       <div class="actions"><button id="hPlace" class="primary" type="button">Place in house</button></div>
     </div>

@@ -95,7 +95,7 @@ export const meta = {
   variantDefaults: {
     swing_arm: { projection: 350 },
   },
-  placement: { mount: 'wall', z: 1600 },
+  placement: { mount: 'wall', z: 1600, hosts: ['wall'] },
 };
 
 const PLATE = 8;

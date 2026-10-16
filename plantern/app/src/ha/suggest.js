@@ -37,7 +37,8 @@ export function setBinding(location, id, { entity, controls, look } = {}) {
  * the house's model. A binding of something that is still there is kept as it is.
  */
 export function pruneBindings(location, model) {
-  const ids = new Set((model.levels || []).flatMap(l => [...(l.fixtures || []), ...(l.openings || [])].map(x => x.id)));
+  // a lit object keeps its link too (openings-and-lit-objects LA4): its id is the lamp's
+  const ids = new Set((model.levels || []).flatMap(l => [...(l.fixtures || []), ...(l.openings || []), ...(l.objects || [])].map(x => x.id)));
   const bindings = Object.fromEntries(Object.entries(location.bindings || {}).filter(([id]) => ids.has(id)));
   return Object.keys(bindings).length === Object.keys(location.bindings || {}).length ? location : { ...location, bindings };
 }

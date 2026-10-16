@@ -107,7 +107,7 @@ export function createAssetCache({
       if (keptBytes) {
         try {
           entry.scene = await readGlb(keptBytes);
-          Object.assign(entry, { status: 'ok', hash: kept.hash, meta: { size: kept.size } });
+          Object.assign(entry, { status: 'ok', hash: kept.hash, meta: { size: kept.size }, light: kept.light ?? null });
           onChange(key, 'ok');
         } catch { /* a kept copy that cannot be read is not used: the server decides */ }
       }
@@ -121,6 +121,7 @@ export function createAssetCache({
           else if (!entry.scene) entry.status = 'missing';
         } else if (entry.scene && entry.hash === answer.hash) {
           entry.meta = { size: answer.size };          // the copy shown is the current one
+          entry.light = answer.light ?? null;
           entry.error = null;
         } else {
           const file = await doFetch(`${apiBase}api/glb/${answer.hash}`);
@@ -131,9 +132,9 @@ export function createAssetCache({
             const bytes = await file.arrayBuffer();
             try {
               entry.scene = await readGlb(bytes);
-              Object.assign(entry, { status: 'ok', hash: answer.hash, meta: { size: answer.size }, error: null });
+              Object.assign(entry, { status: 'ok', hash: answer.hash, meta: { size: answer.size }, light: answer.light ?? null, error: null });
               await settle(store?.putFile(answer.hash, bytes));
-              await settle(store?.putLink(key, answer.hash, answer.size));
+              await settle(store?.putLink(key, answer.hash, answer.size, answer.light ?? null));
             } catch (e) {
               entry.error = e.message;
               entry.status = 'broken';
@@ -195,6 +196,8 @@ export function createAssetCache({
 
   /** Starts the model of an asset object, whichever way it is made. */
   const loadFor = o => (o.blueprint ? loadObject(o) : load(o.asset));
+  /** The light point of a blueprint object as the server built it, [x, y, z] in its own axes; null for a model without one or not yet loaded. */
+  const light = o => (o.blueprint ? entries.get(assetKey(o))?.light ?? null : null);
 
   /** 'loading' | 'ok' | 'missing' | 'broken', or 'unknown' when the model has not been asked for yet. `key` is a model name or assetKey(object). */
   const status = key => entries.get(key)?.status ?? 'unknown';
@@ -203,7 +206,7 @@ export function createAssetCache({
   /** Why a blueprint object's model is missing or broken (the server's reason), or null. */
   const error = key => entries.get(key)?.error ?? null;
 
-  return { load, loadObject, loadFor, status, meta, error, rebuild, mainColour };
+  return { load, loadObject, loadFor, status, meta, error, rebuild, mainColour, light };
 }
 
 /**

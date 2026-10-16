@@ -13,7 +13,7 @@ import { primitives, booleans, transforms, geometries } from '../lib/jscad.js';
 // ASSUMED: A bare_bulb shade shape exposes a globe-shaped lamp envelope with half the nominal head radius and walls at most 3 mm thick (visible bare lamp).
 // ASSUMED: Source spheres have radius min(8 mm, half the head height); sockets have 6 mm radius (simplified lamp fitting).
 // ASSUMED: Head support crosses are 8 mm wide and 5 mm high (shade attachment).
-// ASSUMED: Chandeliers have three or six radial heads, each with nominal diameter 22% of the fixture diameter, spanning the upper 65% of height (balanced multi-arm fixture).
+// ASSUMED: Chandeliers have three or six radial heads, each with a fixed nominal radius of 60 mm (120 mm shades) whatever the fixture diameter, spanning the upper 65% of height (balanced multi-arm fixture).
 // ASSUMED: Chandelier arms are 12 mm wide and 10 mm high, centred at 20% of height (radial structure).
 // ASSUMED: Chandelier stems have 6 mm radius; the bottom finial has radius min(10 mm, 8% of height) (central support reaching z = 0).
 // ASSUMED: Chandeliers require diameter at least 300 mm and height at least 100 mm (space for the heads).
@@ -29,12 +29,14 @@ import { primitives, booleans, transforms, geometries } from '../lib/jscad.js';
 // UNSURE: Chandelier heads share one lightHeight value because only one light-specific parameter is permitted.
 // UNSURE: Variant defaults apply only to omitted parameters; supplied values always win.
 
+const CHANDELIER_SHADE_RADIUS = 60;   // mm
+
 export const meta = {
   id: 'ceiling-light',
   name: 'Ceiling light',
   summary: 'A ceiling light with flush, pendant, chandelier, recessed and track variants.',
   description:
-    'A ceiling-mounted light with its canopy at the ceiling and optional suspension above the fixture, with a configurable source height inside the lamp heads. Assumed: overall height is height plus dropLength; lightHeight is measured from the bottom, 0 means the head centre and other values are kept inside the head; the bare bulb of a bare_bulb shade is in the shade part; canopy diameter is the smaller of 100 mm and 30% of diameter, with height the smaller of 20 mm and fixture height; cord radius 3 mm with 5 mm fixture penetration; drum radius constant and cone top radius 40% of bottom; bell height/radius fractions 0/1, 0.35/0.72, 0.7/0.4, 1/0.32; globe height/radius fractions 0/0.4, 0.125/0.72, 0.25/0.9, 0.375/0.98, 0.5/1 and their vertical mirror; profile bands overlap 5 mm and bell/globe heads require 40 mm height; shade walls at most 5 mm, limited to half the smallest profile radius; a bare_bulb shape exposes globe lamp envelopes with half the nominal head radius and walls at most 3 mm; source sphere radius min(8 mm, half head height), socket radius 6 mm, support crosses 8 mm wide and 5 mm high; chandeliers have six radial heads of nominal diameter 22% of fixture diameter occupying the upper 65% of height, 12 mm wide by 10 mm high arms centred at 20% of height, 6 mm radius central stem, and bottom finial radius min(10 mm, 8% of height); chandeliers have 3 or 6 arms, with heads pointing up (arms at 20% of height) or down (hanging from arms at 80% of height, heads in the lower 65%), and with 3 arms the model is centred on its bounds so the stem is off the middle; minimum chandelier diameter 300 mm and height 100 mm; track lights have three downward heads at x = -1.5, 0, 1.5 times diameter, a rail four times diameter long, rail height 15 mm and width min(30 mm, 40% of diameter), heads ending 20 mm below the top, and 8 mm radius necks entering heads and rail by 5 mm; minimum track height 70 mm; recessed trim thickness 5 mm and reflector radius 80% of overall radius; round fixture parts use 32 segments and small sources, cords and necks use 16; recessed fittings are represented below the ceiling.',
+    'A ceiling-mounted light with its canopy at the ceiling and optional suspension above the fixture, with a configurable source height inside the lamp heads. Assumed: overall height is height plus dropLength; lightHeight is measured from the bottom, 0 means the head centre and other values are kept inside the head; the bare bulb of a bare_bulb shade is in the shade part; canopy diameter is the smaller of 100 mm and 30% of diameter, with height the smaller of 20 mm and fixture height; cord radius 3 mm with 5 mm fixture penetration; drum radius constant and cone top radius 40% of bottom; bell height/radius fractions 0/1, 0.35/0.72, 0.7/0.4, 1/0.32; globe height/radius fractions 0/0.4, 0.125/0.72, 0.25/0.9, 0.375/0.98, 0.5/1 and their vertical mirror; profile bands overlap 5 mm and bell/globe heads require 40 mm height; shade walls at most 5 mm, limited to half the smallest profile radius; a bare_bulb shape exposes globe lamp envelopes with half the nominal head radius and walls at most 3 mm; source sphere radius min(8 mm, half head height), socket radius 6 mm, support crosses 8 mm wide and 5 mm high; chandeliers have six radial heads of a fixed nominal radius of 60 mm (120 mm shades, whatever the fixture diameter) occupying the upper 65% of height, 12 mm wide by 10 mm high arms centred at 20% of height, 6 mm radius central stem, and bottom finial radius min(10 mm, 8% of height); chandeliers have 3 or 6 arms, with heads pointing up (arms at 20% of height) or down (hanging from arms at 80% of height, heads in the lower 65%), and with 3 arms the model is centred on its bounds so the stem is off the middle; minimum chandelier diameter 300 mm and height 100 mm; track lights have three downward heads at x = -1.5, 0, 1.5 times diameter, a rail four times diameter long, rail height 15 mm and width min(30 mm, 40% of diameter), heads ending 20 mm below the top, and 8 mm radius necks entering heads and rail by 5 mm; minimum track height 70 mm; recessed trim thickness 5 mm and reflector radius 80% of overall radius; round fixture parts use 32 segments and small sources, cords and necks use 16; recessed fittings are represented below the ceiling.',
   params: [
     {
       key: 'variant',
@@ -138,7 +140,7 @@ export const meta = {
       height: 150,
     },
   },
-  placement: { mount: 'ceiling' },
+  placement: { mount: 'ceiling', hosts: ['room', 'head'] },
 };
 
 const profiles = {
@@ -398,7 +400,8 @@ export function build(p = {}) {
 
   let shift = [0, 0];
   if (q.variant === 'chandelier') {
-    const nominalHeadRadius = 0.11 * q.diameter;
+    // a fixed shade size: the shades do not grow or shrink with the fixture’s diameter (only the arms’ orbit does)
+    const nominalHeadRadius = CHANDELIER_SHADE_RADIUS;
     const actualHeadRadius = q.shadeShape === 'bare_bulb'
       ? nominalHeadRadius / 2
       : nominalHeadRadius;

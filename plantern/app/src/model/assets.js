@@ -24,11 +24,11 @@ export function assetSources(name, { houseBase = null, sharedBase = null } = {})
  * (radians, counter-clockwise from east). The footprint is the one of objectFootprint(): the first edge runs along the
  * object's width, which is the model's own x axis, so the model turns with the object.
  */
-export function assetPlacement(o, footprint) {
+export function assetPlacement(o, footprint, z = o.z ?? 0) {
   const cx = footprint.reduce((s, p) => s + p[0], 0) / footprint.length;
   const cy = footprint.reduce((s, p) => s + p[1], 0) / footprint.length;
   const [p0, p1] = footprint;
-  return { centre: [cx, cy], z: o.z ?? 0, heading: Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) };
+  return { centre: [cx, cy], z, heading: Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) };
 }
 
 /**

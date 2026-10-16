@@ -8,6 +8,7 @@ import { loadLocationIndex, loadLocation } from './load.js';
 import { detectSaveMode, saveModelFile } from './save.js';
 import { formatJson } from './format.js';
 import { merge3 } from './merge.js';
+import { stripLitLamps } from './lit.js';
 
 /** This page's own id: its saves come back as events, which are not "changes made elsewhere". */
 export const CLIENT = (globalThis.crypto?.randomUUID?.() || String(Math.random()).slice(2));
@@ -100,6 +101,7 @@ export class House {
    * conflict: true and details { theirs, merged, conflicts } for askConflict() (src/capture/conflict-ui.js).
    */
   async save(value, file = 'model') {
+    if (file === 'model') value = stripLitLamps(value);   // the lamps of lit objects are shown, never saved (lit.js)
     if (!this.server) {
       const rel = `locations/${this.entry.path || this.id + '/'}${file === 'location' ? 'location.json' : (this.location.model || 'model.json')}`;
       await saveModelFile(this.saveMode, rel, value, this.base[file]);

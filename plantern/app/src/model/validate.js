@@ -17,6 +17,7 @@ import { checkSolid } from './solids.js';
 import { checkAnchors } from './anchors.js';
 import { checkRoomOptions } from './rooms.js';
 import { checkObject } from './objects.js';
+import { isHosted } from './hosted.js';
 import { checkName } from './names.js';
 import { checkMaterials, checkPalette } from './materials.js';
 import { checkSite } from './site.js';
@@ -36,7 +37,8 @@ function checkIds(model, out) {
   };
   for (const lv of model.levels) {
     note(lv.id, 'levels');
-    for (const c of ID_COLLECTIONS) (lv[c] || []).forEach(x => { note(x.id, `${lv.id}.${c}`); out.push(...checkName(x)); });
+    // a derived lamp (lit.js) is the object's light: it takes the object's id, so it is not a second item with an id of its own
+    for (const c of ID_COLLECTIONS) (lv[c] || []).forEach(x => { if (x.derived) return; note(x.id, `${lv.id}.${c}`); out.push(...checkName(x)); });
   }
   (model.checks || []).forEach(x => note(x.id, 'checks'));
   (model.anchors || []).forEach(x => note(x.id, 'anchors'));
@@ -220,7 +222,8 @@ export function validateLevel(level, geo, below = true, checks = [], blueprints)
     for (const e of checkOpening(o, w, level, (level.openings || []).filter(x => x.wall === w.id))) out.push({ severity: 'error', id: o.id, msg: e });
   }
   for (const x of level.objects || []) {
-    if (x.attach && !geo.wallById.get(x.attach.wall)) out.push({ severity: 'error', id: x.id, msg: `attached to missing wall "${x.attach.wall}"` });
+    // a hosted object is on its opening, and checkObject (below) checks that opening; a wall attachment must name a wall
+    if (x.attach && !isHosted(x) && !geo.wallById.get(x.attach.wall)) out.push({ severity: 'error', id: x.id, msg: `attached to missing wall "${x.attach.wall}"` });
   }
   for (const fx of level.fixtures || []) {
     const { errors, warnings } = checkFixture(fx, level);
@@ -400,12 +403,17 @@ export function validateModel(model, geos, { blueprints, library } = {}) {
 
 /** Bindings (location.json) must reference existing fixtures, or doors (their sensor, PLANTERN.md §6.1). */
 export function validateBindings(location, model) {
-  const out = [], fx = new Set(model.levels.flatMap(l => (l.fixtures || []).map(f => f.id)));
+  // a link is for a lamp, a door's sensor, or a lit object (its light, LA4): the lit object's id is the id of its light
+  const out = [], fx = new Set(model.levels.flatMap(l => [...(l.fixtures || []), ...(l.objects || [])].map(f => f.id)));
+  // only an object that can give light (a blueprint, or one with a stored light) takes a link of its own
+  const lit = new Set(model.levels.flatMap(l => (l.objects || []).filter(o => o.blueprint !== undefined || o.light !== undefined).map(o => o.id)));
+  const isObject = new Set(model.levels.flatMap(l => (l.objects || []).map(o => o.id)));
   const openings = new Map(model.levels.flatMap(l => (l.openings || []).map(o => [o.id, o])));
   for (const [id, b] of Object.entries(location.bindings || {})) {
     const op = openings.get(id);
     if (op && op.type !== 'door') out.push({ severity: 'error', id, msg: 'only a door can be bound to a Home Assistant sensor' });
     else if (!op && !fx.has(id)) out.push({ severity: 'error', id, msg: 'binding references a fixture or door that does not exist in the model' });
+    else if (isObject.has(id) && !lit.has(id)) out.push({ severity: 'error', id, msg: 'only a lit object (a library lamp) can be bound to a Home Assistant light' });
     for (const c of b.controls || []) if (!fx.has(c)) out.push({ severity: 'error', id, msg: `controls missing fixture "${c}"` });
     if (b.entity && !/^[a-z_]+\.[a-z0-9_]+$/.test(b.entity)) out.push({ severity: 'warn', id, msg: `"${b.entity}" does not look like an HA entity id` });
     for (const m of checkLook(b.look)) out.push({ severity: 'error', id, msg: m });

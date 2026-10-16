@@ -231,7 +231,7 @@ export function createView3d(container, hooks = {}) {
     function placeAsset(o, geo, g, box) {
       const fp = geo.objectFootprint(o);
       if (!fp) return;
-      const { centre, z, heading } = assetPlacement(o, fp);
+      const { centre, z, heading } = assetPlacement(o, fp, geo.objectZ(o));   // a hosted object has no z of its own: its opening gives the height
       const entry = assets.loadFor(o);
       entry.ready.then(() => {
         if (gen !== buildGen) return;

@@ -685,11 +685,9 @@
           "blueprint": "table-lamp",
           "params": { "variant": "sill" },
           "name": "Window lamp (the model)",
-          "pos": [2165,3635],
-          "rotationDeg": 0,
           "size": [170,170,280],
-          "z": 910,
-          "assumed": ["size"]
+          "assumed": ["size"],
+          "attach": { "opening": "o_k_win", "at": "sill" }
         },
         {
           "id": "ob_coffee_table_1",

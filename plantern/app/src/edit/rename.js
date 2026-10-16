@@ -55,7 +55,8 @@ export function renameId(model, oldId, newId) {
   const issues = validateModel(next, buildModelGeometry(next));
   const fixture = (model.levels || []).some(l => (l.fixtures || []).some(f => f.id === oldId));
   const opening = (model.levels || []).some(l => (l.openings || []).some(o => o.id === oldId));
-  return { model: next, report: { errors: [], issues, changed, fixture, opening } };
+  const object = (model.levels || []).some(l => (l.objects || []).some(o => o.id === oldId));   // a lit object's link (LA4)
+  return { model: next, report: { errors: [], issues, changed, fixture, opening, object } };
 }
 
 /** The name an entity carries (its own `name`), or '' when it has none. */

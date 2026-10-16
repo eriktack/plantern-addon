@@ -42,17 +42,34 @@ export function createMenu(host, { label, icon, entries, onPick = () => {}, alig
   let shown = [];
 
   const items = () => [...list.querySelectorAll('[role=menuitem]:not(.off)')];
+  // The list is placed on the page, not in the panel: a panel scrolls and clips what is inside it. It opens below the button
+  // when there is room, else above it, and stays within the window's width.
+  function place() {
+    const b = button.getBoundingClientRect(), vw = document.documentElement.clientWidth, vh = window.innerHeight, m = 8, gap = 4;
+    const w = align === 'right' ? Math.min(330, vw * 0.86) : b.width;
+    const left = Math.max(m, Math.min(align === 'right' ? b.right - w : b.left, vw - w - m));
+    Object.assign(list.style, { position: 'fixed', left: `${left}px`, right: 'auto', width: `${w}px` });
+    const below = vh - b.bottom - gap - m, above = b.top - gap - m;
+    if (below >= Math.min(260, above)) Object.assign(list.style, { top: `${b.bottom + gap}px`, bottom: 'auto', maxHeight: `${Math.max(120, below)}px` });
+    else Object.assign(list.style, { top: 'auto', bottom: `${vh - b.top + gap}px`, maxHeight: `${Math.max(120, above)}px` });
+  }
   function set(open) {
     if (open) {
       shown = typeof entries === 'function' ? entries() : entries;
       list.innerHTML = groupEntries(shown).map(g => (g.group ? `<div class="menugroup" role="presentation">${esc(g.group)}</div>` : '') + g.items.map(e => itemHtml(e, shown.indexOf(e))).join('')).join('') || '<div class="menugroup">Nothing to add here</div>';
+      place();
     }
     list.hidden = !open;
+    if (!open) list.style.cssText = '';
     button.setAttribute('aria-expanded', String(open));
     if (open) (list.querySelector('.on') ?? items()[0])?.focus();
   }
   button.addEventListener('click', () => set(list.hidden));
   document.addEventListener('pointerdown', e => { if (!list.hidden && !host.contains(e.target)) set(false); });
+  // placed on the page, so it would drift away from its button if anything scrolls or the window changes: close it instead
+  const closeIfMoved = e => { if (!list.hidden && !(e?.target instanceof Node && list.contains(e.target))) set(false); };   // the list's own scrolling is fine
+  window.addEventListener('scroll', closeIfMoved, true);
+  window.addEventListener('resize', closeIfMoved);
   list.addEventListener('click', e => {
     const el = e.target.closest('[role=menuitem]');
     if (!el || el.classList.contains('off')) return;

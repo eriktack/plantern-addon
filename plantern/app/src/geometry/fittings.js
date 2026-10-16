@@ -5,6 +5,7 @@
 //   color       the frame, sash and leaf colour "#rrggbb" (default: white for a window, wood for a door)
 //   placement   where the unit sits across the wall: "left" (flush with the left face), "middle" (default), "right"
 //               (left and right are relative to the wall's direction a → b, like sides.left / sides.right)
+//   shift       mm, signed: moves the unit from that place toward the left face (+) or the right face (−)
 //   sillDepth   (windows) how far the sill board reaches out beyond the wall face on the side the window opens into
 //   sillColor   its colour (default a light stone grey)
 // `thickness` is the depth of the unit itself (default 70 for a window, 40 for a door; never more than the wall).
@@ -28,7 +29,8 @@ export function unitSpan(w, f, o) {
   const depth = Math.min(o.thickness ?? FITTING_DEFAULTS[o.type]?.depth ?? 60, w.thickness || 1e9);
   const left = f.offL, right = -f.offR, mid = (left + right) / 2;
   const [t0, t1] = o.placement === 'left' ? [left - depth, left] : o.placement === 'right' ? [right, right + depth] : [mid - depth / 2, mid + depth / 2];
-  return { t0, t1, depth };
+  // the shift (decision 253) moves it along the wall's normal; none leaves the numbers exactly as they were
+  return o.shift ? { t0: t0 + o.shift, t1: t1 + o.shift, depth } : { t0, t1, depth };
 }
 
 /**

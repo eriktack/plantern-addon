@@ -362,6 +362,7 @@
     <label id="oThickRow">Thickness of the <span id="oThickWhat">window</span> itself <small>mm, its frame or leaf (not the hole in the wall); empty = not measured</small><input id="oThick" inputmode="numeric" autocomplete="off"></label>
     <div id="oLookBox">
       <label id="oPlaceRow">Sits <small>where the <span id="oPlaceWhat">window</span> is across the wall (the plan and 3D)</small><select id="oPlace"><option value="">in the middle of the wall</option><option value="left">flush with the left side</option><option value="right">flush with the right side</option></select></label>
+      <label id="oShiftRow">± Shift across the wall <small>mm from that place: + toward the left side, − toward the right; empty = 0</small><input id="oShift" inputmode="numeric" placeholder="0" autocomplete="off"></label>
       <div class="grid2">
         <div id="oColorRow"><label class="inl"><input type="checkbox" id="oColorUse"> Colour of its frame</label> <input type="color" id="oColor" value="#f2f0ea"></div>
         <div id="oSillRow" class="grid2" style="grid-column:1/-1">
@@ -376,6 +377,7 @@
       <div id="oEntityNow" class="help"></div>
       <div class="help" id="oBindHint">Without a sensor the door is drawn open, and light passes it. A closed sensor shuts it. Sliding and pocket doors do not change with the sensor.</div>
     </div>
+    <div id="oHosted" class="pform"></div>
     <div id="oErr" class="help" style="color:var(--bad)"></div>
     <div class="row btns">
       <button class="moved" id="oApply">Apply opening changes</button>
@@ -423,6 +425,10 @@
       <div id="xControlsRow"><label style="margin-bottom:2px">Controls <small>lamps this switch turns on and off (a click on it toggles them)</small></label><div id="xControls" class="help"></div></div>
       <div class="row btns"><span id="xBindOut" class="help"></span></div>
     </div>
+    <div id="xUseRow" hidden>
+      <label>Use a lit object's light here <small>this lamp is removed and its link goes to the object</small><select id="xUseObject"></select></label>
+      <div class="row btns"><button id="xUseLight">Use the object's light</button></div>
+    </div>
     <div id="xErr" class="help" style="color:var(--bad)"></div>
     <div class="row btns">
       <button class="moved" id="xApply">Apply fixture changes</button>
@@ -432,6 +438,12 @@
   <section id="objectPanel" hidden>
     <h2>Object <span id="obTitle"></span></h2>
     <div id="obInfo" class="help"></div>
+    <div id="obPlacedRow">
+      <label>Placed <select id="obPlaced"><option value="room">in the room</option><option value="wall">on a wall</option><option value="opening">in an opening</option></select></label>
+      <label id="obOpeningRow" hidden>Opening <select id="obOpening"></select></label>
+      <label id="obAtRow" hidden>Stands <select id="obAt"><option value="sill">on the sill</option><option value="head">at the head</option></select></label>
+      <div id="obPlacedNote" class="help"></div>
+    </div>
     <div id="obBlueprint" class="help" hidden></div>
     <details class="sect" id="obOptionsBox" open hidden>
       <summary>Options <span class="help">· what it is built from</span></summary>
@@ -453,9 +465,25 @@
       <label id="obOffsetRow">Position <small id="obOffsetNote">mm along the wall</small><input id="obOffset" inputmode="numeric" autocomplete="off"></label>
       <label id="obSideRow">On the side of <select id="obSide"><option value="right">right</option><option value="left">left</option></select></label>
       <label id="obGapRow">Gap from the wall <small>mm</small><input id="obGap" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+      <label id="obShiftRow">± Shift across the wall <small>mm from the opening’s room face: + into the room, − deeper into the opening; empty = 0</small><input id="obShift" inputmode="numeric" placeholder="0" autocomplete="off"></label>
       <label id="obXRow">x <small>mm, east (a corner)</small><input id="obX" inputmode="numeric" autocomplete="off"></label>
       <label id="obYRow">y <small>mm, north</small><input id="obY" inputmode="numeric" autocomplete="off"></label>
       <label id="obRotRow">Turned <small>degrees, 0 = width along east</small><input id="obRot" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+    </div>
+    <div id="obBindBox" hidden>
+      <label>Light in Home Assistant <small>the light this object is when it is on; picking one links it when you Apply</small><input id="obEntity" autocomplete="off" placeholder="light.kitchen"></label>
+      <div id="obEntityPick" class="entpick" hidden></div>
+      <div id="obEntityNow" class="help"></div>
+      <div id="obLookRow">
+        <label style="margin-bottom:2px">When on, it looks like <small>for what Home Assistant does not tell: a smart outlet or relay driving an ordinary lamp, a light without dimming or colour; empty = full and warm white</small></label>
+        <div class="grid2">
+          <label>Brightness <small>%</small><input id="obLookBri" inputmode="numeric" placeholder="100" autocomplete="off"></label>
+          <label>Colour temperature <small>K, e.g. 2700 warm</small><input id="obLookK" inputmode="numeric" placeholder="2700" autocomplete="off"></label>
+          <label class="inl"><input type="checkbox" id="obLookUseColor"> A colour instead</label>
+          <label><input type="color" id="obLookColor" value="#ffd6aa"></label>
+        </div>
+      </div>
+      <label>Light radius <small>mm, how far its glow reaches on the plan; empty = the default for its kind (shown in grey)</small><input id="obLightRadius" inputmode="numeric" autocomplete="off"></label>
     </div>
     <div id="obErr" class="help" style="color:var(--bad)"></div>
     <div class="row btns">

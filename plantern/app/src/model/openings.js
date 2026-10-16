@@ -63,6 +63,7 @@ export function checkOpening(o, wall, level, others = []) {
   const hex = v => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
   if (o.color !== undefined && (o.type === 'passage' || !hex(o.color))) err.push(o.type === 'passage' ? 'a passage has no colour (nothing is in it)' : 'color must look like #rrggbb');
   if (o.placement !== undefined && (o.type === 'passage' || !PLACEMENTS.includes(o.placement))) err.push(o.type === 'passage' ? 'a passage has no placement (it is as deep as the wall)' : `placement must be ${PLACEMENTS.map(p => `"${p}"`).join(', ')}`);
+  if (o.shift !== undefined && (o.type === 'passage' || !Number.isFinite(o.shift))) err.push(o.type === 'passage' ? 'a passage has no shift (it is as deep as the wall)' : 'shift must be a number of mm (+ toward the left side, − toward the right)');
   if (o.sillDepth !== undefined && (o.type !== 'window' || !(o.sillDepth >= 0))) err.push(o.type !== 'window' ? 'sillDepth is for windows' : 'sillDepth must be 0 or more (mm)');
   if (o.sillColor !== undefined && (o.type !== 'window' || !hex(o.sillColor))) err.push(o.type !== 'window' ? 'sillColor is for windows' : 'sillColor must look like #rrggbb');
   return err;
