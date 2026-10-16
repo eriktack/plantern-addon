@@ -8,7 +8,7 @@ import { listHouses, openHouse, houseOptions, setApiBase } from '../src/model/ho
 import { chooseLocation, chooseLevel, remember, linkPages } from '../src/model/current.js';
 import { blueprintModule } from '../src/blueprints/build.js';
 import { placeOptions, placeSpec, optionProps, findObject, startPlacement } from '../src/blueprints/place.js';
-import { placementOf, defaultsFor } from './lib/params.js';
+import { placementOf, defaultsFor, hostsOf } from './lib/params.js';
 import { addObject, setObject } from '../src/edit/ops.js';
 import { levelLabel } from '../src/model/names.js';
 
@@ -79,22 +79,49 @@ export function wireHousePanel(ctx, page) {
     fillPlace();
   };
   function fillPlace() {
-    const { rooms, walls } = placeOptions(level());
+    const { rooms, walls, openings } = placeOptions(level());
+    $('hOpening').innerHTML = openings.length ? openings.map(o => `<option value="${esc(o.id)}">${esc(o.label)}</option>`).join('') : '<option value="">no doors or windows on this level</option>';
     $('hRoom').innerHTML = rooms.length ? rooms.map(r => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('') : '<option value="">no rooms on this level</option>';
     $('hWall').innerHTML = walls.length ? walls.map(w => `<option value="${esc(w.id)}">${esc(w.label)}</option>`).join('') : '<option value="">no walls on this level</option>';
     const first = rooms[0];
     if (first && $('hX').value === '') { $('hX').value = first.centre[0]; $('hY').value = first.centre[1]; }
     pickRoom();
+    showHosts();
   }
   function pickRoom() {
     const room = placeOptions(level()).rooms.find(r => r.id === $('hRoom').value);
     if (room) { $('hX').value = room.centre[0]; $('hY').value = room.centre[1]; }
   }
   const showKind = () => {
-    const wall = $('hKind').value === 'wall';
-    $('hRoomRows').hidden = wall;
-    $('hWallRows').hidden = !wall;
+    const kind = $('hKind').value;
+    $('hRoomRows').hidden = kind !== 'room';
+    $('hWallRows').hidden = kind !== 'wall';
+    $('hOpeningRows').hidden = kind !== 'opening';
+    $('hZRow').hidden = kind === 'opening';          // a hosted object's height is its opening's
   };
+  // Where the chosen model may stand (placement.hosts, or derived from its mount): the choices it cannot use are disabled, with the reason
+  const hostsNow = () => {
+    const m = page.current?.()?.mod?.meta;
+    if (!m) return null;
+    let variant; try { variant = page.form?.readForObject?.().params?.variant; } catch { /* a value still being typed */ }
+    return hostsOf(m, variant ?? defaultsFor(m).variant);
+  };
+  function showHosts() {
+    const hosts = hostsNow(), has = (level()?.openings?.length ?? 0) > 0, note = [];
+    const allow = { room: !hosts || hosts.includes('room'), wall: !hosts || hosts.includes('wall'), opening: !hosts || hosts.includes('sill') || hosts.includes('head') };
+    const why = { room: 'it does not stand free in a room', wall: 'it does not go on a wall', opening: 'it does not go on a sill or hang from a head' };
+    for (const o of $('hKind').options) {
+      o.disabled = !allow[o.value] || (o.value === 'opening' && !has);
+      if (!allow[o.value]) note.push(`${o.textContent}: ${why[o.value]}`);
+      else if (o.value === 'opening' && !has) note.push('in an opening: there are no doors or windows on this level');
+    }
+    for (const o of $('hAt').options) o.disabled = !!hosts && !hosts.includes(o.value);
+    if ($('hAt').selectedOptions[0]?.disabled) $('hAt').value = [...$('hAt').options].find(o => !o.disabled)?.value ?? 'sill';
+    if ($('hKind').selectedOptions[0]?.disabled) $('hKind').value = [...$('hKind').options].find(o => !o.disabled)?.value ?? 'room';
+    $('hKindNote').hidden = !note.length;
+    $('hKindNote').textContent = note.join('; ');
+    showKind();
+  }
 
   $('hLevel').addEventListener('change', () => { $('hX').value = ''; fillPlace(); });
   $('hRoom').addEventListener('change', pickRoom);
@@ -112,7 +139,7 @@ export function wireHousePanel(ctx, page) {
     const pl = placementOf(meta, defaultsFor(meta).variant);
     zTyped = false;
     $('hKind').value = pl.mount === 'wall' ? 'wall' : 'room';
-    showKind();
+    showHosts();
     $('hZ').value = '';
     $('hZ').placeholder = pl.mount === 'ceiling' ? 'under the ceiling' : `${pl.z} · ${pl.mount === 'wall' ? 'on the wall' : 'default'}`;
   });
@@ -145,11 +172,16 @@ export function wireHousePanel(ctx, page) {
     say('Building…');
     try {
       const built = await builtNow();
+      // the variant may have changed since the model was picked: check the choice against what this variant may stand on
+      const hosts = hostsNow(), kind = $('hKind').value;
+      if (hosts && !(kind === 'opening' ? hosts.includes($('hAt').value) : hosts.includes(kind))) throw new Error(`This model cannot be placed ${kind === 'opening' ? ($('hAt').value === 'head' ? 'at the head of an opening' : 'on the sill of an opening') : kind === 'wall' ? 'on a wall' : 'free in a room'}.`);
       const placed = placeSpec({
         blueprint: page.current().mod.meta.id, params: built.params, partMaterials: built.partMaterials, size: built.size, z: bottomFor(built.size, built.params), name: $('hName').value,
         place: $('hKind').value === 'wall'
           ? { kind: 'wall', wall: $('hWall').value, side: $('hSide').value, offset: $('hOffset').value, gap: $('hGap').value }
-          : { kind: 'room', x: $('hX').value, y: $('hY').value, rotationDeg: $('hTurn').value },
+          : $('hKind').value === 'opening'
+            ? { kind: 'opening', opening: $('hOpening').value, at: $('hAt').value, offset: $('hOpOffset').value, depth: $('hOpDepth').value }
+            : { kind: 'room', x: $('hX').value, y: $('hY').value, rotationDeg: $('hTurn').value },
       });
       if (placed.error) throw new Error(placed.error);
       const levelId = $('hLevel').value;

@@ -17,6 +17,7 @@ import { paletteFor, backgroundColour } from '../render2d/palette.js';
 import { readPrefs, writePrefs } from '../model/prefs.js';
 import { shadowLevel, SHADOW_COUNT, SHADOW_LEVELS, SHADOW_LABEL } from '../model/shadows.js';
 import { buildModelGeometry } from '../geometry/level.js';
+import { addLitLamps } from '../model/lit.js';
 import { resolveSettings } from '../model/settings.js';
 import { createPlanView } from '../render2d/plan.js';
 import { createAssetCache } from '../render3d/assets.js';
@@ -148,6 +149,7 @@ class PlanternCard extends HTMLElement {
   _show(cfg, loc, model, baseUrl) {
     const root = this.shadowRoot, bindings = loc.bindings || {};
     const geos = buildModelGeometry(model, { headroom: l => resolveSettings(loc, l).stairHeadroom });
+    addLitLamps(model, geos, o => o.light);   // a lit object is a lamp (lit.js); the card has no server, so only the light its object stores
     const ha = new HassHA({ entities: boundEntities(loc) });
     const getState = id => ha.getState(id);
     const { levels: pool, mode: levelMode } = cardLevels(model, cfg);   // select | single | together | cycle

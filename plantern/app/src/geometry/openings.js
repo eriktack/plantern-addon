@@ -53,7 +53,7 @@ export function openingSymbol(w, f, o, { open = true } = {}) {
   }
   else if (o.type === 'window') {
     const c0 = centrePoint(w, f, s0), c1 = centrePoint(w, f, s1);
-    if (o.thickness || o.placement) {
+    if (o.thickness || o.placement || o.shift) {
       // the frame at its own depth, where it sits across the wall (centred unless `placement` says flush with a face): both sides and the ends
       const u = unitSpan(w, f, o), tc = (f.offL - f.offR) / 2, at = (p, t) => [p[0] + f.n[0] * (t - tc), p[1] + f.n[1] * (t - tc)], mid = (u.t0 + u.t1) / 2;
       out.lines.push([at(c0, u.t1), at(c1, u.t1)], [at(c0, u.t0), at(c1, u.t0)], [at(c0, u.t1), at(c0, u.t0)], [at(c1, u.t1), at(c1, u.t0)], [at(c0, mid), at(c1, mid)]);

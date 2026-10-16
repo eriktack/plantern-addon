@@ -64,7 +64,8 @@ export const meta = {
   },
   placement: {
     mount: 'floor',
-    variants: { hanging: { mount: 'ceiling' } },
+    hosts: ['room', 'wall', 'sill'],
+    variants: { hanging: { mount: 'ceiling', hosts: ['room', 'head'] } },
   },
 };
 

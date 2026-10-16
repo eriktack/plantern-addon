@@ -24,6 +24,14 @@ export function addEntries(ctx) {
   if (where === 'opening') {
     add('openingLamp', 'Lamp in it', 'lamp', 'Lights', 'A window star, or a lamp on the sill');
     add('openingStrip', 'LED strip', 'strip', 'Lights', 'Along its sill or its top; it follows it');
+    // library objects that stand on a sill or hang from a head, grouped by where (openings-and-lit-objects OB3)
+    // a model that stands on a sill may also stand on the inner sill, in the frame (decision 251)
+    for (const b of blueprints ?? []) {
+      const hosts = b.hosts ?? [];
+      for (const at of [...(hosts.includes('sill') ? ['sill', 'frame'] : []), ...(hosts.includes('head') ? ['head'] : [])]) {
+        add(`blueprint:${b.id}@${at}`, b.name || b.id, 'blueprint', at === 'head' ? 'At the head' : at === 'frame' ? 'On the inner sill' : 'On the sill', `${b.source === 'house' ? 'This house' : 'Library'}${b.light ? ' · gives light' : ''}`);
+      }
+    }
     return out;
   }
 
@@ -55,7 +63,7 @@ export function addEntries(ctx) {
     add('blueprints-off', 'From the library', 'blueprint', group, '', "Needs Plantern's server");
   } else {
     for (const b of blueprints) {
-      add(`blueprint:${b.id}`, b.name || b.id, 'blueprint', group, `${b.source === 'house' ? 'This house' : 'Library'}${(b.summary || b.description) ? ` · ${b.summary || b.description}` : ''}`, objectsOff);
+      add(`blueprint:${b.id}`, b.name || b.id, 'blueprint', group, `${b.source === 'house' ? 'This house' : 'Library'}${b.light ? ' · gives light' : ''}${(b.summary || b.description) ? ` · ${b.summary || b.description}` : ''}`, objectsOff);
     }
   }
   if (where !== 'wall') for (const name of models) add(`model:${name}`, name, 'model', 'Model files', 'A model from assets/', objectsOff);

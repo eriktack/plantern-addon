@@ -165,7 +165,8 @@ export function levelPrisms(level, geo, materials = {}, options = {}) {
   }
   for (const o of level.objects || []) {
     const fp = geo.objectFootprint(o);
-    if (fp) P({ id: o.id, kind: 'object', poly: fp, z0: o.z ?? 0, z1: (o.z ?? 0) + o.size[2], color: o.color || DEFAULT_COLORS.object });
+    const z = geo.objectZ(o);
+    if (fp) P({ id: o.id, kind: 'object', poly: fp, z0: z, z1: z + o.size[2], color: o.color || DEFAULT_COLORS.object });
   }
   return out;
 }

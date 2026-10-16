@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.3
+
+- **Lamps are objects.** A table lamp, floor lamp, wall sconce or ceiling light from the library is one object that gives its own light: link it to a Home Assistant light in its panel. The light shows in the viewer and in the card.
+- **Objects in windows.** A lamp or planter can stand on a window sill or hang from its head, placed from the opening's Add menu, the object's Placed choice or the Objects page. It follows its window; windows also get an inner sill and openings and objects can be shifted.
+- **More library models:** appliance, sink, toilet, vanity, shower, mirror and tv; chandelier shades have a fixed size.
+- Fix: the Editor no longer asks to apply unchanged values after Check the build, and a lamp object in a window is drawn at the window's height in 3D.
+- Fix: the release checks no longer depend on timing, and a release is made with one command (the version lives in package.json alone). 0.5.2 was tagged without its version bump and was never published; this release replaces it.
+
 ## 0.5.1
 
 - Fix: the release checks now wait for the git storage sync state to settle (a test sampled it too early on a busy machine). No change to the add-on itself.

@@ -67,8 +67,8 @@ export async function glbApi(cache, registry, req, res, url) {
         houseDir = typeof body.house === 'string' ? registry.find(body.house)?.house.dir : undefined;
         if (!houseDir) return json(res, 404, { error: `there is no house "${body.house}"` }), true;
       }
-      const { hash, size } = await cache.ensure({ houseDir, blueprint: body.blueprint, params: body.params, partMaterials: body.partMaterials });
-      return json(res, 200, { hash, size }), true;
+      const { hash, size, light } = await cache.ensure({ houseDir, blueprint: body.blueprint, params: body.params, partMaterials: body.partMaterials });
+      return json(res, 200, { hash, size, light }), true;
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'method not allowed' }), true;
     const hash = decodeURIComponent(p.slice('/api/glb/'.length));

@@ -124,7 +124,7 @@ async function mirrorAssets(from, to) {
  * The publisher. registry: the Registry (houses(), load(), find(), events 'changed' and 'houses'); hub: the HA hub
  * (bridge(name)) used to register the resource, or null; root: the app folder; target: the folder to publish to.
  */
-export function createPublisher({ registry, hub = null, root, target, connection = BUILTIN_CONNECTION, log = console.log, debounceMs = 1000 }) {
+export function createPublisher({ registry, hub = null, root, target, connection = BUILTIN_CONNECTION, log = console.log, debounceMs = 1000, timers = { set: setTimeout, clear: clearTimeout } }) {
   let timer = null, running = null, again = false, registered = null, warned = false, stopped = false;
 
   async function publish() {
@@ -199,12 +199,12 @@ export function createPublisher({ registry, hub = null, root, target, connection
     });
     return running;
   }
-  const soon = () => { if (stopped) return; clearTimeout(timer); timer = setTimeout(run, debounceMs); timer.unref?.(); };
+  const soon = () => { if (stopped) return; timers.clear(timer); timer = timers.set(run, debounceMs); timer?.unref?.(); };
 
   return {
     /** Publish now, and again after every change to a house. Resolves with the first publish's summary. */
     start() { registry.on('changed', soon); registry.on('houses', soon); return run(); },
     publish: run,
-    stop() { stopped = true; clearTimeout(timer); registry.off('changed', soon); registry.off('houses', soon); },
+    stop() { stopped = true; timers.clear(timer); registry.off('changed', soon); registry.off('houses', soon); },
   };
 }

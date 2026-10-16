@@ -13,10 +13,13 @@ import { askConflict } from './conflict-ui.js';
 import { createAssetCache, listAssetNames } from '../render3d/assets.js';
 import { ASSET_NAME, assetWarnings, assetKey, builtSizeStatus } from '../model/assets.js';
 import { blueprintMap, placeSpec, startPlacement, wallInRoom } from '../blueprints/place.js';
-import { defaultsFor } from '../../object-designs/lib/params.js';
+import { defaultsFor, hostsOf, appliesTo } from '../../object-designs/lib/params.js';
 import { createMenu } from '../menu.js';
 import { addEntries } from './add-menu.js';
 import { sizeFields, sizeEdit, optionsChanged } from '../blueprints/size.js';
+import { litRadius } from '../model/lit.js';
+import { isHosted, hostedWhere } from '../model/hosted.js';
+import { switchPlacement, openingsNear, placedAs } from '../edit/placement.js';
 import { createParamForm } from '../param-form.js';
 import { download } from '../export/download.js';
 import { toSvg } from '../render2d/coords.js';
@@ -117,7 +120,7 @@ let modelGeos = null;    // derived geometry of every level, from the last valid
 // Edit mode: the sidebar shows only the thing being edited, with Apply / Revert / Close in a bar at the
 // bottom. A single click selects; double-click, Enter or ✎ edits. Leaving with unapplied changes asks first.
 let editing = null;      // { kind: 'room' | 'solid' | 'wall' | 'opening' | 'fixture' | 'material', id, back? } or null
-let editSnap = null;     // the panel's field values when it was last filled (dirty = anything else)
+let editBase = null;     // Map(field → its value when the panel was last filled), or null: dirty = any field with another value (by field, not by position: a form that gains fields later, or fills them late, is not a change)
 let measure = null;      // the measuring tool on the plan (also while editing: clicks then measure)
 let peekId = null;       // while editing: another level shown read-only (nothing selected or changed there)
 let peekSel = null;      // { kind, id } picked on the level looked at (its info card)
@@ -212,23 +215,21 @@ function panelFields() {
 }
 const fieldValue = c => (c.type === 'checkbox' ? c.checked : c.value);
 /** The edited panel's field values, to tell whether anything was changed and not applied. */
-function panelState() {
-  const f = panelFields();
-  return f.length ? JSON.stringify(f.map(fieldValue)) : '';
-}
+const baseOf = c => { if (!editBase.has(c)) editBase.set(c, fieldValue(c)); return editBase.get(c); };   // a field that appeared after the snapshot (a rebuilt options form) starts as it is
+/** A form that fills fields after the panel was snapshotted (the light of a lit object once its build arrives) says so, so the fill is not a change. */
+function rebase(...ids) { if (editBase) for (const id of ids) { const c = $(id); if (c) editBase.set(c, fieldValue(c)); } }
 /** The fields an unapplied change would drop, as "label: was → now" lines for the dialog (ticket #6). */
 function changedFields() {
-  if (!editing || editSnap === null) return [];
-  const was = JSON.parse(editSnap);
-  return panelFields().flatMap((c, i) => {
-    const now = fieldValue(c);
-    if (was[i] === now) return [];
+  if (!editing || editBase === null) return [];
+  return panelFields().flatMap(c => {
+    const was = baseOf(c), now = fieldValue(c);
+    if (was === now) return [];
     const label = [...(c.closest('label')?.childNodes || [])].find(n => n.nodeType === 3 && n.textContent.trim())?.textContent.trim() || c.id || 'a field';
     const show = v => (typeof v === 'boolean' ? (v ? 'yes' : 'no') : v === '' ? '(blank)' : String(v));
-    return [`${label}: ${show(was[i])} → ${show(now)}`];
+    return [`${label}: ${show(was)} → ${show(now)}`];
   });
 }
-const isDirty = () => !!editing && editSnap !== null && panelState() !== editSnap;
+const isDirty = () => !!editing && editBase !== null && changedFields().length > 0;
 // A double-click is two clicks on the same thing within DOUBLE ms. Counted here, not with the browser's
 // dblclick: the first click selects, which redraws the plan and the tree, and the browser then sees the
 // second click land on a new element and fires no dblclick.
@@ -282,7 +283,7 @@ function settleFresh() {
   }
   setStatus(`${id} created (not saved yet)`);
 }
-function snap() { if (!editing) return; editSnap = panelState(); showEditBar(); }
+function snap() { if (!editing) return; editBase = new Map(panelFields().map(c => [c, fieldValue(c)])); showEditBar(); }
 function showEditBar() {
   if (!editing) return;
   const [a, d] = BAR[editing.kind], changed = isDirty();
@@ -328,7 +329,7 @@ function leaveEdit({ ask = true, noBack = false } = {}) {
   if (isFresh()) discardFresh();                                  // a new thing that was never applied: leaving removes it
   const was = editing;
   if (peekId) { peekId = null; peekSel = null; $('peekBar').hidden = true; $('peekCard').hidden = true; }
-  editing = null; editSnap = null; draft = null; fromPick = null; startPick = false;
+  editing = null; editBase = null; draft = null; fromPick = null; startPick = false;
   wallFormFor = null; openingFormFor = null; fixtureFormFor = null; stairsFormFor = null; objectFormFor = null;           // forms refill from the model next time
   if (was.kind === 'material') { matId = null; $('matForm').dataset.forSide = ''; }
   if (roomId) loadFormForSelection();
@@ -362,7 +363,7 @@ async function renameEditing() {
   if (res.report.errors.length) { setStatus(res.report.errors.join('; ')); return; }
   // a fixture's link or a door's sensor in location.json moves with it (saved with Save, undone with the rename)
   let moved = { location: loc, moved: false };
-  if (res.report.fixture || res.report.opening) {
+  if (res.report.fixture || res.report.opening || res.report.object) {
     moved = renameBinding(loc, from, to);
     if (moved.conflict) {
       const linkOf = b => b?.entity ?? 'no entity';
@@ -449,7 +450,7 @@ function afterCommit() {
   if (k === 'room' || k === 'solid') editing.id = roomId ?? (draft ? null : editing.id);
   if (k === 'material' && matId) editing.id = matId;
   const there = k === 'room' || k === 'solid' ? !!(room() || draft) : k === 'wall' ? !!wall() : k === 'opening' ? !!opening() : k === 'fixture' ? !!fixture() : k === 'stairs' ? !!stairs() : k === 'object' ? !!object() : !!(editing.id && model.materials?.[editing.id]);
-  if (!there) { editing = null; editSnap = null; refresh(); return; }
+  if (!there) { editing = null; editBase = null; refresh(); return; }
   snap();
 }
 function undoRedo(which) {
@@ -650,12 +651,15 @@ async function init() {
   };
   act.wallBox = () => { const w = wall(); placeObject({ attach: { wall: w.id, side: wallInfo(level(), w.id)?.sides?.right?.length ? 'right' : 'left', offset: Math.max(0, Math.round((Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) - 900) / 2)) } }, 'on the wall: drag it along, or set its position'); };
   $('obApply').onclick = applyObjectForm;
+  $('obPlaced').addEventListener('change', () => { const o = object(); if (!o || !placeDraft) return; placeDraft.to = $('obPlaced').value; showPlacedChoice(o); });
+  $('obOpening').addEventListener('change', () => { const o = object(); if (!o || !placeDraft) return; placeDraft.opening = $('obOpening').value; showPlacedChoice(o); });
+  $('obAt').addEventListener('change', () => { const o = object(); if (!o || !placeDraft) return; placeDraft.at = $('obAt').value; showPlacedChoice(o); });
   $('obAsset').addEventListener('input', () => { $('obAssetNote').textContent = assetNote($('obAsset').value.trim()); });
   $('obDelete').onclick = async () => {
     if (!(await askConfirm(`Delete ${objectId}?`, { ok: 'Delete' }))) return;
     const r = deleteObject(model, levelId, objectId, opts());
     if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
-    objectId = null; commit(r.model);
+    objectId = null; loc = pruneBindings(loc, r.model); commit(r.model);
   };
   $('xEntity').addEventListener('input', () => showEntityPick(true));
   $('xEntity').addEventListener('focus', () => showEntityPick(true));
@@ -663,6 +667,10 @@ async function init() {
   $('oEntity').addEventListener('input', () => showEntityPick(true, 'o'));
   $('oEntity').addEventListener('focus', () => showEntityPick(true, 'o'));
   $('oEntity').addEventListener('blur', () => showEntityPick(false, 'o'));
+  $('obEntity').addEventListener('input', () => showEntityPick(true, 'ob'));
+  $('obEntity').addEventListener('focus', () => showEntityPick(true, 'ob'));
+  $('obEntity').addEventListener('blur', () => showEntityPick(false, 'ob'));
+  $('xUseLight').onclick = useObjectLight;
   $('preview').addEventListener('pointerdown', dragStart);
   addEventListener('pointermove', dragMove);
   addEventListener('pointerup', () => { const was = dragging; if (was?.moved) suppressClick = true; dragging = null; if (was?.moved && ['room', 'corner', 'wall', 'wallend'].includes(was.kind)) { draw(); if (was.msg) setStatus(was.msg); } });
@@ -1865,6 +1873,7 @@ function showOpening() {
   const info = openingInfo(level(), openingId);
   if (!info) { openingId = null; $('openingPanel').hidden = true; return; }
   const o = info.opening, nm = ids => ids.map(id => level().rooms?.find(r => r.id === id)?.name || id).join(', ') || 'outside';
+  showOpeningHosted(o);
   $('oTitle').innerHTML = titleHtml(o);
   $('oInfo').innerHTML = `in <a href="#" id="oWall" title="${esc(o.wall)}">${esc(refName(o.wall))}</a> (${info.length} mm, ${info.top} mm high)` + (openingAssumed(o).length ? ` · <b class="warn">still default: ${esc(openingAssumed(o).join(', '))}</b>` : '');
   $('oWall').onclick = e => { e.preventDefault(); afterLeave(() => enterEdit('wall', o.wall))(); };
@@ -1896,7 +1905,7 @@ function showOpening() {
     for (const [id, k] of [['oOffset', 'offset'], ['oWidth', 'width'], ['oSill', 'sill'], ['oHead', 'head'], ['oHeight', 'height'], ['oBelow', 'below']]) $(id).placeholder = f.placeholders[k];
     $('oThick').value = f.thickness;
     $('oColorUse').checked = f.colorUse; $('oColor').value = f.color || FITTING_DEFAULTS[o.type]?.color || '#f2f0ea';
-    $('oPlace').value = f.placement; $('oSillDepth').value = f.sillDepth; $('oSillColorUse').checked = f.sillColorUse; $('oSillColor').value = f.sillColor || FITTING_DEFAULTS.sill.color;
+    $('oPlace').value = f.placement; $('oShift').value = f.shift; $('oSillDepth').value = f.sillDepth; $('oSillColorUse').checked = f.sillColorUse; $('oSillColor').value = f.sillColor || FITTING_DEFAULTS.sill.color;
     $('oMeasured').checked = f.measured; $('oErr').textContent = '';
     openingFormFor = o;
     if (o.type === 'door') showDoorBinding(o);
@@ -1920,7 +1929,7 @@ function showOpeningRows() {
   $('oSwingRow').hidden = slides && $('oDoorOpens').value === 'pocket';
   $('oThickRow').hidden = t === 'passage';
   $('oThickWhat').textContent = t;
-  $('oLookBox').hidden = t === 'passage'; $('oSillRow').hidden = t !== 'window'; $('oPlaceWhat').textContent = t;
+  $('oLookBox').hidden = t === 'passage'; $('oSillRow').hidden = t !== 'window'; $('oShiftRow').hidden = t === 'passage'; $('oPlaceWhat').textContent = t;
 }
 /**
  * The corner an opening's or wall fixture's position is measured from: { key, s, dir, pos, label }
@@ -1993,7 +2002,7 @@ function switchFrom(kind) {
   draw();
 }
 
-const openingForm = () => ({ name: $('oName').value, type: $('oType').value, offset: $('oOffset').value, width: $('oWidth').value, sill: $('oSill').value, head: $('oHead').value, height: $('oHeight').value, below: $('oBelow').value, hinge: $('oHinge').value, swing: $('oSwing').value, opens: $('oType').value === 'door' ? $('oDoorOpens').value : $('oOpens').value, thickness: $('oThick').value, measured: $('oMeasured').checked, colorUse: $('oColorUse').checked, color: $('oColor').value, placement: $('oPlace').value, sillDepth: $('oSillDepth').value, sillColorUse: $('oSillColorUse').checked, sillColor: $('oSillColor').value });
+const openingForm = () => ({ name: $('oName').value, type: $('oType').value, offset: $('oOffset').value, width: $('oWidth').value, sill: $('oSill').value, head: $('oHead').value, height: $('oHeight').value, below: $('oBelow').value, hinge: $('oHinge').value, swing: $('oSwing').value, opens: $('oType').value === 'door' ? $('oDoorOpens').value : $('oOpens').value, thickness: $('oThick').value, measured: $('oMeasured').checked, colorUse: $('oColorUse').checked, color: $('oColor').value, placement: $('oPlace').value, shift: $('oShift').value, sillDepth: $('oSillDepth').value, sillColorUse: $('oSillColorUse').checked, sillColor: $('oSillColor').value });
 
 function applyOpening() {
   const info = openingInfo(level(), openingId);
@@ -2060,7 +2069,7 @@ function addContext(where) {
     roomSelected: shape === 'room' && !!roomId,
     hasRooms: !!lv.rooms?.length,
     levelAbove: model.levels.some(l => l.elevation > lv.elevation && (l.building ?? null) === (lv.building ?? null)),
-    blueprints: blueprintList?.map(b => ({ id: b.id, name: b.meta.name, source: b.source, description: b.meta.description, summary: b.meta.summary })) ?? null,
+    blueprints: blueprintList?.map(b => ({ id: b.id, name: b.meta.name, source: b.source, description: b.meta.description, summary: b.meta.summary, light: !!b.light, hosts: hostsOf(b.meta) })) ?? null,
     models: assetNameList,
   };
 }
@@ -2068,7 +2077,7 @@ function addContext(where) {
 /** Does what an Add entry says, in the panel `where` it was picked. */
 function addPick(where, entry) {
   const id = entry.id;
-  if (id.startsWith('blueprint:')) return placeBlueprint(id.slice('blueprint:'.length), where);
+  if (id.startsWith('blueprint:')) { const [bid, at] = id.slice('blueprint:'.length).split('@'); return placeBlueprint(bid, where, at); }
   if (id.startsWith('model:')) return act.model(id.slice('model:'.length));
   if (id === 'box') return where === 'wall' ? act.wallBox() : act.box();
   return act[id]?.();
@@ -2078,7 +2087,7 @@ function addPick(where, entry) {
  * Places an object made from a blueprint with its default options: the server builds it (that gives its size), it stands in
  * the middle of the room or on the selected wall, and it opens as a new object like a box does (Apply creates it; one undo step).
  */
-async function placeBlueprint(id, where) {
+async function placeBlueprint(id, where, at = 'sill') {
   const meta = blueprints?.get(id);
   if (!meta) { setStatus(`The blueprint "${id}" is not available (Plantern's server must be running)`); return; }
   const params = {};
@@ -2089,7 +2098,13 @@ async function placeBlueprint(id, where) {
   catch (e) { setStatus(`${meta.name} cannot be built: ${e.message}`); return; }
   // where it starts comes from the blueprint (meta.placement, decision 230): on the floor, on a wall, or under the ceiling
   let place, what, room = null;
-  if (where === 'wall') {
+  if (where === 'opening') {
+    const o = opening();
+    if (!o) return;
+    // the side is the room's: the object stands on the face the rooms are on (the window's inside)
+    place = { kind: 'opening', opening: o.id, at, side: wallInfo(level(), o.wall)?.sides?.right?.length ? 'right' : 'left' };
+    what = `${hostedWhere(at)} of ${o.id}: its place follows the opening`;
+  } else if (where === 'wall') {
     const w = wall();
     if (!w) return;
     const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), side = wallInfo(level(), w.id)?.sides?.right?.length ? 'right' : 'left';
@@ -2110,7 +2125,7 @@ async function placeBlueprint(id, where) {
     }
   }
   const { z } = startPlacement(meta, built.size, level(), room, params);
-  const r = placeSpec({ blueprint: id, params, partMaterials: {}, size: built.size, z, place });
+  const r = placeSpec({ blueprint: id, params, partMaterials: {}, size: built.size, z, place, light: built.light });
   if (r.error) { setStatus(r.error); return; }
   placeObject(r.spec, `a ${meta.name} ${what}`);
 }
@@ -2152,8 +2167,8 @@ async function checkBuild(o, { force = false } = {}) {
   if (!force && before) return;
   builds.set(key, { state: 'checking' });
   try {
-    const { size } = await assetCache().rebuild(o);
-    builds.set(key, { state: 'ok', size, checked: true, changedFrom: before?.state === 'ok' && before.size.join() !== size.join() ? before.size : null });
+    const { size, light } = await assetCache().rebuild(o);
+    builds.set(key, { state: 'ok', size, light: light ?? null, checked: true, changedFrom: before?.state === 'ok' && before.size.join() !== size.join() ? before.size : null });
   } catch (e) {
     builds.set(key, { state: 'error', error: e.message });
   }
@@ -2229,7 +2244,7 @@ function showBlueprintNote(o) {
   box.innerHTML = html;
   $('obUseBuilt')?.addEventListener('click', () => {
     const size = [...b.size];
-    const r = setObject(model, levelId, o.id, { size }, opts());
+    const r = setObject(model, levelId, o.id, { size, light: b.light ?? null }, opts());
     if (r.report.errors.length) { $('obErr').textContent = r.report.errors.join('; '); return; }
     commit(r.model);
     setStatus(`${o.id}: size is now the built ${size.join(' × ')} mm (not saved yet)`);
@@ -2242,28 +2257,118 @@ function showObject() {
   if (!o) { objectId = null; $('objectPanel').hidden = true; return; }
   const lv = level(), w = o.attach && lv.walls.find(v => v.id === o.attach.wall);
   $('obTitle').innerHTML = titleHtml(o);
-  $('obInfo').innerHTML = `${o.attach ? `on wall <a href="#" id="obWall">${esc(o.attach.wall)}</a>` : 'standing in the plan'}${o.assumed?.length ? ` · <b class="warn">still default: ${esc(o.assumed.join(', '))}</b>` : ''}`;
+  $('obInfo').innerHTML = `${isHosted(o) ? `in ${esc(o.attach.opening)}, ${o.attach.at === 'head' ? 'hanging from its head' : o.attach.at === 'frame' ? 'on the inner sill, in its frame' : 'on its sill'}` : o.attach ? `on wall <a href="#" id="obWall">${esc(o.attach.wall)}</a>` : 'standing in the plan'}${o.assumed?.length ? ` · <b class="warn">still default: ${esc(o.assumed.join(', '))}</b>` : ''}`;
   $('obWall')?.addEventListener('click', e => { e.preventDefault(); afterLeave(() => enterEdit('wall', o.attach.wall))(); });
   showBlueprintNote(o);
   showOptions(o);
+  showObjectLight(o);
+  if (placeDraftFor !== o.id) { placeDraft = null; placeDraftFor = o.id; }
+  showPlacedChoice(o);
   $('obColorRow').hidden = o.kind === 'asset';      // a model has its own colours (the plan takes its main one)
-  for (const [id, show] of [['obOffsetRow', !!o.attach], ['obSideRow', !!o.attach], ['obGapRow', !!o.attach], ['obXRow', !o.attach], ['obYRow', !o.attach], ['obRotRow', !o.attach]]) $(id).hidden = !show;
+  for (const [id, show] of [['obOffsetRow', !!o.attach && !isHosted(o)], ['obSideRow', !!o.attach && !isHosted(o)], ['obGapRow', !!o.attach && !isHosted(o)], ['obXRow', !o.attach], ['obYRow', !o.attach], ['obRotRow', !o.attach]]) $(id).hidden = !show;
+  applyPlacedRows(o);   // after the rows above: the Placed choice decides them for a hosted object
   if (w) { const start = cornerAt(lv, w.a); $('obOffsetNote').textContent = start ? `mm from corner ${start.index} of ${start.name}` : "mm from the wall's start"; }
   if (objectFormFor !== o) {
     $('obName').value = o.name ?? ''; $('obColor').value = o.color || '#888888'; $('obAsset').value = o.asset ?? '';
-    [$('obW').value, $('obD').value, $('obH').value] = o.size; $('obZ').value = o.z;
-    if (o.attach) { $('obOffset').value = o.attach.offset; $('obSide').value = o.attach.side; $('obGap').value = o.attach.gap ?? ''; }
+    [$('obW').value, $('obD').value, $('obH').value] = o.size; $('obZ').value = isHosted(o) ? (buildModelGeometry(model).get(levelId)?.objectZ(o) ?? '') : (o.z ?? '');
+    if (o.attach) { $('obOffset').value = o.attach.offset ?? ''; $('obSide').value = o.attach.side ?? 'right'; $('obGap').value = (isHosted(o) ? o.attach.depth : o.attach.gap) ?? ''; $('obShift').value = isHosted(o) ? (o.attach.shift ?? '') : ''; }
     else { $('obX').value = o.pos[0]; $('obY').value = o.pos[1]; $('obRot').value = o.rotationDeg ?? ''; }
     $('obErr').textContent = ''; $('obAssetNote').textContent = assetNote(o.asset ?? ''); objectFormFor = o;
     fillCopyInto('object', o);
   }
 }
 
+// ---- Placed: in the room, on a wall or in an opening (openings-and-lit-objects OB1b) ----
+let placeDraft = null;        // { to, opening, at }: the choice in the object panel, applied with Apply
+let placeDraftFor = null;     // the object the draft is for
+/** The hosts of a blueprint object (placement.hosts, or derived from its mount); null for a box or a model file. */
+const hostsOfObject = o => (o.blueprint && blueprints?.get(o.blueprint) ? hostsOf(blueprints.get(o.blueprint), o.params?.variant) : null);
+/** Which places the object may take, with the reason when it may not (a choice that cannot be used says why). */
+function placedChoices(o) {
+  const hosts = hostsOfObject(o), openings = level()?.openings || [];
+  const at = hosts === null ? ['sill', 'frame', 'head'] : [...(hosts.includes('sill') ? ['sill', 'frame'] : []), ...(hosts.includes('head') ? ['head'] : [])];
+  return {
+    room: { ok: hosts === null || hosts.includes('room'), reason: 'this model does not stand in a room' },
+    wall: { ok: hosts === null || hosts.includes('wall'), reason: 'this model does not stand on a wall' },
+    opening: { ok: openings.length > 0 && at.length > 0, reason: !openings.length ? 'no openings on this level' : 'this model does not stand on a sill or at a head' },
+    at,
+  };
+}
+/** The switch the draft asks for, as the props it gives, or null when the draft is the object's place already. */
+function previewSwitch(o) {
+  if (!placeDraft || placeDraft.to === placedAs(o)) return null;
+  const sw = switchPlacement(o, placeDraft.to, { level: level(), geo: buildLevelGeometry(level()), opening: placeDraft.opening, at: placeDraft.at });
+  return sw.props ?? null;
+}
+/** The rows of the object panel follow the draft: a room shows x, y and turn; a wall shows its offset, side and gap; an opening sets the height. */
+function applyPlacedRows(o) {
+  const to = placeDraft?.to ?? placedAs(o);
+  for (const [id, shown] of Object.entries({ obXRow: to === 'room', obYRow: to === 'room', obRotRow: to === 'room', obOffsetRow: to !== 'room', obSideRow: to !== 'room', obGapRow: to !== 'room', obShiftRow: to === 'opening' })) $(id).hidden = !shown;
+  if (to === 'opening') {
+    $('obOffsetNote').textContent = 'mm from the opening\'s near edge; empty = centred';
+    $('obGapRow').querySelector('small').textContent = 'mm out from the wall (empty = none)';
+    $('obGapRow').hidden = (placeDraft?.at ?? o.attach?.at) === 'frame';   // the inner sill's place is the window's own depth
+  }
+  $('obOpeningRow').hidden = to !== 'opening';
+  $('obAtRow').hidden = to !== 'opening';
+  $('obZ').readOnly = to === 'opening';
+  $('obZ').title = to === 'opening' ? 'the opening sets the height' : '';
+}
+/** The things in an opening (OB4): the objects hosted by it, its lamps and its LED strips, each selectable, each with a remove button. */
+function showOpeningHosted(o) {
+  const lv = level();
+  const things = [...(lv.objects || []).filter(x => x.attach?.opening === o.id).map(x => ({ kind: 'object', id: x.id, name: x.name || x.id, what: hostedWhere(x.attach.at) })),
+    ...(lv.fixtures || []).filter(x => x.attach?.opening === o.id).map(x => ({ kind: 'fixture', id: x.id, name: x.name || x.id, what: x.kind === 'strip' ? 'LED strip' : 'lamp' }))];
+  $('oHosted').innerHTML = things.length
+    ? `<div class="help">In this opening</div>` + things.map(t => `<div class="hosted"><button type="button" data-kind="${t.kind}" data-id="${esc(t.id)}">${esc(t.name)} <small>${esc(t.what)}</small></button><button type="button" class="quiet" data-remove="${t.kind}" data-id="${esc(t.id)}">Remove</button></div>`).join('')
+    : '';
+}
+/** The lists of the opening panel: a click selects the thing, Remove deletes it (after a question). */
+$('oHosted')?.addEventListener('click', async e => {
+  const rm = e.target.closest('[data-remove]'), pick = e.target.closest('[data-kind]');
+  if (rm) {
+    const id = rm.dataset.id;
+    if (!(await askConfirm(`Remove ${id}?`, { ok: 'Remove' }))) return;
+    const r = rm.dataset.remove === 'object' ? deleteObject(model, levelId, id, opts()) : deleteFixture(model, levelId, id, opts());
+    if (r.report.errors.length) { $('oErr').textContent = r.report.errors.join('; '); return; }
+    if (rm.dataset.remove === 'object') loc = pruneBindings(loc, r.model);
+    commit(r.model);
+  } else if (pick) afterLeave(() => enterEdit(pick.dataset.kind, pick.dataset.id))();
+});
+
+/** Shows the Placed choice: what the object may take, the openings nearest first, and the preview of a switch in the fields. */
+function showPlacedChoice(o) {
+  if (!placeDraft) placeDraft = { to: placedAs(o), at: o.attach?.at, opening: o.attach?.opening };
+  const ch = placedChoices(o), sel = $('obPlaced');
+  for (const opt of sel.options) { const c = ch[opt.value]; opt.disabled = c ? !c.ok : false; }
+  sel.value = placeDraft.to;
+  const lv = level(), near = openingsNear(lv, buildModelGeometry(model).get(lv.id), o);
+  $('obOpening').innerHTML = near.map(n => { const wall = (lv.walls || []).find(w => w.id === n.wall); return `<option value="${esc(n.id)}">${esc(nameOf(n.id))} · ${esc(displayName(wall ?? { id: n.wall }))} · ${Math.round(n.distance)} mm</option>`; }).join('');
+  if (!near.some(n => n.id === placeDraft.opening)) placeDraft.opening = near[0]?.id;
+  $('obOpening').value = placeDraft.opening ?? '';
+  if (!ch.at.includes(placeDraft.at)) placeDraft.at = ch.at[0];
+  $('obAt').innerHTML = ch.at.map(a => `<option value="${a}">${hostedWhere(a)}</option>`).join('');
+  $('obAt').value = placeDraft.at ?? '';
+  const c = ch[placeDraft.to];
+  $('obPlacedNote').textContent = c && !c.ok ? c.reason : '';
+  applyPlacedRows(o);
+  // the fields show what the switch would give (the change is made with Apply)
+  const p = previewSwitch(o);
+  if (p) {
+    if (p.pos) { $('obX').value = p.pos[0]; $('obY').value = p.pos[1]; }
+    if (p.rotationDeg !== undefined && p.rotationDeg !== null) $('obRot').value = p.rotationDeg;
+    if (p.attach?.wall) { $('obOffset').value = p.attach.offset; $('obSide').value = p.attach.side; $('obGap').value = p.attach.gap ?? ''; }
+    $('obZ').value = p.z === null || p.z === undefined ? '' : p.z;
+  }
+}
+
 async function applyObjectForm() {
   const o = object(), num = numOf, props = {};
+  // a pending switch of place (OB1b) gives the position and height itself: the position fields are not read then
+  const switchingNow = !!placeDraft && placeDraft.to !== placedAs(o);
   const size = [num('obW'), num('obD'), num('obH')];
   if (size.some((v, i) => v !== o.size[i])) props.size = size;
-  if (num('obZ') !== o.z) props.z = num('obZ');
+  if (!isHosted(o) && !switchingNow && num('obZ') !== o.z) props.z = num('obZ');   // a hosted object's height is its opening's
   const name = $('obName').value.trim();
   if (name !== (o.name ?? '')) props.name = name || null;
   if (o.kind !== 'asset' && $('obColor').value !== (o.color || '#888888')) props.color = $('obColor').value;
@@ -2276,7 +2381,16 @@ async function applyObjectForm() {
     const meta = asset ? assetCache().meta(asset) : null;
     if (meta && Array.isArray(meta.size)) props.size = [...meta.size];
   }
-  if (o.attach) {
+  if (switchingNow) {
+    // a switch gives the place itself: nothing here moves it
+  } else if (isHosted(o)) {
+    // hosted: along the opening (empty = centred), out from the wall, on which side, sill or head, and which opening (OB1, OB1b)
+    const blank = id => $(id).value.trim() === '';
+    const next = { opening: placeDraft?.opening ?? o.attach.opening, at: placeDraft?.at ?? o.attach.at, side: $('obSide').value === 'left' ? 'left' : 'right',
+      ...(blank('obOffset') ? {} : { offset: num('obOffset') }), ...(blank('obGap') || num('obGap') <= 0 || (placeDraft?.at ?? o.attach.at) === 'frame' ? {} : { depth: num('obGap') }),
+      ...(blank('obShift') || num('obShift') === 0 ? {} : { shift: num('obShift') }) };
+    if (JSON.stringify(next) !== JSON.stringify(o.attach)) props.attach = next;
+  } else if (o.attach) {
     const gap = $('obGap').value.trim() === '' ? undefined : num('obGap');
     if (num('obOffset') !== o.attach.offset || $('obSide').value !== o.attach.side || gap !== o.attach.gap) props.attach = { ...o.attach, offset: num('obOffset'), side: $('obSide').value, ...(gap === undefined ? { gap: undefined } : { gap }) };
   } else {
@@ -2295,7 +2409,21 @@ async function applyObjectForm() {
     if (optionsChanged(bpMeta, o, form)) optionsEdit = form;
   }
   if (optionsEdit && props.size) { $('obErr').textContent = 'You changed the options and the size: Apply one, then the other (the size follows the options).'; return; }
-  if (!Object.keys(props).length && !optionsEdit) { $('obErr').textContent = 'Nothing changed.'; return; }
+  // a value the variant does not use (it is ignored, and warned about) is dropped by Apply
+  const metaNow = o.blueprint && blueprints?.get(o.blueprint), variantNow = o.params?.variant;
+  const ignored = metaNow ? Object.keys(o.params ?? {}).filter(k => { const d = metaNow.params.find(x => x.key === k); return d && !appliesTo(d, variantNow); }) : [];
+  if (ignored.length && props.params === undefined) props.params = Object.fromEntries(Object.entries(o.params).filter(([k]) => !ignored.includes(k)));
+  // a lit object's link and light radius (LA4): written with the object, undone with the model
+  const bd = !$('obBindBox').hidden ? objectBindingDraft(o) : null;
+  if (bd?.error) { $('obErr').textContent = bd.error; return; }
+  const bindingChanged = !!bd && !sameBinding(loc, bd.next, o.id);
+  if (!$('obBindBox').hidden && $('obLightRadius').value.trim() !== '') {
+    const radius = num('obLightRadius');
+    if (!(radius > 0)) { $('obErr').textContent = 'The light radius is a number of mm above 0.'; return; }
+    if (radius !== o.lightRadius) props.lightRadius = radius;
+  }
+  const switching = !!placeDraft && placeDraft.to !== placedAs(o);
+  if (!Object.keys(props).length && !optionsEdit && !bindingChanged && !switching) { $('obErr').textContent = 'Nothing changed.'; return; }
   if (optionsEdit) {
     $('obErr').textContent = 'Building…';
     let built;
@@ -2305,6 +2433,7 @@ async function applyObjectForm() {
     props.params = optionsEdit.params;
     props.partMaterials = Object.keys(optionsEdit.partMaterials).length ? optionsEdit.partMaterials : null;
     props.size = built.size;
+    props.light = built.light ?? null;
   }
   // a blueprint object's size is what its options build: a typed size changes the option that sets it, the server builds it again
   // and the object takes the size of that build (src/blueprints/size.js); nothing is applied when that cannot be done
@@ -2320,12 +2449,20 @@ async function applyObjectForm() {
     if (object()?.id !== o.id) return;                       // another object was picked meanwhile
     props.params = edit.params;
     props.size = built.size;                                  // setObject then counts the size as measured (no longer "assumed")
+    props.light = built.light ?? null;
+  }
+  if (switching) {
+    // the switch works from the object as it is now, with the size the change gives it (OB1b): the place it takes is the switch's
+    const sw = switchPlacement({ ...o, size: props.size ?? o.size }, placeDraft.to, { level: level(), geo: buildLevelGeometry(level()), opening: placeDraft.opening, at: placeDraft.at });
+    if (sw.error) { $('obErr').textContent = sw.error; return; }
+    Object.assign(props, sw.props);
   }
   const r = setObject(model, levelId, objectId, props, opts());
   if (r.report.errors.length) { $('obErr').textContent = r.report.errors.join('; '); return; }
   $('obErr').textContent = '';
-  commit(r.model);
-  setStatus(`${objectId}: ${Object.keys(props).join(', ')} changed (not saved yet)`);
+  if (bindingChanged) loc = bd.next;                              // the link is stored with the house (Save), undone with the model
+  commit(bindingChanged && r.model === model ? { ...model } : r.model);
+  setStatus(`${objectId}: ${[...Object.keys(props), ...(bindingChanged ? ['light link'] : [])].join(', ')} changed (not saved yet)`);
 }
 
 // ---- dragging a lamp, switch or object on the plan ----
@@ -2803,6 +2940,7 @@ function showFixture() {
     $('xErr').textContent = ''; fixtureFormFor = x;
     fillCopyInto('fixture', x);
     showBinding(x);
+    showUseLight(x);
   }
 }
 
@@ -2840,7 +2978,7 @@ async function showBinding(x) {
   entityChoices.x = suggestEntities(states || [], { kind: x.kind, names: [x.name, room?.name, room && loc.areas?.[room.id]] });
   showEntityPick();
 }
-const entityChoices = { x: [], o: [] };
+const entityChoices = { x: [], o: [], ob: [] };
 /** The entity field of a lamp or switch (prefix x) or of a door (prefix o): what is chosen (friendly name, id, state), and while typing a list to pick from (name + id). */
 function showEntityPick(open = false, p = 'x') {
   const input = $(`${p}Entity`), now = $(`${p}EntityNow`), pick = $(`${p}EntityPick`), choices = entityChoices[p];
@@ -2888,6 +3026,60 @@ function bindingDraft(x) {
   const bad = look ? checkLook(Object.fromEntries(Object.entries(look).filter(([, v]) => v !== undefined))) : [];
   if (bad.length) return { error: bad.join('; ') };
   return { next: setBinding(loc, x.id, { entity, ...(x.kind === 'switch' ? { controls } : {}), ...(look ? { look } : {}) }) };
+}
+
+/** A lit object's light (openings-and-lit-objects LA4, LA5): its link, the look it has when on, and its radius. Shown once the object has a light, stored with it or built by the server. */
+let objectLightFilledFor = null;   // the object whose light fields were last filled from location.json
+const litOf = o => o.light ?? (o.blueprint ? assetCache().light(o) : null);
+function showObjectLight(o) {
+  const lit = !!litOf(o);
+  $('obBindBox').hidden = !lit;
+  if (o.blueprint && !lit) { assetCache().loadFor(o); return; }     // its build says whether it has a light; shown again when it has
+  if (!lit) return;
+  $('obLightRadius').placeholder = String(litRadius(o));
+  if (objectLightFilledFor !== o) {
+    const b = loc.bindings?.[o.id] || {}, l = b.look || {};
+    $('obEntity').value = b.entity || ''; $('obLightRadius').value = o.lightRadius ?? '';
+    $('obLookBri').value = l.brightness ?? ''; $('obLookK').value = l.kelvin ?? ''; $('obLookUseColor').checked = !!l.color; $('obLookColor').value = l.color || '#ffd6aa';
+    objectLightFilledFor = o;
+    rebase('obEntity', 'obLightRadius', 'obLookBri', 'obLookK', 'obLookUseColor', 'obLookColor');   // filled from the house, not typed
+  }
+  loadHaStates().then(states => {
+    if (object() !== o) return;
+    entityChoices.ob = suggestEntities(states || [], { kind: 'lamp', names: [o.name, o.blueprint] });
+    showEntityPick(false, 'ob');
+  });
+}
+/** The link and look of a lit object as its fields say them now: { next } is the location with them, or { error }. Written when the object is applied. */
+function objectBindingDraft(o) {
+  const entity = $('obEntity').value.trim();
+  if (entity && !/^[a-z_]+\.[a-z0-9_]+$/.test(entity)) return { error: 'The Home Assistant entity looks like light.kitchen' };
+  const num = id => ($(id).value.trim() === '' ? undefined : Number($(id).value));
+  const useColor = $('obLookUseColor').checked;
+  const look = Object.fromEntries(Object.entries({ brightness: num('obLookBri'), kelvin: useColor ? undefined : num('obLookK'), color: useColor ? $('obLookColor').value : undefined }).filter(([, v]) => v !== undefined));
+  const bad = Object.keys(look).length ? checkLook(look) : [];
+  if (bad.length) return { error: bad.join('; ') };
+  return { next: setBinding(loc, o.id, { entity, look }) };
+}
+/** A lamp can give way to the light of a lit object on its level (LA6): the lit objects are offered; hidden when there are none. */
+function showUseLight(x) {
+  const lit = x.kind === 'lamp' ? (level().objects || []).filter(o => litOf(o)) : [];
+  $('xUseRow').hidden = !lit.length;
+  $('xUseObject').innerHTML = lit.map(o => `<option value="${esc(o.id)}">${esc(o.name || o.id)}</option>`).join('');
+}
+/** The lamp is removed and the lit object takes its link. A lit object that already has another link is not changed. */
+async function useObjectLight() {
+  const x = fixture(), o = (level().objects || []).find(v => v.id === $('xUseObject').value);
+  if (!x || !o) return;
+  const lampLink = loc.bindings?.[x.id]?.entity, objLink = loc.bindings?.[o.id]?.entity;
+  if (lampLink && objLink && lampLink !== objLink) { $('xErr').textContent = `${o.id} is already linked to ${objLink}: unlink one of them first.`; return; }
+  if (!(await askConfirm(`Use the light of ${o.name || o.id} instead of ${x.name || x.id}?`, { ok: 'Use it' }))) return;
+  const r = deleteFixture(model, levelId, x.id, opts());
+  if (r.report.errors.length) { $('xErr').textContent = r.report.errors.join('; '); return; }
+  let next = setBinding(loc, x.id, { entity: '' });
+  if (lampLink) next = setBinding(next, o.id, { entity: lampLink });
+  fixtureId = null; loc = next; commit(r.model);
+  setStatus(`${x.id} removed: ${o.id} gives its light`);
 }
 
 function applyFixture() {
@@ -3442,7 +3634,7 @@ async function deleteRoom() {
   lines.push(...describeReconcile(preview.report));
   if (!(await askConfirm(lines.join('\n\n'), { ok: 'Delete' }))) return;
   model = history.push(preview.model); dirty = isModelDirty();
-  roomId = null; draft = null; editing = null; editSnap = null;
+  roomId = null; draft = null; editing = null; editBase = null;
   loadFormForSelection(); refresh();
   if (!level().rooms?.length) editDraft({ name: '', exterior: false });
   setStatus(`deleted ${r.id} (not saved yet)`);
@@ -3586,7 +3778,7 @@ function showIssues() {
     if (el.dataset.ilevel && el.dataset.ilevel !== levelId && !(await goToLevel(el.dataset.ilevel))) return;
     const lv = level();
     const kind = lv.rooms?.some(r => r.id === id) ? 'room' : lv.solids?.some(s => s.id === id) ? 'solid' : lv.walls?.some(w => w.id === id) ? 'wall'
-      : lv.openings?.some(o => o.id === id) ? 'opening' : lv.fixtures?.some(x => x.id === id) ? 'fixture' : null;
+      : lv.openings?.some(o => o.id === id) ? 'opening' : lv.fixtures?.some(x => x.id === id) ? 'fixture' : lv.objects?.some(o => o.id === id) ? 'object' : null;
     if (kind) afterLeave(() => enterEdit(kind, id))();
   }));
   $('issues').querySelectorAll('.cutPair').forEach(b => (b.onclick = e => { e.stopPropagation(); cutOverlap(b.dataset.pair.split('|'), b.closest('.iss').dataset.ilevel || levelId); }));

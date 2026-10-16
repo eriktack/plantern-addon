@@ -172,11 +172,21 @@ function checkMount(pl, where, problems) {
 
 // meta.placement = { mount, z?, variants?: { <variant>: { mount, z? } } }: a variant that starts elsewhere (an upper
 // kitchen cabinet on the wall, the base cabinets on the floor) has its own entry
+// placement.hosts (openings-and-lit-objects OB1b): where the model may stand, a non-empty list of room, wall, sill, head.
+// Absent: derived from the mount (hostsOf). A sill is never derived, only declared.
+function checkHosts(p, where, problems) {
+  if (p.hosts === undefined) return;
+  if (!Array.isArray(p.hosts) || !p.hosts.length) { problems.push(`${where}.hosts must be a non-empty list of room, wall, sill, head`); return; }
+  for (const h of p.hosts) if (!HOST_NAMES.includes(h)) problems.push(`${where}.hosts: "${h}" is not room, wall, sill or head`);
+  if (new Set(p.hosts).size !== p.hosts.length) problems.push(`${where}.hosts lists a place twice`);
+}
+
 function checkPlacement(pl, problems, meta) {
   if (pl === undefined) return;
   if (!pl || typeof pl !== 'object' || Array.isArray(pl)) { problems.push('meta.placement must be an object { mount, z }'); return; }
-  for (const k of Object.keys(pl)) if (!['mount', 'z', 'variants'].includes(k)) problems.push(`meta.placement: unknown key "${k}"`);
+  for (const k of Object.keys(pl)) if (!['mount', 'z', 'variants', 'hosts'].includes(k)) problems.push(`meta.placement: unknown key "${k}"`);
   checkMount(pl, 'meta.placement', problems);
+  checkHosts(pl, 'meta.placement', problems);
   if (pl.variants === undefined) return;
   const options = (meta.params || []).find(d => d?.key === 'variant')?.options;
   if (!Array.isArray(options)) { problems.push('meta.placement.variants needs an enum parameter with key "variant"'); return; }
@@ -185,8 +195,9 @@ function checkPlacement(pl, problems, meta) {
     const where = `meta.placement.variants.${name}`;
     if (!options.includes(name)) { problems.push(`${where}: "${name}" is not a variant`); continue; }
     if (!v || typeof v !== 'object' || Array.isArray(v)) { problems.push(`${where} must be an object { mount, z }`); continue; }
-    for (const k of Object.keys(v)) if (k !== 'mount' && k !== 'z') problems.push(`${where}: unknown key "${k}"`);
+    for (const k of Object.keys(v)) if (!['mount', 'z', 'hosts'].includes(k)) problems.push(`${where}: unknown key "${k}"`);
     checkMount(v, where, problems);
+    checkHosts(v, where, problems);
   }
 }
 
@@ -194,6 +205,21 @@ function checkPlacement(pl, problems, meta) {
  * Where a new object of this model starts: { mount, z } (z null for a ceiling item), for a variant when it has its own
  * entry, else the model's. Assumes a meta checkMeta accepts.
  */
+/** The places an object of this model may stand, for its variant: room, wall, sill, head (openings-and-lit-objects OB1b). */
+export const HOST_NAMES = ['room', 'wall', 'sill', 'head'];
+
+/**
+ * The hosts of a model's variant: `placement.hosts` when declared; else derived from `mount` (floor → room, wall;
+ * wall → wall; ceiling → room, head). A sill is never derived, only declared.
+ */
+export function hostsOf(meta, variant) {
+  const top = meta?.placement;
+  const pl = (variant !== undefined && top?.variants?.[variant]) || top;
+  if (Array.isArray(pl?.hosts)) return [...pl.hosts];
+  const mount = pl?.mount ?? 'floor';
+  return mount === 'wall' ? ['wall'] : mount === 'ceiling' ? ['room', 'head'] : ['room', 'wall'];
+}
+
 export function placementOf(meta, variant) {
   const top = meta?.placement;
   const pl = (variant !== undefined && top?.variants?.[variant]) || top;

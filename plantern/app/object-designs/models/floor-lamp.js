@@ -138,7 +138,7 @@ export const meta = {
       shadeShape: 'empire',
     },
   },
-  placement: { mount: 'floor' },
+  placement: { mount: 'floor', hosts: ['room', 'wall'] },
 };
 
 function shadeDimensions(q) {

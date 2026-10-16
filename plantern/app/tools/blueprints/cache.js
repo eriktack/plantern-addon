@@ -164,21 +164,32 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
     catch (e) { throw new GlbError(400, e.message); }
   }
 
+  /**
+   * Where a lit model’s light is, [x, y, z] in mm in the model’s own frame (AGENT_INSTRUCTIONS §3.3): its lightPoint() for the
+   * resolved params. null for a model that has none, or when it fails (a light is an extra, the object is still built).
+   */
+  function lightOf(found, resolved) {
+    if (typeof found.model?.lightPoint !== 'function') return null;
+    try { const p = found.model.lightPoint(resolved); return Array.isArray(p) && p.length === 3 && p.every(Number.isFinite) ? p.map(v => Math.round(v)) : null; }
+    catch { return null; }
+  }
+
   async function build(r, blueprint) {
     const { hash } = r;
     const built = await buildOnly(r);
     const bounds = meshBounds({ pos: built.parts.flatMap(p => p.mesh.pos), nrm: [], idx: [] });
     const size = bounds ? [0, 1, 2].map(k => round1(bounds.max[k] - bounds.min[k])) : [0, 0, 0];
+    const light = lightOf(r.found, r.resolved);
     await fs.mkdir(dir, { recursive: true });
     const tmp = path.join(dir, `${hash}.glb.tmp-${process.pid}`);
     await fs.writeFile(tmp, built.glb);
     await renameRetry(tmp, path.join(dir, `${hash}.glb`));
     // the entry is complete once its note exists, so a half-written one is never answered
     const noteTmp = path.join(dir, `${hash}.json.tmp-${process.pid}`);
-    await fs.writeFile(noteTmp, JSON.stringify({ blueprint, size, built: new Date().toISOString() }) + '\n');
+    await fs.writeFile(noteTmp, JSON.stringify({ blueprint, size, light, built: new Date().toISOString() }) + '\n');
     await renameRetry(noteTmp, path.join(dir, `${hash}.json`));
     await prune(hash).catch(() => { /* a failed clean-up must not fail the build that succeeded */ });
-    return { hash, size };
+    return { hash, size, light };
   }
 
   /**
@@ -230,7 +241,10 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
         const text = await fs.readFile(path.join(houseDir, 'blueprints', name), 'utf8').catch(() => null);
         if (text !== null) house.push({ file: name, text });
       }
-      return loadBlueprints({ builtIn, house, libraryNames: new Set(Object.keys(library)) });
+      const listed = loadBlueprints({ builtIn, house, libraryNames: new Set(Object.keys(library)) });
+      // a model with a lightPoint() gives light: the Add menu marks it (openings-and-lit-objects LA5)
+      const lit = new Set(builtIn.filter(m => typeof m.lightPoint === 'function').map(m => m.meta?.id));
+      return { ...listed, blueprints: listed.blueprints.map(b => (b.source === 'built-in' && lit.has(b.id) ? { ...b, light: true } : b)) };
     },
 
     /** The hash a request would have, without building it. */
@@ -254,7 +268,8 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
         // both files: a pruned object has neither, and a half-removed one must not be answered
         const note = JSON.parse(await fs.readFile(path.join(dir, `${r.hash}.json`), 'utf8'));
         await fs.access(path.join(dir, `${r.hash}.glb`));
-        if (HASH.test(r.hash) && Array.isArray(note.size)) return { hash: r.hash, size: note.size };
+        // an entry from before the light point was kept has no `light` field: it is built again once, which writes it
+        if (HASH.test(r.hash) && Array.isArray(note.size) && 'light' in note) return { hash: r.hash, size: note.size, light: note.light };
       } catch { /* not cached */ }
       if (!building.has(r.hash)) building.set(r.hash, build(r, request.blueprint).finally(() => building.delete(r.hash)));
       return building.get(r.hash);

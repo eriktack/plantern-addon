@@ -13,6 +13,7 @@
 // whose bottom is above the cut plane dashed. Pure.
 
 import { pointInPolygon } from '../geometry/polygon.js';
+import { isHosted, hostedPlacement } from './hosted.js';
 import { ASSET_NAME } from './assets.js';
 import { resolveParams, appliesTo } from '../../object-designs/lib/params.js';
 import { materialOptions, materialAllowed } from '../blueprints/options.js';
@@ -107,11 +108,31 @@ export function checkObject(o, level, blueprints) {
     }
   }
   if (!Array.isArray(o.size) || o.size.length !== 3 || !o.size.every(v => Number.isFinite(v) && v > 0)) errors.push('size must be [width, depth, height] in mm, all more than 0');
-  if (!Number.isFinite(o.z) || o.z < 0) errors.push('z (the bottom above the floor) must be 0 or more');
+  if (!isHosted(o) && (!Number.isFinite(o.z) || o.z < 0)) errors.push('z (the bottom above the floor) must be 0 or more');   // a hosted object's z is worked out from its opening
   if (o.color !== undefined && !HEX.test(o.color)) errors.push('color must look like #rrggbb');
+  // a lit object's light (openings-and-lit-objects): the built light point and the reach of its glow
+  if (o.light !== undefined && !(Array.isArray(o.light) && o.light.length === 3 && o.light.every(Number.isFinite))) errors.push('light must be [x, y, z] in mm (the built light point)');
+  if (o.lightRadius !== undefined && !(Number.isFinite(o.lightRadius) && o.lightRadius > 0)) errors.push('lightRadius must be more than 0 mm');
   if (!o.attach && !o.pos) errors.push('needs a position (pos) or a wall it is on (attach)');
   if (o.attach && o.pos) errors.push('either attach or pos, not both');
-  if (o.attach) {
+  if (isHosted(o)) {
+    // hosted by an opening (hosted.js): on its sill or at its head, along it; a warning when it does not fit
+    const op = (level.openings || []).find(x => x.id === o.attach.opening);
+    if (!op) errors.push(`hosted by a missing opening "${o.attach.opening}"`);
+    else {
+      if (!(['sill', 'frame', 'head'].includes(o.attach.at))) errors.push('attach.at must be "sill", "frame" or "head"');
+      const wall = (level.walls || []).find(w => w.id === op.wall);
+      if (o.attach.at === 'frame' && wall && (o.size?.[1] ?? 0) > (wall.thickness ?? 0) + 1) warnings.push('deeper than the wall: it would reach past the far face');
+      if (o.attach.offset !== undefined && !(o.attach.offset >= 0)) errors.push('attach.offset must be 0 or more');
+      if (o.attach.shift !== undefined && !Number.isFinite(o.attach.shift)) errors.push('attach.shift must be a number of mm (+ into the room, − into the opening)');
+      const width = o.size?.[0] ?? 0;
+      if (width > (op.width ?? 0) + 1) warnings.push(`wider than its opening (${op.width} mm)`);
+      else if (o.attach.offset !== undefined && o.attach.offset + width > (op.width ?? 0) + 1) warnings.push('reaches past the end of its opening');
+      const p = hostedPlacement(o, op, level.ceilingHeight);
+      if (p && o.attach.at !== 'head' && p.z + (o.size?.[2] ?? 0) > (op.head ?? level.ceilingHeight ?? 2400) + 1) warnings.push('taller than its opening: its top is above the head');
+      if (p && o.attach.at === 'head' && p.z < (op.sill ?? 0) - 1) warnings.push('longer than its opening: its bottom is below the sill');
+    }
+  } else if (o.attach) {
     const w = (level.walls || []).find(x => x.id === o.attach.wall);
     if (!w) errors.push(`attached to missing wall "${o.attach.wall}"`);
     else {

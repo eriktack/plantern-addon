@@ -148,7 +148,7 @@ export function createPlanView(svg, hooks = {}) {
     for (const o of level.objects || []) {
       const fp = geo.objectFootprint(o);
       if (!fp) continue;
-      const above = (o.z ?? 0) >= settings.cutPlane;
+      const above = geo.objectZ(o) >= settings.cutPlane;
       // an asset whose model is missing is drawn in red, dashed, so it is seen and fixed (decision 146)
       const missing = o.kind === 'asset' && ['missing', 'broken'].includes(assetStatus(assetKey(o)));
       // a model's footprint takes the colour of its main part (the largest), grey until it has loaded
