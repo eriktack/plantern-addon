@@ -42,11 +42,11 @@
   <div id="mapBox"><svg id="map"></svg></div>
   <div id="hint" class="help" style="margin:4px 2px"></div>
   <h1>Doors, windows &amp; lights</h1>
-  <div class="sel"><select id="loc" aria-label="Location"></select><select id="level" aria-label="Level"></select></div>
+  <div class="sel"><select data-native id="loc" aria-label="Location"></select><select data-native id="level" aria-label="Level"></select></div>
   <div id="msg" class="help" style="margin-top:6px"></div>
 
   <section id="s-pick">
-    <label class="f">Room <small>(or tap it on the map)</small><select id="room" class="big"></select></label>
+    <label class="f">Room <small>(or tap it on the map)</small><select data-native id="room" class="big"></select></label>
     <div id="walls" class="list"></div>
   </section>
 
@@ -68,11 +68,11 @@
     <div class="help">Leave a size empty if you have not measured it: a default is used and listed as still to measure.</div>
     <div id="windowRow">
       <label class="f">The window opens</label>
-      <select id="opens" class="big"><option value="fixed">does not open (fixed)</option><option value="side-hung">side-hung (like a door)</option><option value="top-hung">top-hung</option><option value="bottom-hung">bottom-hung</option><option value="tilt-turn">tilt-turn</option><option value="sliding">sliding</option></select>
+      <select id="opens" class="big"><option value="fixed">does not open (fixed)</option><option value="side-hung" data-icon="swingOut">side-hung (like a door)</option><option value="top-hung">top-hung</option><option value="bottom-hung">bottom-hung</option><option value="tilt-turn">tilt-turn</option><option value="sliding" data-icon="sliding">sliding</option></select>
     </div>
     <div id="doorRow">
       <label class="f">The door opens</label>
-      <select id="doorOpens" class="big"><option value="swing">on hinges (swings)</option><option value="sliding">sliding along the wall</option><option value="pocket">sliding into the wall (pocket)</option></select>
+      <select id="doorOpens" class="big"><option value="swing" data-icon="swingOut">on hinges (swings)</option><option value="sliding" data-icon="sliding">sliding along the wall</option><option value="pocket" data-icon="pocket">sliding into the wall (pocket)</option></select>
     </div>
     <div id="leafRow">
       <label class="f" id="hingeLbl">Hinges on</label>
@@ -96,9 +96,9 @@
     </div>
     <div id="fixCeiling">
       <div class="two">
-        <label class="f" style="margin:0"><span class="key" style="background:#6cb6ff"></span>From wall <select id="fixEdgeA" class="big"></select></label>
+        <label class="f" style="margin:0"><span class="key" style="background:#6cb6ff"></span>From wall <select data-native id="fixEdgeA" class="big"></select></label>
         <label class="f" style="margin:0">mm <small>straight out from it</small><input id="fixDistA" class="big" inputmode="numeric" autocomplete="off"></label>
-        <label class="f" style="margin:0"><span class="key" style="background:#4cc38a"></span>and wall <select id="fixEdgeB" class="big"></select></label>
+        <label class="f" style="margin:0"><span class="key" style="background:#4cc38a"></span>and wall <select data-native id="fixEdgeB" class="big"></select></label>
         <label class="f" style="margin:0">mm <small>straight out from it</small><input id="fixDistB" class="big" inputmode="numeric" autocomplete="off"></label>
       </div>
     </div>

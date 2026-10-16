@@ -62,6 +62,7 @@ export const meta = {
   variantDefaults: {
     hanging: { diameter: 200, height: 200 },
   },
+  sizeParams: { x: 'diameter', y: 'diameter', z: { default: 'height', hanging: null } },
   placement: {
     mount: 'floor',
     hosts: ['room', 'wall', 'sill'],

@@ -105,6 +105,7 @@ export const meta = {
     string: { shelves: 3, depth: 300 },
     hat_shelf: { width: 1000, depth: 300, shelves: 1, hooks: 6 },
   },
+  sizeParams: { x: 'width', y: 'depth' },
   placement: {
     mount: 'wall',
     z: 1500,

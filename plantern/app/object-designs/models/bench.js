@@ -131,6 +131,8 @@ export const meta = {
       material: 'pine',
     },
   },
+  sizeParams: { x: 'width', y: { default: 'depth', sauna_lave: null }, z: { default: 'height', upholstered: 'backrestHeight', kitchen_sofa: null, sauna_lave: null } },
+
   placement: { mount: 'floor' },
 };
 

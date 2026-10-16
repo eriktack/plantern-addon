@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.4
+
+- **Nicer dropdowns.** Every list is drawn like the page menu, with icons, colour swatches for materials, grouped lists and a state dot for Home Assistant entities. The phone pages use it for short choices (how a window or door opens) and keep the phone's own wheel for long lists.
+- **Object library complete:** 14 more models (kitchen island, bathtub, towel rail, radiator, tile stove, wood stove, heat pump, rug, water heater, workbench, sauna heater, sideboard, hallway unit, tv), grouped by kind with icons in the object picker; the shower's glass and tray take the right materials; the older models can have their size typed in the Editor.
+- **Lamp objects:** a lamp object is clicked in 3D on the object, has a faint ball round its light that is easy to hit, and its light shows in the 3D view as soon as the server has built the model. The 2D plan draws lamps as light bulbs.
+- Fix: a lamp object in a window is drawn at the window's height in 3D, and the Editor no longer asks to apply unchanged values after Check the build.
+
 ## 0.5.3
 
 - **Lamps are objects.** A table lamp, floor lamp, wall sconce or ceiling light from the library is one object that gives its own light: link it to a Home Assistant light in its panel. The light shows in the viewer and in the card.

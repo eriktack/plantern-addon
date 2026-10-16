@@ -92,6 +92,7 @@ export const meta = {
     low_boy: { height: 700, rows: 3 },
     tall_boy: { height: 1600, rows: 6 },
   },
+  sizeParams: { x: 'width', y: 'depth', z: 'height' },
   placement: { mount: 'floor' },
 };
 

@@ -85,6 +85,8 @@ export const meta = {
   variantDefaults: {
     nightstand: { width: 450, depth: 400, height: 550, drawers: 1 },
   },
+  sizeParams: { x: 'width', y: 'depth', z: 'height' },
+
   placement: { mount: 'floor' },
 };
 

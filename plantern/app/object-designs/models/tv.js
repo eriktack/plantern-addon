@@ -68,6 +68,7 @@ export const meta = {
     { key: 'screen', label: 'Screen' },
     { key: 'stand', label: 'Stand', appliesTo: ['on_stand'] },
   ],
+  sizeParams: { x: 'width', y: { default: 'depth', on_stand: null }, z: { default: 'height', on_stand: null } },
   placement: {
     mount: 'floor',
     z: 450,

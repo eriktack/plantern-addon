@@ -11,7 +11,9 @@ import { buildLevelGeometry, buildModelGeometry, labelObstacles } from '../geome
 import { listHouses, openHouse, houseOptions } from '../model/house.js';
 import { askConflict } from './conflict-ui.js';
 import { createAssetCache, listAssetNames } from '../render3d/assets.js';
-import { ASSET_NAME, assetWarnings, assetKey, builtSizeStatus } from '../model/assets.js';
+import { ASSET_NAME, assetWarnings, assetKey, builtSizeStatus, assetEntries } from '../model/assets.js';
+import { levelHint, openingHint, openingIcon, wallHint } from './option-hints.js';
+import { colourSwatches } from '../model/swatches.js';
 import { blueprintMap, placeSpec, startPlacement, wallInRoom } from '../blueprints/place.js';
 import { defaultsFor, hostsOf, appliesTo } from '../../object-designs/lib/params.js';
 import { createMenu } from '../menu.js';
@@ -44,6 +46,8 @@ import { renameId, renameBinding, idFromName, entityName } from '../edit/rename.
 import { openDialog, askConfirm } from './dialog.js';
 import { FITTING_DEFAULTS } from '../geometry/fittings.js';
 import { checkLook } from '../ha/appearance.js';
+import { domainIcon, stateClass } from '../ha/pick.js';
+import { ICONS } from '../icons.js';
 import { compassSvg } from '../render2d/compass.js';
 import { roomNameLayout, labelPoint, pointInPolygon } from '../geometry/polygon.js';
 import { cornerAt } from '../edit/inspect.js';
@@ -64,6 +68,7 @@ import { stepsOf, runOf, outerOf, landingAfter } from './stair-dims.js';
 import { stairSketch } from './stair-sketch.js';
 import { renameFromName, applyRoom, removeRoom, setWallProps, unbindWall, deleteWall, linkWalls, fillWalls, setSite, splitWall, addOpening, setOpening, deleteOpening, addFixture, setFixture, deleteFixture, setMaterial, deleteMaterial, nameColor, materialFromColor } from '../edit/ops.js';
 import { resolveSide, materialUse, usedColors, materialTable, setDesignLibrary } from '../model/materials.js';
+import { materialKind, materialSwatch, MATERIAL_KINDS } from '../model/material-kind.js';
 import { sideStrips, wallProfile } from '../geometry/walls.js';
 import { wallInfo, wallToForm, wallPropsFromForm, stillToMeasure, openingInfo, openingToForm, openingPropsFromForm, offsetFrom, offsetTo, measureCorners, defaultCorner } from '../edit/inspect.js';
 import { openingSymbol, arcPathSvg } from '../geometry/openings.js';
@@ -79,6 +84,10 @@ import { adjacentLevels } from '../tools/snap.js';
 import { readPrefs, writePrefs } from '../model/prefs.js';
 import { levelLabel } from '../model/names.js';
 import { coalesce } from '../coalesce.js';
+
+// nicer dropdowns (ND2): every select on the page is drawn as the page menu
+import { enhanceAll } from '../select.js';
+enhanceAll();
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -176,6 +185,7 @@ function fillPlace() {
 function fillPlaceWalls() {
   const sel = $('placeWall'), keep = sel.value, walls = level()?.walls || [];
   sel.replaceChildren(...walls.map(w => new Option(`${w.name || w.id}: (${Math.round(w.a[0])}, ${Math.round(w.a[1])}) → (${Math.round(w.b[0])}, ${Math.round(w.b[1])})`, w.id)));
+  [...sel.options].forEach((o, i) => { o.dataset.hint = wallHint(walls[i]); });
   if (keep && walls.some(w => w.id === keep)) sel.value = keep;
 }
 
@@ -655,6 +665,12 @@ async function init() {
   $('obOpening').addEventListener('change', () => { const o = object(); if (!o || !placeDraft) return; placeDraft.opening = $('obOpening').value; showPlacedChoice(o); });
   $('obAt').addEventListener('change', () => { const o = object(); if (!o || !placeDraft) return; placeDraft.at = $('obAt').value; showPlacedChoice(o); });
   $('obAsset').addEventListener('input', () => { $('obAssetNote').textContent = assetNote($('obAsset').value.trim()); });
+  // the model menu beside the field (ND8): searchable by what is typed; the field still takes any name
+  const assetHost = document.createElement('div');
+  $('obAsset').after(assetHost);
+  createMenu(assetHost, { label: 'Pick a model', icon: 'model', entries: () => assetEntries(assetPickNames, $('obAsset').value), onPick: e => { $('obAsset').value = e.id; $('obAsset').dispatchEvent(new Event('input')); }, align: 'full' });
+  // a swatch menu beside each colour input (ND10): the house's palette and colours, the library's, then Other colour…
+  for (const id of ['wLeftColor', 'wRightColor', 'sColor', 'obColor', 'mColor']) addSwatchPicker($(id));
   $('obDelete').onclick = async () => {
     if (!(await askConfirm(`Delete ${objectId}?`, { ok: 'Delete' }))) return;
     const r = deleteObject(model, levelId, objectId, opts());
@@ -884,7 +900,7 @@ const NEW_LEVEL = '+new';
 const LEVEL_COLOR = { below: '#7aa2d6', above: '#d6a56b' };   // the level below and above, faintly under the plan
 const DOT_HIT = 0.95;                                            // a start dot reacts this far out (× the label size)
 function fillLevels() {
-  $('level').innerHTML = model.levels.map(l => `<option value="${esc(l.id)}">${esc(levelLabel(l))}${l.elevationFrom ? ' ⇅' : ''}</option>`).join('') + `<option value="${NEW_LEVEL}">+ New level…</option>`;
+  $('level').innerHTML = model.levels.map(l => `<option value="${esc(l.id)}" data-hint="${esc(levelHint(l, model.levels))}">${esc(levelLabel(l))}${l.elevationFrom ? ' ⇅' : ''}</option>`).join('') + `<option value="${NEW_LEVEL}">+ New level…</option>`;
   $('level').value = levelId;
 }
 /** Show another level (leaving what is edited first, asked when changed); false when the user stays. */
@@ -1561,7 +1577,7 @@ function refreshNextTo() {
   const rooms = (lv.rooms || []).filter(r => r.id !== cur && r.polygon?.length >= 3);
   $('ntEdge').innerHTML = rooms.flatMap(r => r.polygon.map((p, i) => {
     const q = r.polygon[(i + 1) % r.polygon.length], t = edgeWallThickness(lv, r, i);
-    return `<option value="${esc(r.id)}|${i}">${esc(r.name || r.id)} · wall ${wallName(i)}: (${Math.round(p[0])}, ${Math.round(p[1])}) → (${Math.round(q[0])}, ${Math.round(q[1])})${t ? ` · wall ${t} mm` : ''}</option>`;
+    return `<option value="${esc(r.id)}|${i}" data-hint="${esc(wallHint({ a: p, b: q }, [r.name || r.id]))}">${esc(r.name || r.id)} · wall ${wallName(i)}: (${Math.round(p[0])}, ${Math.round(p[1])}) → (${Math.round(q[0])}, ${Math.round(q[1])})${t ? ` · wall ${t} mm` : ''}</option>`;
   })).join('');
   if ([...$('ntEdge').options].some(o => o.value === keep)) $('ntEdge').value = keep;
   if ($('ntT').value.trim() === '') { const { room, i } = ntPick(); $('ntT').value = (room && edgeWallThickness(lv, room, i)) || innerThickness(); }
@@ -1799,9 +1815,26 @@ function renderColors() {
 }
 // The design library's names that this house does not override: listed read-only, picked by name (materials-library plan).
 function libraryMaterials() { return Object.entries(materialTable(model)).filter(([, m]) => m.fromLibrary); }
+/**
+ * The options of a material list: the house's materials and the library's, grouped by kind with a swatch each (ND3). first and
+ * last are options put before and after the groups. A house texture is not drawn in the menu (its path is the house's, not this page's).
+ */
+function materialOptionsHtml(first = '', last = '') {
+  const items = [
+    ...Object.entries(model.materials || {}).map(([id, m]) => ({ id, label: m.name || id, entry: { ...m, texture: undefined } })),
+    ...libraryMaterials().map(([id, m]) => ({ id, label: `${m.name || id} (library)`, entry: m })),
+  ];
+  const groups = new Map();
+  for (const it of items) {
+    const k = materialKind(it.id, it.entry).label;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(it);
+  }
+  const body = MATERIAL_KINDS.filter(k => groups.has(k.label)).map(k => `<optgroup label="${esc(k.label)}">${groups.get(k.label).map(it => `<option value="${esc(it.id)}" data-swatch="${esc(materialSwatch(it.entry, 'object-designs/'))}">${esc(it.label)}</option>`).join('')}</optgroup>`).join('');
+  return first + body + last;
+}
 function fillMaterialSelects() {
-  const mats = Object.entries(model.materials || {});
-  const opts = '<option value="">choose…</option>' + mats.map(([id, m]) => `<option value="${esc(id)}">${esc(m.name || id)}</option>`).join('') + libraryMaterials().map(([id, m]) => `<option value="${esc(id)}">${esc(m.name || id)} (library)</option>`).join('') + '<option value="+new">+ New material…</option>';
+  const opts = materialOptionsHtml('<option value="">choose…</option>', '<option value="+new">+ New material…</option>');
   for (const S of ['Left', 'Right']) { const keep = $(`w${S}Mat`).value; $(`w${S}Mat`).innerHTML = opts; if ([...$(`w${S}Mat`).options].some(o => o.value === keep)) $(`w${S}Mat`).value = keep; }
 }
 
@@ -2136,9 +2169,30 @@ function wireAddMenus() {
     createMenu($(id), { label: 'Add', icon: 'plus', align: 'right', entries: () => addEntries(addContext(where)), onPick: e => addPick(where, e) });
   }
 }
+let assetPickNames = [];   // the names the model menu lists (fillAssetNames)
+/** A swatch menu beside a colour input (ND10): picking one sets the colour and fires its input and change events, as the picker would. */
+function addSwatchPicker(input) {
+  const host = document.createElement('div');
+  host.className = 'swatchpick';
+  input.after(host);
+  createMenu(host, {
+    label: 'Swatches', icon: 'colour', align: 'right',
+    entries: () => [
+      ...colourSwatches(model, optionLibrary).map(e => ({ id: e.value, label: e.label, hint: e.hint, group: e.group, swatch: e.swatch, current: e.value.toLowerCase() === input.value.toLowerCase() })),
+      { id: 'other', label: 'Other colour…', icon: 'colour', group: 'More' },
+    ],
+    onPick: e => {
+      if (e.id === 'other') { input.click(); return; }
+      input.value = e.id;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    },
+  });
+}
 function fillAssetNames() {
   const used = (model?.levels || []).flatMap(l => (l.objects || []).filter(o => o.kind === 'asset' && o.asset).map(o => o.asset));
   const names = [...new Set([...assetNameList, ...used])].sort();
+  assetPickNames = names;
   $('assetNames').innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
 }
 /** A line for the object panel: where the model of an asset is, or that the field is a box. */
@@ -2343,11 +2397,11 @@ function showPlacedChoice(o) {
   for (const opt of sel.options) { const c = ch[opt.value]; opt.disabled = c ? !c.ok : false; }
   sel.value = placeDraft.to;
   const lv = level(), near = openingsNear(lv, buildModelGeometry(model).get(lv.id), o);
-  $('obOpening').innerHTML = near.map(n => { const wall = (lv.walls || []).find(w => w.id === n.wall); return `<option value="${esc(n.id)}">${esc(nameOf(n.id))} · ${esc(displayName(wall ?? { id: n.wall }))} · ${Math.round(n.distance)} mm</option>`; }).join('');
+  $('obOpening').innerHTML = near.map(n => { const wall = (lv.walls || []).find(w => w.id === n.wall), op = (lv.openings || []).find(x => x.id === n.id); return `<option value="${esc(n.id)}" data-icon="${esc(openingIcon(op?.type))}" data-hint="${esc(openingHint(op, displayName(wall ?? { id: n.wall })))}">${esc(nameOf(n.id))} · ${esc(displayName(wall ?? { id: n.wall }))} · ${Math.round(n.distance)} mm</option>`; }).join('');
   if (!near.some(n => n.id === placeDraft.opening)) placeDraft.opening = near[0]?.id;
   $('obOpening').value = placeDraft.opening ?? '';
   if (!ch.at.includes(placeDraft.at)) placeDraft.at = ch.at[0];
-  $('obAt').innerHTML = ch.at.map(a => `<option value="${a}">${hostedWhere(a)}</option>`).join('');
+    $('obAt').innerHTML = ch.at.map(a => `<option value="${a}" data-icon="${a === 'sill' ? 'sill' : a === 'head' ? 'head' : 'inOpening'}">${hostedWhere(a)}</option>`).join('');
   $('obAt').value = placeDraft.at ?? '';
   const c = ch[placeDraft.to];
   $('obPlacedNote').textContent = c && !c.ok ? c.reason : '';
@@ -2986,7 +3040,8 @@ function showEntityPick(open = false, p = 'x') {
   now.innerHTML = v ? (st ? `<b>${esc(st.attributes?.friendly_name || v)}</b> <small>${esc(v)} · ${esc(st.state)}</small>` : `<small>${esc(v)}${haStates ? ' · not found in Home Assistant' : ''}</small>`) : '<small>not linked</small>';
   if (!open || !choices.length) { pick.hidden = true; return; }
   const q = v.toLowerCase(), shown = choices.filter(e => !q || e.id.toLowerCase().includes(q) || e.label.toLowerCase().includes(q)).slice(0, 40);
-  pick.innerHTML = shown.map(e => { const s = haStates?.find(x => x.entity_id === e.id); return `<div class="pick" data-ent="${esc(e.id)}"><b>${esc(e.label)}</b><small>${esc(e.id)}${s ? ` · ${esc(s.state)}` : ''}</small></div>`; }).join('') || '<div class="help">No entity matches.</div>';
+  // a row: the domain's icon and a dot for its state, then the name and the id (ND8)
+  pick.innerHTML = shown.map(e => { const s = haStates?.find(x => x.entity_id === e.id), ic = domainIcon(e.id); return `<div class="pick" data-ent="${esc(e.id)}"><span class="dot ${stateClass(s?.state)}"></span>${ic ? `<span class="pic">${ICONS[ic]}</span>` : ''}<b>${esc(e.label)}</b><small>${esc(e.id)}${s ? ` · ${esc(s.state)}` : ''}</small></div>`; }).join('') || '<div class="help">No entity matches.</div>';
   pick.hidden = false;
   now.innerHTML = '';                                                // while searching, the list is what counts
   pick.querySelectorAll('[data-ent]').forEach(el => (el.onmousedown = ev => { ev.preventDefault(); input.value = el.dataset.ent; showEntityPick(false, p); input.blur(); input.dispatchEvent(new Event('input')); }));
@@ -3548,7 +3603,7 @@ const solidSidesForm = () => readLookRows($('sSides'), room()?.sides);
  * default / colour / material with the palette, like a wall side. rows = [{ key: roomId, label }].
  */
 function fillLookRows(box, rows, looks = {}) {
-  const matOpts = Object.entries(model.materials || {}).map(([id, m]) => `<option value="${esc(id)}">${esc(m.name || id)}</option>`).join('') + libraryMaterials().map(([id, m]) => `<option value="${esc(id)}">${esc(m.name || id)} (library)</option>`).join('');
+  const matOpts = materialOptionsHtml('');
   box.innerHTML = rows.map(r => `<div class="sideLook" data-room="${esc(r.key)}"><label>${esc(r.label)}
       <select class="sMode"><option value="">default</option><option value="color">colour</option><option value="material"${matOpts ? '' : ' disabled'}>material</option></select></label>
       <input type="color" class="sCol" title="Colour: ${esc(r.label)}"><select class="sMat">${matOpts}</select></div><div class="swatches"></div>`).join('');

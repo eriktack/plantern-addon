@@ -89,6 +89,7 @@ export const meta = {
   variantDefaults: {
     floor_standing: { concealedCistern: false, depth: 680 },
   },
+  sizeParams: { x: 'width', y: 'depth', z: { default: 'seatHeight', floor_standing: null } },
   placement: { mount: 'floor' },
 };
 

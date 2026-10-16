@@ -5,6 +5,9 @@ import { MM, toThree, dirToThree, prismGeometry, cylinderGeometry, barGeometry, 
 import { pointAlong, polylineLength } from '../geometry/strip.js';
 import { pickShadowLamps, SHADOW_COUNT } from '../model/shadows.js';
 import { lampReach } from '../geometry/leak.js';
+
+/** The faint ball round a lit object's light, clicked with the object (m, and its opacity off / on). */
+const LIT_HALO_RADIUS = 0.16, LIT_HALO_OFF = 0.1, LIT_HALO_ON = 0.2;
 import { installLampMask, setLampMasks, packMasks, decayFor, MAX_MASKS } from './lamp-mask.js';
 import { DEFAULT_NIGHT_LIGHT } from '../model/night.js';
 import { assetPlacement } from '../model/assets.js';
@@ -228,7 +231,7 @@ export function createView3d(container, hooks = {}) {
 
     // An asset object: its model replaces the object's box once loaded, at its footprint's centre and heading (the
     // model's own x axis is the object's width). A missing model leaves the box, in red with a red outline.
-    function placeAsset(o, geo, g, box) {
+    function placeAsset(o, geo, g, box, lit) {
       const fp = geo.objectFootprint(o);
       if (!fp) return;
       const { centre, z, heading } = assetPlacement(o, fp, geo.objectZ(o));   // a hosted object has no z of its own: its opening gives the height
@@ -244,6 +247,11 @@ export function createView3d(container, hooks = {}) {
           m.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
           g.add(m);
           if (box) box.visible = false;
+          // a lit object is its lamp (lit.js): its model is what is clicked to switch the light, not a ball at the light
+          if (lit) {
+            if (box) { const k = pickables.indexOf(box); if (k >= 0) pickables.splice(k, 1); }
+            m.traverse(c => { if (c.isMesh) { c.userData = { ...c.userData, fixture: lit, label: fixtureLabel(lit) }; pickables.push(c); } });
+          }
         } else {
           if (box) box.material.color.set(0xb00020);
           const [w, d, h] = o.size;
@@ -285,7 +293,7 @@ export function createView3d(container, hooks = {}) {
       g.add(m);
       if (p.kind === 'object') objectMeshes.set(p.id, m);
     }
-    if (assets) for (const o of level.objects || []) if (o.kind === 'asset') placeAsset(o, geo, g, objectMeshes.get(o.id));
+    if (assets) for (const o of level.objects || []) if (o.kind === 'asset') placeAsset(o, geo, g, objectMeshes.get(o.id), (level.fixtures || []).find(f => f.derived && f.id === o.id));
 
 
     for (const fx of level.fixtures || []) {
@@ -307,8 +315,23 @@ export function createView3d(container, hooks = {}) {
         light.shadow.bias = -0.002;
         light.shadow.camera.near = 0.05;
         g.add(bulb, light);
-        pickables.push(bulb);
-        fixtures.set(fx.id, { kind: 'lamp', bulb, light });
+        const box = fx.derived ? objectMeshes.get(fx.id) : null;
+        let halo = null;
+        if (box) {
+          // a lit object's lamp has no ball: the object is clicked (its box until its model has loaded, then the model)
+          bulb.visible = false;
+          box.userData = { ...box.userData, fixture: fx, label: fixtureLabel(fx) };
+          pickables.push(box);
+          // a small lamp is hard to hit from some sides: a faint ball round its light is clicked too (a little stronger while it is on)
+          halo = new THREE.Mesh(new THREE.SphereGeometry(LIT_HALO_RADIUS, 20, 14), new THREE.MeshBasicMaterial({ color: 0xffd6aa, transparent: true, opacity: LIT_HALO_OFF, depthWrite: false }));
+          halo.position.copy(at);
+          halo.name = `${fx.id}:halo`;
+          halo.userData = { fixture: fx, label: fixtureLabel(fx) };
+          halo.castShadow = false;
+          g.add(halo);
+          pickables.push(halo);
+        } else pickables.push(bulb);
+        fixtures.set(fx.id, { kind: 'lamp', bulb, light, halo });
       } else {
         const a = fx.attach && geo.resolveAttach(fx.attach);
         const box = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.02), new THREE.MeshStandardMaterial({ color: 0xdddddd }));
@@ -445,6 +468,7 @@ export function createView3d(container, hooks = {}) {
       f.light.visible = steadyLights || a.on;
       f.light.color.copy(col);
       f.light.intensity = a.on || !steadyLights ? (settings.render3d?.lampIntensity ?? 80) * a.brightness : 0;
+      if (f.halo) { f.halo.material.color.copy(a.on ? col : new THREE.Color(0xffd6aa)); f.halo.material.opacity = a.on ? LIT_HALO_ON : LIT_HALO_OFF; }
       f.bulb.material.color.set(a.available ? (a.on ? col : 0x555555) : 0x7a2a2a);
       f.bulb.material.emissive.copy(a.on ? col : new THREE.Color(0));
       f.bulb.material.emissiveIntensity = a.on ? 2 : 0;

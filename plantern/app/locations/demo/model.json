@@ -870,7 +870,6 @@
         }
       ],
       "fixtures": [
-        { "id": "f_k_lamp", "name": "Kitchen ceiling lamp", "kind": "lamp", "pos": [2500,2000], "z": 2400, "radius": 3600 },
         { "id": "f_l_lamp", "name": "Living room ceiling lamp", "kind": "lamp", "pos": [6558,1971], "z": 2400, "radius": 3600 },
         {
           "id": "f_k_switch",

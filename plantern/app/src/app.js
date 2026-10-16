@@ -27,6 +27,10 @@ import { shadowLevel, SHADOW_LEVELS, SHADOW_LABEL, SHADOW_COUNT } from './model/
 import { nightLight } from './model/night.js';
 import { northAngleOf } from './model/orientation.js';
 
+// nicer dropdowns (ND2): every select on the page is drawn as the page menu
+import { enhanceAll } from './select.js';
+enhanceAll();
+
 const params = new URLSearchParams(location.search);
 const status = t => ($('status').textContent = t);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -59,7 +63,15 @@ async function main() {
   let planReady = false;
   // Every model that has loaded changes the plan a little (its footprint, its colour). Fifty models loading one after another must not draw
   // the whole level fifty times, so the plan is drawn again after a quiet moment; the 3D view places each model itself when it arrives.
-  const planAfterAssets = coalesce(() => { if (planReady) drawPlan(); });
+  // A lit object's light arrives from the server after the first drawing: when that adds or moves a lamp, the whole level is drawn again
+  // (the 3D view builds its lights and what is clicked from the lamps it is given), otherwise the plan alone.
+  const litKey = () => model.levels.flatMap(l => (l.fixtures || []).filter(f => f.derived).map(f => `${f.id}@${f.pos}@${f.z}`)).join('|');
+  let litShown = '';
+  const planAfterAssets = coalesce(() => {
+    if (!planReady) return;
+    refreshLit();
+    if (litKey() !== litShown) showLevel(); else drawPlan();
+  });
   const assets = createAssetCache({ houseBase: baseUrl, sharedBase: '', house: house.id, onChange: planAfterAssets });
   for (const lv of model.levels) for (const o of lv.objects || []) if (o.kind === 'asset') assets.loadFor(o);
   // the design library's colours (decision 64, materials-library plan): a wall side may name one of them
@@ -75,6 +87,7 @@ async function main() {
   // a lit object is a lamp: its light comes from the server's build (assets.light), and is shown as a lamp of its level (lit.js)
   const refreshLit = () => addLitLamps(model, geos, o => assets.light(o) ?? o.light);
   refreshLit();
+  litShown = litKey();
   const allSnaps = model.levels.flatMap(l => collectSnapPoints(model, l, geos.get(l.id)));
   const snapIndex = new Map(allSnaps.map(s => [s.ref, s]));
 
@@ -182,6 +195,7 @@ async function main() {
   }
   function showLevel() {
     refreshLit();
+    litShown = litKey();
     planAfterAssets.cancel();                                      // this draws the plan now
     view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors() });
     if (view3d) build3d();

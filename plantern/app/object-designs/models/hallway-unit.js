@@ -107,6 +107,7 @@ export const meta = {
     shoe_rack: { width: 800, depth: 300, height: 600 },
     umbrella_stand: { width: 250, depth: 250, height: 500 },
   },
+  sizeParams: { x: 'width', y: 'depth', z: 'height' },
   placement: { mount: 'floor' },
 };
 

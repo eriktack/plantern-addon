@@ -116,15 +116,16 @@ export const meta = {
       key: 'material',
       label: 'Material (whole object)',
       type: 'material',
-      default: 'glass',
+      default: 'ceramic',
     },
   ],
   parts: [
     { key: 'base', label: 'Floor tray or curb' },
-    { key: 'screen', label: 'Glass walls' },
+    { key: 'screen', label: 'Glass walls', defaultMaterial: 'glass' },
     {
       key: 'door',
       label: 'Door',
+      defaultMaterial: 'glass',
       appliesTo: ['enclosed_stall', 'corner'],
     },
   ],
@@ -145,6 +146,8 @@ export const meta = {
       depth: 900,
     },
   },
+  sizeParams: { x: 'width', y: 'depth', z: 'height' },
+
   placement: { mount: 'floor' },
 };
 

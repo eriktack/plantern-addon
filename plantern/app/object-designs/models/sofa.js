@@ -96,6 +96,8 @@ export const meta = {
     corner_u: { width: 3000, depth: 950, height: 850, cornerLegLength: 2000 },
     sofa_bed: { width: 2000, depth: 950, height: 850, armStyle: 'square' },
   },
+  sizeParams: { x: 'width', y: { default: 'cornerLegLength', two_seat: null, three_seat: null, sofa_bed: null }, z: 'height' },
+
   placement: { mount: 'floor' },
 };
 

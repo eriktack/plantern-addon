@@ -229,3 +229,32 @@ dialog.pdialog .pbtns{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-e
 .menu.inline .menubtn{width:auto;padding:4px 10px;font-weight:500}
 h2 .menu.inline{text-transform:none;letter-spacing:0;font-size:13px}
 .psummary.inline{position:static;margin:8px 0 0;border:1px solid var(--bad);border-radius:6px}
+
+/* nicer dropdowns (ND1): the native select stays, hidden, as the source of its value; a colour swatch in a menu */
+.dd-native { display: none !important; }
+.ddsel { display: block; }
+.swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.25); flex: none; vertical-align: middle; }
+.menubtn .pic { display: inline-flex; flex: none; }
+.menubtn>.pic{flex:none}
+.menubtn>.lbl{flex:1}
+.menubtn .pic>svg:first-child{color:var(--acc)}
+.seg button.hasIcon { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.seg .oi { display: inline-flex; }
+.seg .oi svg { width: 20px; height: 20px; }
+/* the entity search (ND8): a dot for the state, a domain icon before the name */
+.pick .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: #555; }
+.pick .dot.on { background: #f5c04c; }
+.pick .dot.unavailable { background: #7a2a2a; }
+.pick .pic { display: inline-flex; vertical-align: middle; margin-right: 6px; }
+.pick .pic svg { width: 16px; height: 16px; }
+/* colour swatch menus beside a colour input (ND10) */
+.swatchpick { display: inline-block; width: 150px; vertical-align: middle; margin-left: 6px; }
+/* review of the first build: the material row’s menu takes the free width */
+.pform .mat .ddsel { flex: 1 1 auto; min-width: 0; }
+.pform .mat .ddsel .menubtn { width: 100%; }
+
+/* phone (ND12): the drawn menus are touch-sized: the button and each entry at least 44 px tall */
+@media (max-width: 600px) {
+  .ddsel .menubtn { min-height: 44px; font-size: 16px; }
+  .ddsel .menulist [role=menuitem] { min-height: 44px; font-size: 16px; }
+}

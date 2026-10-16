@@ -27,6 +27,10 @@ import { levelLabel } from '../model/names.js';
 import { askConfirm } from './dialog.js';
 import { HEADINGS, suggestAxis, lengthToReach, currentHeading, cornerPreview, parseAngle, parseLength, newWizard, addEdge, undo, pathPoints, finish, exportResult } from './wizard-state.js';
 
+// nicer dropdowns (ND12): the short kind choices are drawn as the menu; the long lists keep the browser select (data-native)
+import { enhanceAll } from '../select.js';
+enhanceAll();
+
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const params = new URLSearchParams(location.search);

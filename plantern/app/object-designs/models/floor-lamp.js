@@ -138,6 +138,7 @@ export const meta = {
       shadeShape: 'empire',
     },
   },
+  sizeParams: { z: 'height' },
   placement: { mount: 'floor', hosts: ['room', 'wall'] },
 };
 

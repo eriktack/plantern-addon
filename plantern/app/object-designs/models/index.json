@@ -1,6 +1,7 @@
 {
   "models": [
     "appliance.js",
+    "bathtub.js",
     "bed.js",
     "bench.js",
     "bookshelf.js",
@@ -12,9 +13,14 @@
     "dining-table.js",
     "floor-lamp.js",
     "hallway-unit.js",
+    "heat-pump-indoor.js",
     "kitchen-cabinet.js",
+    "kitchen-island.js",
     "mirror.js",
     "planter.js",
+    "radiator.js",
+    "rug.js",
+    "sauna-heater.js",
     "shower.js",
     "side-table.js",
     "sideboard.js",
@@ -22,11 +28,16 @@
     "sofa.js",
     "stool.js",
     "table-lamp.js",
+    "tile-stove.js",
     "toilet.js",
+    "towel-rail.js",
     "tv.js",
     "vanity.js",
     "wall-sconce.js",
     "wall-shelf.js",
-    "wardrobe.js"
+    "wardrobe.js",
+    "water-heater.js",
+    "wood-stove.js",
+    "workbench.js"
   ]
 }

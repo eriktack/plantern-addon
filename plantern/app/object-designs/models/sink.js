@@ -120,6 +120,7 @@ export const meta = {
       bowls: 1,
     },
   },
+  sizeParams: { x: 'width', y: 'depth', z: 'height' },
   placement: {
     mount: 'floor',
     z: 710,

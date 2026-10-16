@@ -168,6 +168,7 @@ export const meta = {
       builtIn: false,
     },
   },
+  sizeParams: { x: 'width', y: 'depth', z: 'height' },
   placement: {
     mount: 'floor',
     variants: {

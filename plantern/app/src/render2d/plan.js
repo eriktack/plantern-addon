@@ -22,6 +22,9 @@ export const el = (t, a = {}, parent) => {
   return e;
 };
 
+/** The lamp symbol in the plan: a light bulb about 220 mm tall, centred on the lamp (globe, neck, two lines for the base). */
+const BULB_PATH = 'M -46 52 C -118 12 -102 -104 0 -104 C 102 -104 118 12 46 52 Z M -40 74 H 40 M -28 96 H 28';
+
 /** A strip's many overlapping glows are each dimmer than a lamp's, so they add up to about one lamp's light. */
 const STRIP_GLOW = 0.55;
 /**
@@ -167,7 +170,7 @@ export function createPlanView(svg, hooks = {}) {
       if (fx.kind === 'strip') { drawStrip(fx, geo.fixtureLine(fx), fixtureLabel, defs, gFix, gLight, occ); continue; }
       const s = toSvg(c), g = el('g', { class: 'fix', transform: `translate(${s[0]} ${s[1]})` }, gFix);
       el('title', {}, g).textContent = fixtureLabel(fx);
-      fixEls[fx.id] = fx.kind === 'lamp' ? el('circle', { r: 120 }, g) : el('rect', { x: -90, y: -90, width: 180, height: 180, rx: 30 }, g);
+      fixEls[fx.id] = fx.kind === 'lamp' ? el('path', { d: BULB_PATH }, g) : el('rect', { x: -90, y: -90, width: 180, height: 180, rx: 30 }, g);
       g.addEventListener('click', ev => hooks.onFixtureClick?.(fx, ev));
       if (fx.kind === 'lamp' && fx.radius) {
         const gr = el('radialGradient', { id: 'g_' + fx.id, gradientUnits: 'userSpaceOnUse', cx: s[0], cy: s[1], r: fx.radius }, defs);

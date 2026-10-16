@@ -4,10 +4,11 @@
 //
 //   createMenu(host, { label, icon, entries, onPick, align })
 //     entries: an array, or a function returning one (asked each time the menu opens, so it follows what is selected):
-//       { id, label, hint?, icon?, group?, href?, disabled?: 'the reason' | true, current?: true }
+//       { id, label, hint?, icon?, swatch?, group?, href?, disabled?: 'the reason' | true, current?: true }
+//     swatch: a CSS colour drawn in place of the icon (materials; ND1)
 //     an entry with `href` is a link; any other calls onPick(entry) and closes the menu
 //     align: 'full' (as wide as the button, the page menu) or 'right' (opens to the left of the button's right edge)
-//   returns { button, setLabel(text), close() }
+//   returns { button, setLabel(text), setPicture({ icon?, swatch? }), close() }
 
 import { ICONS } from './icons.js';
 
@@ -28,16 +29,22 @@ export function groupEntries(entries) {
 /** Whether an entry can be picked: not disabled. */
 export const usable = e => !e.disabled;
 
+/** What an entry, or a button, shows before its label: its swatch (a colour) when it has one, else its icon. */
+export function pictureHtml(e) {
+  if (e.swatch) return `<i class="swatch" style="background:${esc(e.swatch)}"></i>`;
+  return e.icon ? (ICONS[e.icon] ?? e.icon) : '';
+}
+
 function itemHtml(e, index) {
   const off = !usable(e);
-  const body = `${e.icon ? (ICONS[e.icon] ?? e.icon) : ''}<span class="nt"><b>${esc(e.label)}</b>${off && typeof e.disabled === 'string' ? `<small class="why">${esc(e.disabled)}</small>` : e.hint ? `<small>${esc(e.hint)}</small>` : ''}</span>${e.current ? ICONS.check : ''}`;
+  const body = `${pictureHtml(e)}<span class="nt"><b>${esc(e.label)}</b>${off && typeof e.disabled === 'string' ? `<small class="why">${esc(e.disabled)}</small>` : e.hint ? `<small>${esc(e.hint)}</small>` : ''}</span>${e.current ? ICONS.check : ''}`;
   const attrs = `role="menuitem" data-i="${index}"${e.current ? ' class="on" aria-current="page"' : off ? ' class="off" aria-disabled="true"' : ''}`;
   return e.href && !off ? `<a ${attrs} href="${esc(e.href)}">${body}</a>` : `<button type="button" ${attrs}>${body}</button>`;
 }
 
 export function createMenu(host, { label, icon, entries, onPick = () => {}, align = 'full' }) {
   host.classList.add('menu', align === 'right' ? 'menu-right' : 'menu-full');
-  host.innerHTML = `<button type="button" class="menubtn" aria-haspopup="menu" aria-expanded="false">${icon ? (ICONS[icon] ?? icon) : ''}<span>${esc(label)}</span>${ICONS.chevron}</button><div class="menulist" role="menu" hidden></div>`;
+  host.innerHTML = `<button type="button" class="menubtn" aria-haspopup="menu" aria-expanded="false"><span class="pic">${pictureHtml({ icon })}</span><span class="lbl">${esc(label)}</span>${ICONS.chevron}</button><div class="menulist" role="menu" hidden></div>`;
   const button = host.querySelector('.menubtn'), list = host.querySelector('.menulist');
   let shown = [];
 
@@ -88,7 +95,8 @@ export function createMenu(host, { label, icon, entries, onPick = () => {}, alig
   });
   return {
     button,
-    setLabel(text) { button.querySelector('span').textContent = text; },
+    setLabel(text) { button.querySelector('.lbl').textContent = text; },
+    setPicture(entry) { button.querySelector('.pic').innerHTML = pictureHtml(entry); },
     close() { set(false); },
   };
 }

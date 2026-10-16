@@ -100,3 +100,9 @@ export function mainColourOf(parts) {
   for (const p of parts) if (p.colour && (!best || p.weight > best.weight)) best = p;
   return best ? best.colour : null;
 }
+
+/** The entries of the model menu (ND8): the names the house has, filtered by what is typed (case-insensitive, sorted). */
+export function assetEntries(names, query = '') {
+  const q = String(query ?? '').trim().toLowerCase();
+  return [...names].sort().filter(n => !q || n.toLowerCase().includes(q)).map(n => ({ id: n, label: n, icon: 'model' }));
+}
