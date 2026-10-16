@@ -145,6 +145,8 @@ export const meta = {
       worktop: false,
     },
   },
+  sizeParams: { y: { default: 'depth', base: null, base_drawer: null }, z: { default: 'height', base: null, base_drawer: null } },
+
   placement: {
     mount: 'floor',
     variants: { upper: { mount: 'wall', z: 1450 } },

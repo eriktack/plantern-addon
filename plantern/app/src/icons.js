@@ -2,6 +2,25 @@
 const svg = body => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 
 export const ICONS = {
+  // kinds (ND4): openings, the place of a hosted object, hinges and openings, levels, sensors
+  sill: svg('<rect x="6" y="4" width="12" height="11" rx="1"/><path d="M3 18h18"/>'),
+  head: svg('<rect x="6" y="9" width="12" height="11" rx="1"/><path d="M3 5h18"/>'),
+  free: svg('<rect x="7" y="11" width="10" height="8"/><path d="M4 21h16"/>'),
+  onWall: svg('<path d="M4 3v18"/><rect x="4" y="9" width="8" height="6"/>'),
+  inOpening: svg('<path d="M3 12h5M16 12h5"/><path d="M8 5v14M16 5v14"/><rect x="10" y="9" width="4" height="6"/>'),
+  hingeNear: svg('<path d="M4 4v16M4 4l12 3v13"/><circle cx="4" cy="6" r="1"/>'),
+  hingeFar: svg('<path d="M20 4v16M20 4 8 7v13"/><circle cx="20" cy="6" r="1"/>'),
+  hingesBoth: svg('<path d="M4 4v16M20 4v16"/><path d="M4 4l8 3v13M20 4l-8 3v13"/>'),
+  swingOut: svg('<path d="M4 4v16"/><path d="M4 4A14 14 0 0 1 18 18"/>'),
+  swingIn: svg('<path d="M4 4v16"/><path d="M4 20A14 14 0 0 0 18 6"/>'),
+  sliding: svg('<path d="M3 5h18"/><rect x="4" y="8" width="9" height="11" rx="1"/><path d="M16 13h4m-2-2 2 2-2 2"/>'),
+  pocket: svg('<path d="M3 4v16M21 4v16"/><rect x="8" y="9" width="8" height="6"/>'),
+  level: svg('<path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="m3 13 9 5 9-5"/>'),
+  chimney: svg('<rect x="7" y="4" width="10" height="17"/><path d="M9 4V2h6v2"/>'),
+  pillar: svg('<circle cx="12" cy="12" r="6"/>'),
+  colour: svg('<circle cx="12" cy="12" r="9"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="9" r="1.2"/><circle cx="12" cy="15" r="1.2"/>'),
+  light: svg('<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9V16h7v-2.1A6 6 0 0 0 12 3Z"/>'),
+  sensor: svg('<path d="M4 4h10v16H4z"/><circle cx="18" cy="12" r="2"/>'),
   // the page menu
   plan: svg('<path d="M9 4 3 6.5v13L9 17l6 3 6-2.5v-13L15 7 9 4Z"/><path d="M9 4v13M15 7v13"/>'),
   editor: svg('<path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>'),

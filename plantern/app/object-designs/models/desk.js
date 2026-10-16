@@ -110,6 +110,8 @@ export const meta = {
     l_shaped: { width: 1600, returnLength: 1200, cornerSide: 'right' },
     standing: { heightAdjustable: true, height: 1100 },
   },
+  sizeParams: { x: 'width', y: { default: 'depth', l_shaped: 'returnLength' }, z: 'height' },
+
   placement: { mount: 'floor' },
 };
 

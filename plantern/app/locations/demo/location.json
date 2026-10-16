@@ -6,7 +6,6 @@
   "model": "model.json",
   "integrations": { "ha": { "connection": "demo_mock" } },
   "bindings": {
-    "f_k_lamp": { "entity": "light.kitchen" },
     "f_l_lamp": { "entity": "light.living" },
     "f_k_switch": { "controls": ["f_l_lamp"] },
     "f_t_lamp": { "entity": "light.terrace" },
@@ -22,7 +21,8 @@
     "f_bed_sill_strip": { "entity": "light.bedroom_window" },
     "f_land_switch": { "controls": ["f_land_lamp","f_bath_lamp"] },
     "o_l_door": { "entity": "binary_sensor.entrance_door" },
-    "o_bed_doors": { "entity": "binary_sensor.bedroom_doors" }
+    "o_bed_doors": { "entity": "binary_sensor.bedroom_doors" },
+    "ob_ceiling_light_1": { "entity": "light.kitchen" }
   },
   "settings": {
     "cutPlane": 1200,

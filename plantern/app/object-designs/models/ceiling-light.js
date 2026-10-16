@@ -140,6 +140,8 @@ export const meta = {
       height: 150,
     },
   },
+  sizeParams: { x: { default: 'diameter', track_light: null }, y: { default: 'diameter', chandelier: null }, z: { default: 'height', pendant: null, chandelier: null } },
+
   placement: { mount: 'ceiling', hosts: ['room', 'head'] },
 };
 

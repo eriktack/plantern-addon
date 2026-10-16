@@ -133,6 +133,7 @@ export const meta = {
       drawers: 2,
     },
   },
+  sizeParams: { x: 'length', y: 'depth', z: 'height' },
   placement: { mount: 'floor' },
 };
 

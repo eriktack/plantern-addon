@@ -47,6 +47,7 @@ export const meta = {
     office: { width: 650, depth: 650, height: 1050, seatHeight: 480, arms: true, upholstered: true },
     lounge: { width: 750, depth: 800, height: 850, seatHeight: 420, arms: true, upholstered: true },
   },
+  sizeParams: { x: 'width', y: 'depth', z: 'height' },
   placement: { mount: 'floor' },
 };
 

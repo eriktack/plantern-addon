@@ -146,6 +146,8 @@ export const meta = {
       baseShape: 'pole',
     },
   },
+  sizeParams: { x: { default: 'shadeDiameter', orb: null }, y: { default: 'shadeDiameter', orb: null, desk_arm: null }, z: 'height' },
+
   placement: { mount: 'floor', z: 720, hosts: ['room', 'sill'] },
 };
 

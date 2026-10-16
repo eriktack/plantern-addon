@@ -114,6 +114,8 @@ export const meta = {
       footboard: false,
     },
   },
+  sizeParams: { z: { default: 'height', standard: null, platform: null, storage_bed: null, daybed: null } },
+
   placement: { mount: 'floor' },
 };
 

@@ -78,6 +78,8 @@ export const meta = {
     nesting_pair: { length: 900, width: 550, height: 450 },
     with_shelf: { shelf: true },
   },
+  sizeParams: { x: { default: 'length', nesting_pair: null }, y: 'width', z: 'height' },
+
   placement: { mount: 'floor' },
 };
 

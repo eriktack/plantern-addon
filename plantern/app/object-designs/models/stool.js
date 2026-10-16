@@ -33,6 +33,7 @@ export const meta = {
     { key: 'seat', label: 'Seat' },
     { key: 'legs', label: 'Legs' },
   ],
+  sizeParams: { x: 'diameter', y: 'diameter', z: 'seatHeight' },
   placement: { mount: 'floor' },
 };
 

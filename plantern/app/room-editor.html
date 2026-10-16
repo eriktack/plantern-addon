@@ -165,7 +165,7 @@
       <label>Ceiling height <small>mm; empty = the level's <span id="rCeilNote"></span></small><input id="rCeil" inputmode="numeric" autocomplete="off"></label>
     </div>
     <div class="grid2" id="solidFields" hidden>
-      <label>Kind<select id="sKind"><option value="chimney">chimney</option><option value="pillar">pillar</option><option value="box">boxed-in pipe or duct</option></select></label>
+      <label>Kind<select id="sKind"><option value="chimney" data-icon="chimney">chimney</option><option value="pillar" data-icon="pillar">pillar</option><option value="box" data-icon="box">boxed-in pipe or duct</option></select></label>
       <label>Shape<select id="sShape"><option value="outline">measured walking round it</option><option value="round">round: a diameter</option></select></label>
       <label>Colour<input type="color" id="sColor"></label>
       <label>Base <small>mm above the floor (boxing under the ceiling: its underside; negative: down through the slab) <a href="#" id="sBaseDown" title="Start at the ceiling of the level below, so the chimney has no gap through the floor">↧ to the ceiling below</a></small><input id="sBase" inputmode="numeric" placeholder="0" autocomplete="off"></label>
@@ -342,7 +342,7 @@
     <label>Measured from <small>the corner the position counts from (marked “from here” on the plan)</small><select id="oFrom"></select> <button type="button" id="oFromPick" title="Click the corner on the plan instead (every corner along the wall is marked)">On the plan</button></label>
     <div class="grid2">
       <label>Type
-        <select id="oType"><option value="door">door</option><option value="window">window</option><option value="passage">passage (no door)</option></select></label>
+        <select id="oType"><option value="door" data-icon="door">door</option><option value="window" data-icon="window">window</option><option value="passage" data-icon="passage">passage (no door)</option></select></label>
       <label class="inl" id="oMeasuredRow"><input type="checkbox" id="oMeasured"> all values measured</label>
       <label>Position <small id="oOffsetNote">mm to the near edge</small><input id="oOffset" inputmode="numeric" autocomplete="off"></label>
       <label>Width <small>mm</small><input id="oWidth" inputmode="numeric" autocomplete="off"></label>
@@ -352,11 +352,11 @@
       <label>Below ceiling <small id="oBelowNote">mm, top to ceiling</small><input id="oBelow" inputmode="numeric" autocomplete="off"></label>
     </div>
     <label id="oDoorOpensRow">Door opens
-      <select id="oDoorOpens"><option value="swing">on hinges (swings)</option><option value="sliding">sliding along the wall</option><option value="pocket">sliding into the wall (pocket)</option></select></label>
+      <select id="oDoorOpens"><option value="swing" data-icon="swingOut">on hinges (swings)</option><option value="sliding" data-icon="sliding">sliding along the wall</option><option value="pocket" data-icon="pocket">sliding into the wall (pocket)</option></select></label>
     <label id="oOpensRow">Window opens
       <select id="oOpens"><option value="fixed">fixed (does not open)</option><option value="side-hung">side-hung (like a door)</option><option value="top-hung">top-hung</option><option value="bottom-hung">bottom-hung</option><option value="tilt-turn">tilt-turn</option><option value="sliding">sliding</option></select></label>
     <div class="grid2" id="oLeafRow">
-      <label><span id="oHingeLbl">Hinge</span> <select id="oHinge"><option value="near">near edge</option><option value="far">far edge</option><option value="both">both sides (double)</option></select></label>
+      <label><span id="oHingeLbl">Hinge</span> <select id="oHinge"><option value="near" data-icon="hingeNear">near edge</option><option value="far" data-icon="hingeFar">far edge</option><option value="both" data-icon="hingesBoth">both sides (double)</option></select></label>
       <label id="oSwingRow"><span id="oSwingLbl">Opens into</span> <select id="oSwing"><option value="right">right</option><option value="left">left</option></select></label>
     </div>
     <label id="oThickRow">Thickness of the <span id="oThickWhat">window</span> itself <small>mm, its frame or leaf (not the hole in the wall); empty = not measured</small><input id="oThick" inputmode="numeric" autocomplete="off"></label>
@@ -439,9 +439,9 @@
     <h2>Object <span id="obTitle"></span></h2>
     <div id="obInfo" class="help"></div>
     <div id="obPlacedRow">
-      <label>Placed <select id="obPlaced"><option value="room">in the room</option><option value="wall">on a wall</option><option value="opening">in an opening</option></select></label>
+      <label>Placed <select id="obPlaced"><option value="room" data-icon="free">in the room</option><option value="wall" data-icon="onWall">on a wall</option><option value="opening" data-icon="inOpening">in an opening</option></select></label>
       <label id="obOpeningRow" hidden>Opening <select id="obOpening"></select></label>
-      <label id="obAtRow" hidden>Stands <select id="obAt"><option value="sill">on the sill</option><option value="head">at the head</option></select></label>
+      <label id="obAtRow" hidden>Stands <select id="obAt"><option value="sill" data-icon="sill">on the sill</option><option value="head" data-icon="head">at the head</option></select></label>
       <div id="obPlacedNote" class="help"></div>
     </div>
     <div id="obBlueprint" class="help" hidden></div>

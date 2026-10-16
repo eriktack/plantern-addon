@@ -5,6 +5,10 @@
 import { remember } from '../model/current.js';
 import { initHa } from './ha.js';
 
+// nicer dropdowns (ND2): every select on the page is drawn as the page menu
+import { enhanceAll } from '../select.js';
+enhanceAll();
+
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const api = async (path, body, method = body ? 'POST' : 'GET') => {

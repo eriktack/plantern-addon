@@ -49,12 +49,12 @@
 
   <section id="s-setup">
     <h1>Measure a room</h1>
-    <div class="sel"><select id="loc" aria-label="Location"></select><select id="level" aria-label="Level"></select></div>
+    <div class="sel"><select data-native id="loc" aria-label="Location"></select><select data-native id="level" aria-label="Level"></select></div>
     <div id="levelMsg" class="help"></div>
     <label class="f">Room name<input id="name" class="big" autocomplete="off" placeholder="e.g. Kitchen"></label>
     <label class="f" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="exterior"> Outdoors (balcony, terrace)</label>
     <label class="f" id="sameAsRow">Same shape as <small>a room already measured: no walls to measure, just where it starts (on the level below or above it goes exactly on top)</small>
-      <select id="sameAs" class="big" style="font-size:16px;padding:10px"></select></label>
+      <select data-native id="sameAs" class="big" style="font-size:16px;padding:10px"></select></label>
     <label class="f">Where is corner 0, the corner you start in?</label>
     <div class="dirs" id="placeMode" style="grid-template-columns:1fr 1fr">
       <button data-m="point" class="on">At a point</button><button data-m="wall">Next to another room</button>
@@ -62,7 +62,7 @@
     <div id="placePoint">
       <div class="f">Start from <small>(tap a corner on the map)</small></div>
       <details class="pickList"><summary>or pick it from a list</summary>
-        <label class="f">Point <select id="originRef" class="big" style="font-size:16px;padding:10px"></select></label></details>
+        <label class="f">Point <select data-native id="originRef" class="big" style="font-size:16px;padding:10px"></select></label></details>
       <div class="two" style="margin:2px 0">
         <label class="f" style="margin:0">Offset x <small>mm, east</small><input id="ox" class="big" inputmode="numeric" placeholder="0" autocomplete="off" style="font-size:18px;padding:10px"></label>
         <label class="f" style="margin:0">Offset y <small>mm, north</small><input id="oy" class="big" inputmode="numeric" placeholder="0" autocomplete="off" style="font-size:18px;padding:10px"></label>
@@ -71,7 +71,7 @@
     </div>
     <div id="placeWall" hidden>
       <div class="help"><b>Tap the wall on the map</b> that you share with the room next door (or pick it here). Corner 0 goes on the <b>far side</b> of that wall, and your first wall runs back along it, so the two rooms end up sharing one wall.</div>
-      <select id="edgeSel" class="big" style="font-size:16px;padding:10px;margin-top:6px"></select>
+      <select data-native id="edgeSel" class="big" style="font-size:16px;padding:10px;margin-top:6px"></select>
       <div class="two" style="margin:6px 0 2px">
         <label class="f" style="margin:0">Wall thickness <small>mm, face to face</small><input id="edgeT" class="big" inputmode="numeric" autocomplete="off" style="font-size:18px;padding:10px"></label>
         <label class="f" style="margin:0">Start <small>mm from the green end</small><input id="edgeSlide" class="big" inputmode="numeric" placeholder="0" autocomplete="off" style="font-size:18px;padding:10px"></label>
@@ -99,7 +99,7 @@
       <div class="two"><button data-axis="x" id="axX">until x =</button><button data-axis="y" id="axY">until y =</button></div>
       <div class="two"><input id="reachVal" class="big" inputmode="numeric" placeholder="mm, e.g. 3000" autocomplete="off"></div>
       <div class="help">or tap the point on the map (every point is marked while this is open)</div>
-      <details class="pickList"><summary>or pick it from a list</summary><select id="reachPt" class="big" style="font-size:15px;padding:8px"></select></details>
+      <details class="pickList"><summary>or pick it from a list</summary><select data-native id="reachPt" class="big" style="font-size:15px;padding:8px"></select></details>
       <div class="help" id="reachOut"></div>
     </div>
     <div class="err" id="err"></div>

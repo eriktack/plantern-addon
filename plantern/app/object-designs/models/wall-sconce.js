@@ -95,6 +95,8 @@ export const meta = {
   variantDefaults: {
     swing_arm: { projection: 350 },
   },
+  sizeParams: { x: 'width', z: 'height' },
+
   placement: { mount: 'wall', z: 1600, hosts: ['wall'] },
 };
 

@@ -5,6 +5,7 @@
 // Each field is checked as it changes and shows its own message; the preview waits for a short pause
 // and builds only what it shows. glTF and GLB are built when the person downloads (docs/archive/2026-10-14-object-catalog-ux.md).
 
+import { groupBlueprints } from '../src/blueprints/kinds.js';
 import { createPreview } from './preview.js';
 import { buildModel } from './lib/build.js';
 import { placementOf, resolveParams } from './lib/params.js';
@@ -13,6 +14,10 @@ import { geomToMesh, addPlanarUvs, triangleCount } from './lib/geom.js';
 import { createParamForm } from '../src/param-form.js';
 import { wirePanelResize } from '../src/panel-resize.js';
 import { openHouseContext, wireHousePanel } from './house-context.js';
+
+// nicer dropdowns (ND2): every select on the page is drawn as the page menu
+import { enhanceAll } from '../src/select.js';
+enhanceAll();
 
 const $ = id => document.getElementById(id);
 
@@ -188,10 +193,19 @@ try {
   if (models.length === 0) {
     form.setBuildError('No models found in models/. Copy _template.js to a new file to start.');
   } else {
-    for (const m of models) {
-      const opt = document.createElement('option');
-      opt.textContent = m.source === 'house' ? `${m.mod.meta.name} · this house` : m.mod.meta.name;
-      $('picker').append(opt);
+    // grouped by kind (ND11): the models are put in the order the groups show them, so the option index is the model's index
+    const grouped = groupBlueprints(models.map(m => ({ ...m, id: m.mod.meta.id, name: m.mod.meta.name })));
+    models = grouped.flatMap(g => g.items);
+    for (const g of grouped) {
+      const og = document.createElement('optgroup');
+      og.label = g.group;
+      for (const m of g.items) {
+        const opt = document.createElement('option');
+        opt.textContent = m.source === 'house' ? `${m.mod.meta.name} · this house` : m.mod.meta.name;
+        opt.dataset.icon = m.kind.icon;
+        og.append(opt);
+      }
+      $('picker').append(og);
     }
     selectModel(0);
   }

@@ -1,4 +1,7 @@
 import { labelOf } from '../object-designs/lib/params.js';
+import { materialKind, materialSwatch, MATERIAL_KINDS } from './model/material-kind.js';
+import { optionIcon } from './option-icons.js';
+import { ICONS } from './icons.js';
 
 // The form controls for a blueprint's parameters (docs/archive/2026-10-14-object-templates.md, task 9; first built for the catalog,
 // docs/archive/2026-10-14-object-catalog-ux.md). Browser only. Each control is a field: a frame (the name and unit above, the control,
@@ -154,7 +157,16 @@ export function choiceField(d, value, onChange) {
   const buttons = d.options.map(o => {
     const b = document.createElement('button');
     b.type = 'button';
-    b.textContent = labelOf(d, o);
+    // the option's drawing above its label (ND5), when it has one
+    const icon = optionIcon(d.key, o);
+    if (icon) {
+      const pic = document.createElement('span');
+      pic.className = 'oi';
+      pic.innerHTML = ICONS[icon];
+      b.append(pic);
+      b.classList.add('hasIcon');
+    }
+    b.append(labelOf(d, o));
     b.addEventListener('click', () => {
       chosen = String(o);
       paint();
@@ -187,6 +199,8 @@ export function selectField(d, value, onChange) {
     const option = document.createElement('option');
     option.value = String(o);
     option.textContent = labelOf(d, o);
+    const icon = optionIcon(d.key, o);
+    if (icon) option.dataset.icon = icon;   // the menu shows it before the label (ND5)
     select.append(option);
   }
   select.value = String(value);
@@ -222,16 +236,31 @@ export function materialField(spec, { library = {}, options = null, hint, whole,
   first.value = '';
   first.textContent = whole ? `Default: ${fallback}` : partDefault ? `Default: ${partDefault}` : 'Same as the whole object';
   select.append(first);
+  // the names grouped by kind (wood, paint, metal, …), each with its swatch (ND3); a name the library does not know is grey, in Other
+  const groups = new Map();
   for (const name of names) {
-    const option = document.createElement('option');
-    option.value = name;
-    option.textContent = name;
-    select.append(option);
+    const entry = library[name] ?? {}, { label } = materialKind(name, entry);
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push({ name, entry });
+  }
+  for (const { label } of MATERIAL_KINDS) {
+    if (!groups.has(label)) continue;
+    const group = document.createElement('optgroup');
+    group.label = label;
+    for (const { name, entry } of groups.get(label)) {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      option.dataset.swatch = materialSwatch(entry);
+      group.append(option);
+    }
+    select.append(group);
   }
   if (allowCustom) {
     const custom = document.createElement('option');
     custom.value = 'custom';
     custom.textContent = 'Custom colour…';
+    custom.dataset.swatch = '#b08040';   // follows the colour picked (below)
     select.append(custom);
   }
 
@@ -264,6 +293,7 @@ export function materialField(spec, { library = {}, options = null, hint, whole,
     bar.style.color = hex ? inkOn(hex) : '#d9dde4';
     const label = !v ? 'none' : choice ? v : partDefault ? `Default: ${v}` : inherit ? `Same as the whole object: ${v}` : `Default: ${v}`;
     bar.textContent = entry?.texture ? `${label} · texture` : label;
+    bar.hidden = select.value !== 'custom';   // the button shows the material; the bar is for a custom colour (review 2)
   };
   select.addEventListener('change', () => {
     showColour(select.value === 'custom');
@@ -271,6 +301,8 @@ export function materialField(spec, { library = {}, options = null, hint, whole,
     onChange();
   });
   colour.addEventListener('input', () => {
+    const custom = select.querySelector('option[value="custom"]');
+    if (custom) custom.dataset.swatch = colour.value;   // the menu's swatch for Custom colour… follows the picker
     paint();
     onChange();
   });

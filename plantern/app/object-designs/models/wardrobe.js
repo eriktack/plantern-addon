@@ -124,6 +124,7 @@ export const meta = {
     built_in_closet: { height: 2400, width: 1500 },
     narrow: { width: 600, depth: 400 },
   },
+  sizeParams: { x: 'width', y: 'depth', z: 'height' },
   placement: { mount: 'floor' },
 };
 

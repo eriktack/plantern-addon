@@ -80,6 +80,7 @@ export const meta = {
     round: { width: 600, height: 600 },
     medicine_cabinet: { depth: 120, height: 700 },
   },
+  sizeParams: { x: 'width', y: 'depth', z: 'height' },
   placement: { mount: 'wall', z: 1100 },
 };
 

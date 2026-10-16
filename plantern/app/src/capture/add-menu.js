@@ -63,9 +63,10 @@ export function addEntries(ctx) {
     add('blueprints-off', 'From the library', 'blueprint', group, '', "Needs Plantern's server");
   } else {
     for (const b of blueprints) {
-      add(`blueprint:${b.id}`, b.name || b.id, 'blueprint', group, `${b.source === 'house' ? 'This house' : 'Library'}${b.light ? ' · gives light' : ''}${(b.summary || b.description) ? ` · ${b.summary || b.description}` : ''}`, objectsOff);
+      add(`blueprint:${b.id}`, b.name || b.id, kindOf(b.id).icon, kindOf(b.id).group, `${b.source === 'house' ? 'This house' : 'Library'}${b.light ? ' · gives light' : ''}${(b.summary || b.description) ? ` · ${b.summary || b.description}` : ''}`, objectsOff);
     }
   }
   if (where !== 'wall') for (const name of models) add(`model:${name}`, name, 'model', 'Model files', 'A model from assets/', objectsOff);
   return out;
 }
+import { kindOf } from '../blueprints/kinds.js';

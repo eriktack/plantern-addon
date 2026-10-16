@@ -123,6 +123,7 @@ export const meta = {
     wall_mounted: { height: 800 },
     with_cabinet: { doors: 2, drawers: 1 },
   },
+  sizeParams: { x: 'width', y: 'depth', z: { default: 'height', wall_mounted: null } },
   placement: {
     mount: 'floor',
     variants: {
