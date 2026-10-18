@@ -51,7 +51,7 @@ function optionsOf(select) {
  * Keys: a letter picks the next option that starts with it (as a browser select does); the arrows open the list.
  */
 export function enhanceSelect(select) {
-  if (select.dataset.enhanced || select.dataset.native !== undefined || select.multiple) return null;
+  if (select.dataset.enhanced || select.dataset.native !== undefined || select.dataset.seg !== undefined || select.multiple) return null;   // data-seg: a row of buttons (src/segmented.js)
   select.dataset.enhanced = '1';
   const wrap = document.createElement('div');
   wrap.className = 'ddsel';
@@ -107,19 +107,32 @@ export function enhanceSelect(select) {
 
 
 /**
- * Draws every select under root as a menu, and every one added later (the Editor and the object forms build theirs as they go).
- * Selects marked data-native, and multi-selects, stay as they are. Returns the observer.
+ * The added nodes worth looking at for selects, from the records of a MutationObserver: elements only, and not those added inside `skip` (a CSS selector
+ * for the places that never get a select but are rebuilt all the time: the Editor's plan and tree, PF16) nor inside any SVG. Pure apart from `closest`.
  */
-export function enhanceAll(root = document) {
+export function nodesToScan(records, skip = '') {
+  const out = [];
+  const inside = el => !!el?.closest?.(skip ? `svg, ${skip}` : 'svg');
+  for (const r of records) {
+    if (!r.addedNodes?.length || inside(r.target)) continue;                    // one test per record: the plan's rebuild is one record with hundreds of nodes
+    for (const n of r.addedNodes) if (n.nodeType === 1 && n.tagName?.toLowerCase() !== 'svg') out.push(n);
+  }
+  return out;
+}
+
+/**
+ * Draws every select under root as a menu, and every one added later (the Editor and the object forms build theirs as they go).
+ * Selects marked data-native, and multi-selects, stay as they are. `skip`: a selector for places that are rebuilt a lot and never hold a select,
+ * which the observer then leaves alone (PF16). Returns the observer.
+ */
+export function enhanceAll(root = document, { skip = '' } = {}) {
   const each = node => {
     if (node instanceof HTMLSelectElement) enhanceSelect(node);
     else node.querySelectorAll?.('select').forEach(enhanceSelect);
   };
   const top = root.body ?? root;
   each(top);
-  const observer = new MutationObserver(records => {
-    for (const r of records) for (const n of r.addedNodes) if (n.nodeType === 1 && !n.closest('svg')) each(n);   // the plan's SVG holds no select
-  });
+  const observer = new MutationObserver(records => { for (const n of nodesToScan(records, skip)) each(n); });
   observer.observe(top, { childList: true, subtree: true });
   return observer;
 }

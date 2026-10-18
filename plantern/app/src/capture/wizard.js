@@ -6,7 +6,7 @@ import { resolveSettings } from '../model/settings.js';
 import { toSvg } from '../render2d/coords.js';
 import { buildLevelGeometry } from '../geometry/level.js';
 import { collectSnapPointsAround, adjacentOutlines } from '../tools/snap.js';
-import { startOptions, resolveStart, placeAgainstEdge, edgeWallThickness } from './start.js';
+import { startOptions, resolveStart, placeAgainstEdge, edgeWallThickness, onePerPlace } from './start.js';
 import { bearingFromHeading, headingFromBearing, northAngleOf, roundDeg } from '../model/orientation.js';
 import { download } from '../export/download.js';
 import { addRoom, blockingErrors } from '../edit/ops.js';
@@ -619,13 +619,20 @@ function drawMap() {
   }
   if (phase === 'setup' && !w.nextTo) {
     // tappable corners of existing rooms: choose the start corner
+    // one dot per place (UX32): where two rooms meet, or a corner of the level below is right under one, a single dot
+    const corners = onePerPlace([
+      ...existing.flatMap(r => r.polygon.map((p, i) => ({ ref: `${r.id}#p${i}`, pos: p }))),
+      ...snaps.filter(s => s.adjacent && /^r_[^#]+#p\d+$/.test(s.ref)),
+    ]);
+    const mine = new Set(corners.filter(c => !c.adjacent).map(c => c.ref));
     for (const r of existing) r.polygon.forEach(p => {
+      if (!mine.has(`${r.id}#p${r.polygon.indexOf(p)}`)) return;
       const [x, y] = toSvg(p), on = `${r.id}#p${r.polygon.indexOf(p)}` === w.origin.ref;
       // a generous invisible tap target around a small ring
       out += `<g data-ref="${r.id}#p${r.polygon.indexOf(p)}" style="cursor:pointer"><circle cx="${x}" cy="${y}" r="${fs * 1.1}" fill="transparent"/><circle cx="${x}" cy="${y}" r="${fs * 0.45}" fill="${on ? '#ffb454' : '#14161a'}" stroke="#ffb454" stroke-width="${fs / 8}"/></g>`;
     });
-    for (const s of snaps) {
-      if (!s.adjacent || !/^r_[^#]+#p\d+$/.test(s.ref)) continue;
+    for (const s of corners) {
+      if (!s.adjacent) continue;
       const [x, y] = toSvg(s.pos), on = s.ref === w.origin.ref;
       const c = s.relation === 'above' ? '#d6a56b' : '#7aa2d6', no = nameOpts();
       out += `<g data-ref="${esc(s.ref)}" style="cursor:pointer"><title>${esc(no.name(s.ref))} · ${esc(no.levelName(s.level))}</title><circle cx="${x}" cy="${y}" r="${fs * 0.9}" fill="transparent"/><circle cx="${x}" cy="${y}" r="${fs * 0.4}" fill="${on ? c : 'none'}" stroke="${c}" stroke-width="${fs / 8}" pointer-events="none"/></g>`;

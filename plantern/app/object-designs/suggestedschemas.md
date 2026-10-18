@@ -3996,3 +3996,199 @@ Per generator:
   ]
 }
 ```
+
+```json
+{
+  "category": "misc",
+  "generators": [
+    {
+      "id": "cat_tree",
+      "parameters": [
+        {
+          "key": "variant",
+          "label": "Variant",
+          "type": "enum",
+          "options": [
+            "tension_pole",
+            "freestanding"
+          ],
+          "default": "tension_pole"
+        },
+        {
+          "key": "height",
+          "label": "Height",
+          "type": "number",
+          "unit": "mm",
+          "default": 2400,
+          "min": 800,
+          "max": 3200,
+          "step": 10
+        },
+        {
+          "key": "platforms",
+          "label": "Platforms",
+          "type": "integer",
+          "default": 4,
+          "min": 2,
+          "max": 6
+        },
+        {
+          "key": "platformSize",
+          "label": "Platform size",
+          "type": "number",
+          "unit": "mm",
+          "default": 400,
+          "min": 300,
+          "max": 550,
+          "step": 10
+        },
+        {
+          "key": "postDiameter",
+          "label": "Post diameter",
+          "type": "number",
+          "unit": "mm",
+          "default": 90,
+          "min": 60,
+          "max": 140,
+          "step": 5
+        },
+        {
+          "key": "baseSize",
+          "label": "Base size",
+          "type": "number",
+          "unit": "mm",
+          "default": 600,
+          "min": 400,
+          "max": 800,
+          "step": 10
+        },
+        {
+          "key": "cave",
+          "label": "Cave",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "key": "material",
+          "label": "Material (whole object)",
+          "type": "material",
+          "default": "fabric"
+        }
+      ],
+      "variant_defaults": {
+        "freestanding": {
+          "height": 1500
+        }
+      },
+      "parts": [
+        [
+          "post",
+          "Post"
+        ],
+        [
+          "platforms",
+          "Platforms"
+        ],
+        [
+          "base",
+          "Base and ceiling plate"
+        ],
+        [
+          "cave",
+          "Cave"
+        ]
+      ],
+      "placement": {
+        "mount": "floor"
+      },
+      "notes": [
+        "A cat climbing tree. `tension_pole` runs from the floor to the ceiling (the height is the ceiling height; a plate at each end, the platforms spaced evenly below the top 450 mm); `freestanding` stands on a round base with the top platform on the post. The platforms are discs set round the post at changing angles. `baseSize` is the freestanding base only. The cave is a small hollow box with a round entrance on the second platform (a part that exists only when `cave` is on). The post is wrapped in sisal in reality: it defaults to the library's birch until a sisal material is added."
+      ]
+    },
+    {
+      "id": "chest",
+      "parameters": [
+        {
+          "key": "variant",
+          "label": "Variant",
+          "type": "enum",
+          "options": [
+            "blanket_chest",
+            "trunk",
+            "toy_box"
+          ],
+          "default": "blanket_chest"
+        },
+        {
+          "key": "width",
+          "label": "Width",
+          "type": "number",
+          "unit": "mm",
+          "default": 1000,
+          "min": 400,
+          "max": 1500,
+          "step": 10
+        },
+        {
+          "key": "depth",
+          "label": "Depth",
+          "type": "number",
+          "unit": "mm",
+          "default": 450,
+          "min": 300,
+          "max": 700,
+          "step": 10
+        },
+        {
+          "key": "height",
+          "label": "Height",
+          "type": "number",
+          "unit": "mm",
+          "default": 450,
+          "min": 300,
+          "max": 900,
+          "step": 10
+        },
+        {
+          "key": "material",
+          "label": "Material (whole object)",
+          "type": "material",
+          "default": "pine"
+        }
+      ],
+      "variant_defaults": {
+        "trunk": {
+          "width": 900,
+          "depth": 500,
+          "height": 600
+        },
+        "toy_box": {
+          "width": 800,
+          "depth": 400,
+          "height": 450
+        }
+      },
+      "parts": [
+        [
+          "body",
+          "Body"
+        ],
+        [
+          "lid",
+          "Lid"
+        ],
+        [
+          "fittings",
+          "Bands and lock"
+        ]
+      ],
+      "placement": {
+        "mount": "floor"
+      },
+      "notes": [
+        "A storage chest (Swedish kista). `blanket_chest` has a flat 30 mm lid on a 60 mm plinth and a lock plate; `trunk` has an arched lid and two metal straps over it; `toy_box` is a plain low box with a flat lid and a hand slot in each end (no fittings). The lid is closed; the overall width, depth and height are exact."
+      ]
+    }
+  ]
+}
+```

@@ -1,4 +1,4 @@
-// What the Editor's Add menus offer (docs/plans/editor-objects-ux.md, tasks 6 to 8): the entries for the house view, a selected
+// What the Editor's Add menus offer (docs/archive/2026-10-14-editor-objects-ux.md, tasks 6 to 8): the entries for the house view, a selected
 // room, a wall and an opening, each with a reason when it cannot be used now. Pure: the page says what is selected and what the
 // house has, and does the adding (src/capture/ui.js); the menu itself is src/menu.js.
 
@@ -19,7 +19,6 @@ export function addEntries(ctx) {
   const out = [];
   const add = (id, label, icon, group, hint, disabled) => out.push({ id, label, icon, group, hint, ...(disabled ? { disabled } : {}) });
   const noRoom = hasRooms ? false : 'Add a room first';
-  const needRoom = roomSelected ? false : 'Select a room first';
 
   if (where === 'opening') {
     add('openingLamp', 'Lamp in it', 'lamp', 'Lights', 'A window star, or a lamp on the sill');
@@ -52,7 +51,8 @@ export function addEntries(ctx) {
     add('wallLamp', 'Wall lamp', 'lamp', 'Lights', 'On this wall');
     add('strip', 'LED strip', 'strip', 'Lights', 'Along this wall: under a cabinet, behind a TV');
   } else {
-    add('ceilingLamp', 'Ceiling lamp', 'lamp', 'Lights', 'In the middle of the room', where === 'room' ? false : needRoom);
+    // placed with a click in a room (ui-consistency plan, UX10), so no room needs to be selected first
+    add('ceilingLamp', 'Ceiling lamp', 'lamp', 'Lights', where === 'room' ? 'Click where it goes in this room' : 'Click in the room where it goes', where === 'room' ? false : noRoom);
   }
 
   const here = where === 'wall' ? 'on this wall' : where === 'room' ? 'in this room' : 'in the middle of the room';

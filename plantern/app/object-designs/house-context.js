@@ -80,9 +80,9 @@ export function wireHousePanel(ctx, page) {
   };
   function fillPlace() {
     const { rooms, walls, openings } = placeOptions(level());
-    $('hOpening').innerHTML = openings.length ? openings.map(o => `<option value="${esc(o.id)}">${esc(o.label)}</option>`).join('') : '<option value="">no doors or windows on this level</option>';
-    $('hRoom').innerHTML = rooms.length ? rooms.map(r => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('') : '<option value="">no rooms on this level</option>';
-    $('hWall').innerHTML = walls.length ? walls.map(w => `<option value="${esc(w.id)}">${esc(w.label)}</option>`).join('') : '<option value="">no walls on this level</option>';
+    $('hOpening').innerHTML = openings.length ? openings.map(o => `<option value="${esc(o.id)}" data-hint="${esc(o.hint ?? '')}">${esc(o.label)}</option>`).join('') : '<option value="">no doors or windows on this level</option>';
+    $('hRoom').innerHTML = rooms.length ? rooms.map(r => `<option value="${esc(r.id)}" data-hint="${esc(r.hint ?? '')}">${esc(r.name)}</option>`).join('') : '<option value="">no rooms on this level</option>';
+    $('hWall').innerHTML = walls.length ? walls.map(w => `<option value="${esc(w.id)}" data-hint="${esc(w.hint ?? '')}">${esc(w.label)}</option>`).join('') : '<option value="">no walls on this level</option>';
     const first = rooms[0];
     if (first && $('hX').value === '') { $('hX').value = first.centre[0]; $('hY').value = first.centre[1]; }
     pickRoom();

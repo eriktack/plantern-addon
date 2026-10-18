@@ -23,3 +23,20 @@ export function wallHint(wall, roomNames = []) {
   const L = Math.round(Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]));
   return [`${L} mm`, ...roomNames].join(' · ');
 }
+
+/**
+ * Items grouped by the room they belong to, for a list of corners: [{ label, items }], the rooms in `first` (where the thing is) before the others,
+ * each group in the order its first item appears, items with no room in a last group `otherLabel`. roomOf(item) gives a room id or '' and
+ * nameOf(id) its name. A list that falls into one group only is returned as one group: the caller then leaves out the heading.
+ */
+export function groupByRoom(items, roomOf, nameOf, first = new Set(), otherLabel = 'Other corners') {
+  const order = [], groups = new Map();
+  for (const it of items) {
+    const id = roomOf(it) || '';
+    if (!groups.has(id)) { groups.set(id, []); order.push(id); }
+    groups.get(id).push(it);
+  }
+  const rank = id => (id === '' ? 2 : first.has(id) ? 0 : 1);
+  return order.map((id, i) => ({ id, i })).sort((a, b) => rank(a.id) - rank(b.id) || a.i - b.i)
+    .map(({ id }) => ({ label: id === '' ? otherLabel : nameOf(id) || id, items: groups.get(id) }));
+}

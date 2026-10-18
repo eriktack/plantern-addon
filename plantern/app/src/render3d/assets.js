@@ -17,10 +17,13 @@ const settle = p => Promise.resolve(p).then(v => v, () => null);
  * docs/archive/2026-10-14-object-templates.md T4); house is the house id (for its own blueprints), apiBase the path from the page to the app's root.
  * store: the browser's own copy of those GLBs (glb-store.js; null for none). fetchImpl and parseImpl stand in for fetch and the
  * GLB reader in tests.
+ * sceneless (the Editor, PF14): a blueprint object is not loaded as a model at all. The server's answer (size, light, main colour) is all that is
+ * kept, so the page fetches no model file and never loads three.js for them; mainColour() then gives the colour the server worked out. A plain
+ * model file (assets/<name>/model.glb) is still loaded as before.
  */
 export function createAssetCache({
   houseBase = null, sharedBase = null, house = null, apiBase = '', onChange = () => {},
-  store = glbStore(), fetchImpl = null, parseImpl = null,
+  store = glbStore(), fetchImpl = null, parseImpl = null, sceneless = false,
 } = {}) {
   const entries = new Map();   // name -> { status, scene, meta, ready: Promise }
   let loader = null;
@@ -101,8 +104,8 @@ export function createAssetCache({
     const entry = { status: 'loading', scene: null, meta: null, error: null, hash: null, ready: null };
     entries.set(key, entry);
     entry.ready = (async () => {
-      // 1. the kept copy
-      const kept = await settle(store?.getLink(key));
+      // 1. the kept copy (a sceneless cache has no models to keep)
+      const kept = sceneless ? null : await settle(store?.getLink(key));
       const keptBytes = kept ? await settle(store.getFile(kept.hash)) : null;
       if (keptBytes) {
         try {
@@ -119,6 +122,8 @@ export function createAssetCache({
           entry.error = answer.error || `the server answered ${res.status}`;
           if (res.status === 400) { entry.status = 'broken'; entry.scene = null; }
           else if (!entry.scene) entry.status = 'missing';
+        } else if (sceneless) {
+          Object.assign(entry, { status: 'ok', hash: answer.hash, meta: { size: answer.size }, light: answer.light ?? null, colour: answer.colour ?? null, error: null });
         } else if (entry.scene && entry.hash === answer.hash) {
           entry.meta = { size: answer.size };          // the copy shown is the current one
           entry.light = answer.light ?? null;
@@ -184,7 +189,7 @@ export function createAssetCache({
    */
   function mainColour(key) {
     const scene = entries.get(key)?.scene;
-    if (!scene) return null;
+    if (!scene) return entries.get(key)?.colour ?? null;     // a sceneless cache: the one the server worked out
     const parts = [];
     scene.traverse(m => {
       if (!m.isMesh) return;
@@ -192,6 +197,36 @@ export function createAssetCache({
       parts.push({ weight: areaFromAbove(m.geometry), colour: mat?.color ? `#${mat.color.getHexString()}` : null });
     });
     return mainColourOf(parts);
+  }
+
+  /**
+   * Asks for many blueprint objects at once (sceneless caches only: PF15): one request with a list instead of one each, then every object has its
+   * size, light and colour. Objects already asked for are left out. A batch the server cannot answer (an older server, no network) leaves the
+   * objects to be asked for one by one, as loadFor() does. onChange runs once when the batch is in.
+   */
+  async function prefetch(objects) {
+    if (!sceneless) return;
+    const todo = [], seen = new Set();
+    for (const o of objects) { if (!o?.blueprint) continue; const key = assetKey(o); if (!entries.has(key) && !seen.has(key)) { seen.add(key); todo.push([key, o]); } }
+    if (!todo.length) return;
+    const mine = todo.map(([key]) => { const entry = { status: 'loading', scene: null, meta: null, error: null, hash: null, ready: null }; entries.set(key, entry); return entry; });
+    const batch = (async () => {
+      try {
+        const res = await doFetch(`${apiBase}api/glb`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...(house ? { house } : {}), batch: todo.map(([, o]) => blueprintRequest(o)) }) });
+        const answer = await res.json().catch(() => ({}));
+        if (!res.ok || !Array.isArray(answer.results) || answer.results.length !== todo.length) throw new Error('no batch answer');
+        answer.results.forEach((r, i) => {
+          const entry = mine[i];
+          if (r.error) { entry.error = r.error; entry.status = r.status === 400 ? 'broken' : 'missing'; }
+          else Object.assign(entry, { status: 'ok', hash: r.hash, meta: { size: r.size }, light: r.light ?? null, colour: r.colour ?? null, error: null });
+        });
+        onChange(todo[0][0], 'ok');
+      } catch {
+        todo.forEach(([key], i) => { if (entries.get(key) === mine[i]) entries.delete(key); });   // asked for one by one when drawn
+      }
+    })();
+    mine.forEach(e => { e.ready = batch.then(() => e); });
+    await batch;
   }
 
   /** Starts the model of an asset object, whichever way it is made. */
@@ -206,7 +241,7 @@ export function createAssetCache({
   /** Why a blueprint object's model is missing or broken (the server's reason), or null. */
   const error = key => entries.get(key)?.error ?? null;
 
-  return { load, loadObject, loadFor, status, meta, error, rebuild, mainColour, light };
+  return { load, loadObject, loadFor, status, meta, error, rebuild, mainColour, light, prefetch };
 }
 
 /**

@@ -82,12 +82,33 @@ export function pointInPolygon(p, poly) {
   return inside;
 }
 
+// PF2: the box of a polygon, worked out once per polygon (the arrays of a model and of its derived geometry are not changed once made, so the
+// array itself is the key). Every overlap test of a room, a wall piece or a solid against the others asks for the same few boxes.
+const BOXES = new WeakMap();
+/** [minX, minY, maxX, maxY] of a polygon (an array of [x, y]); the same array is returned for the same polygon. */
+export function polygonBounds(poly) {
+  let b = BOXES.get(poly);
+  if (!b) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of poly) { if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0]; if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1]; }
+    b = [x0, y0, x1, y1];
+    BOXES.set(poly, b);
+  }
+  return b;
+}
+
 /**
  * Do two simple polygons share floor area? Touching edges and overlaps thinner than `tol` mm do not
  * count. Samples the outline of each polygon (every ~50 mm, plus points nudged just inside, which
  * catches identical or nested outlines) and asks whether any lies more than `tol` inside the other.
  */
 export function polygonsOverlap(a, b, tol = 5) {
+  // PF1: a cheap rejection first. A point more than tol inside B lies more than tol inside B's box, so when the boxes meet by tol or
+  // less on either axis no point can be inside both by more than tol: the answer is no, without sampling the outlines.
+  if (a.length && b.length) {
+    const [ax0, ay0, ax1, ay1] = polygonBounds(a), [bx0, by0, bx1, by1] = polygonBounds(b);
+    if (Math.min(ax1, bx1) - Math.max(ax0, bx0) <= tol || Math.min(ay1, by1) - Math.max(ay0, by0) <= tol) return false;
+  }
   const strictlyInside = (p, poly) => pointInPolygon(p, poly) && distToOutline(p, poly) > tol;
   const probe = (A, B) => {
     const cw = signedArea(A) < 0;
@@ -113,6 +134,15 @@ export function polygonsOverlap(a, b, tol = 5) {
  * larger part, not in a notch. Returns { pos, radius } (radius = distance to the outline).
  */
 export function labelPoint(poly) {
+  // PF6: a grid search per call, and the same room is asked for again on every draw: the answer is kept per polygon array (a model's rooms are
+  // never changed once made, so the array is the key; a copy of the polygon is a new key). The same object is returned: read it, do not change it.
+  let r = LABELS.get(poly);
+  if (!r) LABELS.set(poly, (r = computeLabelPoint(poly)));
+  return r;
+}
+const LABELS = new WeakMap();
+
+function computeLabelPoint(poly) {
   const xs = poly.map(p => p[0]), ys = poly.map(p => p[1]);
   let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
   const mid = [(x0 + x1) / 2, (y0 + y1) / 2];

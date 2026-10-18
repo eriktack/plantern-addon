@@ -11,6 +11,7 @@
 // Errors are GlbError with the HTTP status to answer: 400 for a bad blueprint or bad params (the reason is the message),
 // 404 for a blueprint that does not exist, 503 when the code that builds changed since the server started.
 
+import { mainColourOfBuild } from '../../src/blueprints/colour.js';
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -180,16 +181,17 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
     const bounds = meshBounds({ pos: built.parts.flatMap(p => p.mesh.pos), nrm: [], idx: [] });
     const size = bounds ? [0, 1, 2].map(k => round1(bounds.max[k] - bounds.min[k])) : [0, 0, 0];
     const light = lightOf(r.found, r.resolved);
+    const colour = mainColourOfBuild(built.parts, built.resolved);        // the footprint's colour in the Editor's plan (PF14)
     await fs.mkdir(dir, { recursive: true });
     const tmp = path.join(dir, `${hash}.glb.tmp-${process.pid}`);
     await fs.writeFile(tmp, built.glb);
     await renameRetry(tmp, path.join(dir, `${hash}.glb`));
     // the entry is complete once its note exists, so a half-written one is never answered
     const noteTmp = path.join(dir, `${hash}.json.tmp-${process.pid}`);
-    await fs.writeFile(noteTmp, JSON.stringify({ blueprint, size, light, built: new Date().toISOString() }) + '\n');
+    await fs.writeFile(noteTmp, JSON.stringify({ blueprint, size, light, colour, built: new Date().toISOString() }) + '\n');
     await renameRetry(noteTmp, path.join(dir, `${hash}.json`));
     await prune(hash).catch(() => { /* a failed clean-up must not fail the build that succeeded */ });
-    return { hash, size, light };
+    return { hash, size, light, colour };
   }
 
   /**
@@ -268,8 +270,8 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
         // both files: a pruned object has neither, and a half-removed one must not be answered
         const note = JSON.parse(await fs.readFile(path.join(dir, `${r.hash}.json`), 'utf8'));
         await fs.access(path.join(dir, `${r.hash}.glb`));
-        // an entry from before the light point was kept has no `light` field: it is built again once, which writes it
-        if (HASH.test(r.hash) && Array.isArray(note.size) && 'light' in note) return { hash: r.hash, size: note.size, light: note.light };
+        // an entry from before the light point or the main colour was kept lacks that field: it is built again once, which writes it
+        if (HASH.test(r.hash) && Array.isArray(note.size) && 'light' in note && 'colour' in note) return { hash: r.hash, size: note.size, light: note.light, colour: note.colour };
       } catch { /* not cached */ }
       if (!building.has(r.hash)) building.set(r.hash, build(r, request.blueprint).finally(() => building.delete(r.hash)));
       return building.get(r.hash);

@@ -4,6 +4,7 @@
 // the derived lamps to what they show (addLitLamps) and the save takes them out again (stripLitLamps). Pure.
 
 import { lightInPlan } from '../blueprints/light.js';
+import { unitSpan } from '../geometry/fittings.js';
 
 /** Plan radius of a lit object’s light (mm) when it has none of its own. */
 export const LIT_RADIUS = 3000;
@@ -17,6 +18,22 @@ export const litRadius = o => o.lightRadius ?? LIT_RADIUS_BY_KIND[o.blueprint] ?
 const BEFORE = Symbol('fixtures before the lit lamps were added');
 
 /**
+ * A lamp that stands in a window or door opening (hosted by it) may be deep enough that its light lies beyond the window unit, on the outside of the
+ * frame and sash: the 3D view then throws their shadows into the room. The light is kept on the room's side of the unit (10 mm in front of its room
+ * face); the lamp itself is drawn where it is. Other lamps are returned as they are.
+ */
+function roomSideOfUnit(o, level, geo, pos) {
+  const op = o.attach?.opening !== undefined ? (level.openings || []).find(x => x.id === o.attach.opening) : null;
+  if (!op || op.type === 'passage') return pos;
+  const w = geo.wallById?.get(op.wall), f = w && geo.frames?.get(w.id);
+  if (!f?.n) return pos;
+  const { t0, t1 } = unitSpan(w, f, op), t = (pos[0] - w.a[0]) * f.n[0] + (pos[1] - w.a[1]) * f.n[1];
+  const left = o.attach?.side === 'left';                    // the room is on the wall's left (+ along its normal) or on its right
+  const want = left ? Math.max(t, t1 + 10) : Math.min(t, t0 - 10);
+  return want === t ? pos : [pos[0] + f.n[0] * (want - t), pos[1] + f.n[1] * (want - t)];
+}
+
+/**
  * The derived lamps of one level: one per object whose light is known (`lightOf(object)` gives [x, y, z] in the model's own
  * axes or null). geo: buildLevelGeometry() of the level, for the object's footprint. Returns [] when nothing is lit.
  */
@@ -27,7 +44,7 @@ export function litLamps(level, geo, lightOf) {
     if (!light || !geo) continue;
     const at = lightInPlan(geo.objectFootprint(o), o.size, light);
     if (!at) continue;
-    out.push({ id: o.id, kind: 'lamp', pos: at.pos, z: geo.objectZ(o) + at.z, radius: litRadius(o), derived: true });
+    out.push({ id: o.id, kind: 'lamp', pos: roomSideOfUnit(o, level, geo, at.pos), z: geo.objectZ(o) + at.z, radius: litRadius(o), derived: true });
   }
   return out;
 }

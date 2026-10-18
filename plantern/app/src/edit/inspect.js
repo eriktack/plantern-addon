@@ -313,9 +313,15 @@ export function openingPropsFromForm(o, form, top, where = {}) {
     if (dist !== undefined) props.offset = offsetTo(dist, where, width);
   }
   const sill = props.sill ?? o.sill;
-  if (changed('head')) { const v = num('head'); if (v !== undefined) props.head = v; }
-  else if (changed('height')) { const v = num('height'); if (v !== undefined) props.head = sill + v; }
-  else if (changed('below')) { const v = num('below'); if (v !== undefined) props.head = top - v; }
+  // the top: from the field typed last when the form says which (form.heightFrom, linked fields: UX22), else the first changed
+  const fromHead = () => { const v = num('head'); if (v !== undefined) props.head = v; };
+  const fromHeight = () => { const v = num('height'); if (v !== undefined) props.head = sill + v; };
+  const fromBelow = () => { const v = num('below'); if (v !== undefined) props.head = top - v; };
+  const typed = { head: fromHead, height: fromHeight, below: fromBelow }[form.heightFrom];
+  if (typed) { if (changed(form.heightFrom)) typed(); }
+  else if (changed('head')) fromHead();
+  else if (changed('height')) fromHeight();
+  else if (changed('below')) fromBelow();
   const type = props.type ?? o.type;
   // a door on hinges, or sliding along the wall or into it (opens "sliding" / "pocket")
   const doorOpens = type === 'door' ? (DOOR_OPENS.includes(form.opens) ? form.opens : 'swing') : null, slides = doorOpens && doorOpens !== 'swing';
@@ -398,4 +404,26 @@ export function peekInfo(level, kind, id, { name = x => x } = {}) {
     return { title: o.name || o.id, sub: o.id, rows: [['Type', o.type], ['Width', mm(o.width)], ['Bottom – top', `${Math.round(o.sill)} – ${Math.round(o.head)} mm`], ['In', name(o.wall)], ...(openingAssumed(o).length ? [['Still default', openingAssumed(o).join(', ')]] : [])] };
   }
   return null;
+}
+
+/**
+ * An opening's bottom, top, height and distance below the ceiling kept in step while one is typed (ui-consistency plan UX22):
+ * `values` = the four boxes as text ({ sill, head, height, below }; empty = its default from `defaults`), `typed` = the one just
+ * typed, `top` = the ceiling (the wall's top) there. The top stays when the bottom is typed. Returns the other boxes' new text
+ * (the typed one is left as typed); {} when the typed value is not a number.
+ */
+export function linkHeights(values, typed, top, defaults = {}) {
+  const n = k => { const t = String(values[k] ?? '').trim(); const v = t === '' ? Number(defaults[k]) : Number(t); return Number.isFinite(v) ? v : null; };
+  const v = n(typed);
+  if (v === null || String(values[typed] ?? '').trim() === '') return {};
+  let sill = n('sill'), head = n('head');
+  if (typed === 'sill') sill = v;
+  if (typed === 'head') head = v;
+  if (typed === 'height') head = (sill ?? 0) + v;
+  if (typed === 'below') head = top - v;
+  if (sill === null || head === null) return {};
+  const out = { head: String(head), height: String(head - sill), below: String(top - head) };
+  delete out[typed];
+  if (typed === 'sill') delete out.below;                                    // the top stays where it is
+  return out;
 }

@@ -1,3 +1,4 @@
+import { parseMeasure } from './number-parse.js';
 import { labelOf } from '../object-designs/lib/params.js';
 import { materialKind, materialSwatch, MATERIAL_KINDS } from './model/material-kind.js';
 import { optionIcon } from './option-icons.js';
@@ -86,16 +87,19 @@ export function makeField(spec, control, { hint, header = true } = {}) {
   };
 }
 
-/** A number: a number box with the exact step, and a slider over the parameter's range (when it has a max). */
+/**
+ * A number: the same number box as the Editor's (a text box: a decimal comma, a unit and a sum can be typed, ↑/↓ and dragging
+ * the label step it; src/number-input.js, decision 257), and a slider over the parameter's range (when it has a max).
+ */
 export function numberField(d, value, onChange) {
   const control = document.createElement('div');
   control.className = 'pair';
   const number = document.createElement('input');
-  number.type = 'number';
+  number.type = 'text';
+  number.inputMode = 'decimal';
+  number.autocomplete = 'off';
+  number.dataset.unit = d.unit === 'mm' ? 'mm' : (d.unit ?? '');
   number.name = d.key;
-  number.min = d.min;
-  if (d.max !== undefined) number.max = d.max;
-  number.step = d.step ?? 1;
   number.value = value;
   number.setAttribute('aria-label', d.label);
   control.append(number);
@@ -113,8 +117,9 @@ export function numberField(d, value, onChange) {
   }
 
   const field = makeField(d, control, { hint: d.hint });
+  const read = () => { const r = parseMeasure(number.value, number.dataset.unit); return r.value ?? NaN; };
   number.addEventListener('input', () => {
-    if (range && Number.isFinite(number.valueAsNumber)) range.value = number.value;
+    if (range && Number.isFinite(read())) range.value = String(read());
     onChange();
   });
   range?.addEventListener('input', () => {
@@ -124,12 +129,12 @@ export function numberField(d, value, onChange) {
   return {
     ...field,
     key: d.key,
-    read: () => number.valueAsNumber,
+    read,
     set(v) {
       number.value = String(v);
       if (range) range.value = String(v);
     },
-    check: () => numberProblem(d, number.valueAsNumber),
+    check: () => numberProblem(d, read()),
   };
 }
 
@@ -158,7 +163,7 @@ export function choiceField(d, value, onChange) {
     const b = document.createElement('button');
     b.type = 'button';
     // the option's drawing above its label (ND5), when it has one
-    const icon = optionIcon(d.key, o);
+    const icon = optionIcon(d.key, o, d.icons);
     if (icon) {
       const pic = document.createElement('span');
       pic.className = 'oi';
@@ -199,7 +204,7 @@ export function selectField(d, value, onChange) {
     const option = document.createElement('option');
     option.value = String(o);
     option.textContent = labelOf(d, o);
-    const icon = optionIcon(d.key, o);
+    const icon = optionIcon(d.key, o, d.icons);
     if (icon) option.dataset.icon = icon;   // the menu shows it before the label (ND5)
     select.append(option);
   }

@@ -18,6 +18,8 @@ import { openHouseContext, wireHousePanel } from './house-context.js';
 // nicer dropdowns (ND2): every select on the page is drawn as the page menu
 import { enhanceAll } from '../src/select.js';
 enhanceAll();
+import { enhanceNumbers } from '../src/number-input.js';
+enhanceNumbers();
 
 const $ = id => document.getElementById(id);
 

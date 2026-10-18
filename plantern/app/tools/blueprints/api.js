@@ -1,5 +1,7 @@
 // The GLB routes of the local server (docs/archive/2026-10-14-object-templates.md, T4 and T5; decision 185).
-//   POST   /api/glb          { house?, blueprint, params?, partMaterials? } → { hash, size }   (builds the GLB when it is not cached)
+//   POST   /api/glb          { house?, blueprint, params?, partMaterials? } → { hash, size, light, colour }   (builds the GLB when it is not cached)
+//            { house?, batch: [{ blueprint, params?, partMaterials? }, …] } → { results: [{ hash, size, light, colour } | { error, status }, …] }:
+//            many objects in one request, answered in the same order (the Editor asks for a whole house at once, PF15)
 //   GET    /api/glb/<hash>   → the GLB (model/gltf-binary); it never changes for a hash, so it is cached for a year
 //   GET    /api/houses/<id>/blueprints → { blueprints: [{ id, source, meta, json? }], refused }: the built-in models and the house's own
 //   DELETE /api/glb-cache    → { objects, bytes }: empties the cache (*Clear cache* on the Storage page)
@@ -67,8 +69,17 @@ export async function glbApi(cache, registry, req, res, url) {
         houseDir = typeof body.house === 'string' ? registry.find(body.house)?.house.dir : undefined;
         if (!houseDir) return json(res, 404, { error: `there is no house "${body.house}"` }), true;
       }
-      const { hash, size, light } = await cache.ensure({ houseDir, blueprint: body.blueprint, params: body.params, partMaterials: body.partMaterials });
-      return json(res, 200, { hash, size, light }), true;
+      if (body.batch !== undefined) {
+        if (!Array.isArray(body.batch) || body.batch.length > 500) return json(res, 400, { error: 'batch must be a list of at most 500 requests' }), true;
+        const results = [];
+        for (const r of body.batch) {
+          try { results.push(await cache.ensure({ houseDir, blueprint: r?.blueprint, params: r?.params, partMaterials: r?.partMaterials })); }
+          catch (e) { results.push({ error: e.message, status: e.status || 500 }); }
+        }
+        return json(res, 200, { results }), true;
+      }
+      const { hash, size, light, colour } = await cache.ensure({ houseDir, blueprint: body.blueprint, params: body.params, partMaterials: body.partMaterials });
+      return json(res, 200, { hash, size, light, colour }), true;
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'method not allowed' }), true;
     const hash = decodeURIComponent(p.slice('/api/glb/'.length));

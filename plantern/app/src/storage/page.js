@@ -71,7 +71,7 @@ function render() {
 function branchPicker(s) {
   const b = branchBox;
   if (!b.data) return `<div class="msg" style="margin-top:8px">${b.error ? esc(b.error) : 'Looking at the branches…'}</div>`;
-  const d = b.data, opt = (n, note = '') => `<option value="${esc(n)}"${n === d.current ? ' selected' : ''}>${esc(n)}${n === d.current ? ' (this one)' : ''}${note}</option>`;
+  const d = b.data, opt = (n, note = '') => `<option value="${esc(n)}" data-icon="branch"${n === d.current ? ' selected' : ''}>${esc(n)}${n === d.current ? ' (this one)' : ''}${note}</option>`;
   return `<div class="msg" style="margin-top:8px"><div class="title" style="margin-bottom:6px">Branch</div>
     <div class="help">The houses in this storage are the ones on the branch you pick; saving commits to it. Switching changes the files in the folder.${d.dirty ? ' <b>There are uncommitted changes in the folder.</b>' : ''}</div>
     <div class="btns" style="margin-top:6px"><select id="branchSel" aria-label="Branch">${d.local.map(n => opt(n)).join('')}${d.remote.map(n => opt(n, ' (on the repository)')).join('')}</select>
@@ -183,7 +183,7 @@ function renderWizard() {
     }
     el.innerHTML = `<div class="title">New house</div>
       <label class="f">Name<input class="t" id="hName" placeholder="e.g. Sommarstugan" style="font-family:inherit"></label>
-      <label class="f">Kept in<select id="hStore" style="width:100%">${stores.map(s => `<option value="${esc(s.id)}"${s.id === w.store ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
+      <label class="f">Kept in<select id="hStore" style="width:100%">${stores.map(s => `<option value="${esc(s.id)}" data-icon="storage"${s.id === w.store ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
       <div id="wErr"></div>
       <div class="btns" style="margin-top:10px"><button class="go big" id="create">Create</button><button class="quiet" data-cancel>Cancel</button></div>`;
     $('hName').focus();

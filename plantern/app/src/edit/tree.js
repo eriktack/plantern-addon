@@ -15,15 +15,19 @@ import { pointInPolygon } from '../geometry/polygon.js';
 import { openingAssumed } from '../model/openings.js';
 import { boundEdges } from '../geometry/bound.js';
 import { solidCover, solidStretches } from '../geometry/solids.js';
+import { fallbackName, numberRepeats } from '../model/names.js';
 
 const len = (p, q) => Math.hypot(q[0] - p[0], q[1] - p[1]);
 
-export function levelTree(level) {
+/** opts.blueprintName(id): a blueprint's own name, for unnamed objects made from it (UX29). */
+export function levelTree(level, { blueprintName } = {}) {
   const walls = level.walls || [], openings = level.openings || [], fixtures = level.fixtures || [], objects = level.objects || [];
   const placed = new Set();                                   // walls that ended up under a room
   const roomsById = new Map((level.rooms || []).map(r => [r.id, r]));
   const wallAt = (w, s) => { const L = len(w.a, w.b) || 1; return [w.a[0] + (w.b[0] - w.a[0]) * s / L, w.a[1] + (w.b[1] - w.a[1]) * s / L]; };
-  const objectLabel = o => o.name || (o.attach ? 'wall object' : 'object');
+  // an unnamed object is called what it is, numbered when there are several ("Chair", "Chair 2"; UX29)
+  const objectNames = numberRepeats(objects.map(o => ({ id: o.id, name: fallbackName(o, 'object', { blueprintName }) })));
+  const objectLabel = o => objectNames.get(o.id);
   const objectNode = (o, key) => ({ key, kind: 'object', id: o.id, label: objectLabel(o), note: `${o.id} · ${o.size.map(Math.round).join('×')}`, warn: !!o.assumed?.length, children: [] });
   const fixtureKind = x => x.kind === 'switch' ? 'switch' : x.kind === 'strip' ? 'LED strip' : x.attach ? 'wall lamp' : 'lamp';
   // a friendly name is the label, with what it is and its id beside it

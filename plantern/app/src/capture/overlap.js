@@ -29,7 +29,9 @@ export function findOverlaps(level, geo, polygon, { ignoreRoom, tol = 5 } = {}) 
  * polygon, capture }; without an id it is checked as a new room.
  */
 export function overlapsAfterApply(model, levelId, room, options = {}) {
-  const r = room.id ? applyRoom(model, levelId, room, options) : addRoom(model, levelId, room, room.polygon, room.capture, options);
+  // PF11: only the level as reconcile makes it is needed, so the edit operation stops there (no following levels, no validation of the model)
+  const light = { ...options, checkOnly: true };
+  const r = room.id ? applyRoom(model, levelId, room, light) : addRoom(model, levelId, room, room.polygon, room.capture, light);
   const id = room.id || r.room?.id, lv = r.model.levels.find(l => l.id === levelId);
   if (r.report.errors?.length || !lv) {
     const old = model.levels.find(l => l.id === levelId);

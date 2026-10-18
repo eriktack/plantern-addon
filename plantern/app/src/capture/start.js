@@ -17,8 +17,13 @@ export const ORIGIN = '';   // empty ref = the plan origin (0, 0)
  * walls merge into a facade; a room's corners only move with the room.
  */
 export function startDots(snaps, opts) {
+  return onePerPlace(startOptions(snaps, opts));
+}
+
+/** Points in order of preference, one kept per place (within tol mm): the first at a place wins (ui-consistency plan UX32). */
+export function onePerPlace(points, tol = 1) {
   const seen = [];
-  for (const o of startOptions(snaps, opts)) if (!seen.some(s => Math.hypot(s.pos[0] - o.pos[0], s.pos[1] - o.pos[1]) <= 1)) seen.push(o);
+  for (const o of points) if (!seen.some(s => Math.hypot(s.pos[0] - o.pos[0], s.pos[1] - o.pos[1]) <= tol)) seen.push(o);
   return seen;
 }
 

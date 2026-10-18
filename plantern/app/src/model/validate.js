@@ -385,6 +385,22 @@ function validateLevels(model, geos) {
  * `options.blueprints`: optional Map of blueprint id to its meta (from src/blueprints/load.js). Without it, the
  * blueprint rules of objects are skipped, so the card and a plain static server validate the same model.
  */
+// validateModelCached(): the same, with the result kept per model object (and the blueprints and library it was checked
+// with). For callers whose models are never changed once made: the edit operations (every edit makes a new model) and
+// the Editor, so an operation and the page that shows its issues share one run, and selecting, undo and redo do not
+// validate again (ui-consistency plan, UX4). Code that changes a model in place must call validateModel().
+const memo = new WeakMap();
+const NONE = {};
+export function validateModelCached(model, geos, options = {}) {
+  let byBp = memo.get(model);
+  if (!byBp) memo.set(model, (byBp = new Map()));
+  const bp = options.blueprints || NONE, lib = options.library || NONE;
+  let byLib = byBp.get(bp);
+  if (!byLib) byBp.set(bp, (byLib = new Map()));
+  if (!byLib.has(lib)) byLib.set(lib, validateModel(model, geos, options));
+  return byLib.get(lib);
+}
+
 export function validateModel(model, geos, { blueprints, library } = {}) {
   const out = [];
   if (model.units && model.units !== 'mm') out.push({ severity: 'error', id: 'model', msg: `units must be "mm" (got "${model.units}")` });

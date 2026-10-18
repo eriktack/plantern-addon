@@ -14,7 +14,8 @@ import { createAssetCache } from './render3d/assets.js';
 import { coalesce } from './coalesce.js';
 import { createHaClient, resolveConnection, boundEntities } from './ha/client.js';
 import { appearance } from './ha/appearance.js';
-import { fixtureAppearance as fixtureAppearanceOf, toggleCalls } from './ha/fixture.js';
+import { lampGroups } from './ha/lamp-list.js';
+import { fixtureAppearance as fixtureAppearanceOf, toggleCalls, canPreview, previewLook } from './ha/fixture.js';
 import { doorStates, doorEntities } from './ha/door.js';
 import { exportSvg } from './export/svg.js';
 
@@ -125,7 +126,11 @@ async function main() {
   catch (e) { issues.push({ severity: 'error', id: connName || 'ha', msg: e.message }); showIssues(); ha = createHaClient({ type: 'mock' }, { entities: boundEntities(loc) }); }
   ha.onStatus((s, detail) => { $('haStatus').textContent = `${connName || 'no connection'} · ${s}${detail ? ` (${detail})` : ''}${note && s === 'mock' ? ` — ${note}` : ''}`; });
 
-  const fixtureAppearance = fx => fixtureAppearanceOf(bindings, id => ha.getState(id), fx);
+  // A lamp with no link to Home Assistant, or whose light HA cannot reach, can still be clicked on and off here, to see a room lit: a preview in the
+  // colour set on the light (its look), kept only until the page is reloaded. Whatever HA reports wins as soon as it reports something.
+  const preview = new Map();                                       // fixture id → on
+  const previewing = fx => preview.has(fx.id) && canPreview(bindings, id => ha.getState(id), fx);
+  const fixtureAppearance = fx => (previewing(fx) ? previewLook(preview.get(fx.id), bindings[fx.id]?.look) : fixtureAppearanceOf(bindings, id => ha.getState(id), fx));
   // door states (a binary_sensor per door, PLANTERN.md §6.1): an open door is drawn open and lets light past
   const doors = () => doorStates(model, bindings, id => ha.getState(id));
   const doorIds = doorEntities(model, bindings);
@@ -143,6 +148,12 @@ async function main() {
   const build3d = () => view3d.build({ level, geo: state().geo, levels: shownLevels(), settings: state().settings, fixtureLabel, ceilings, ...looks, doorStates: doors() });
 
   async function toggleFixture(fx) {
+    const why = canPreview(bindings, id => ha.getState(id), fx);
+    if (why) {
+      preview.set(fx.id, !preview.get(fx.id));
+      refreshFixtures();
+      return status(`${fixtureLabel(fx).split(' → ')[0]}: ${why === 'unbound' ? 'not linked to Home Assistant' : 'Home Assistant has no state for it'}, so this is a preview only${why === 'unbound' ? ' (link it in the Editor to switch the real light)' : ''}`);
+    }
     const r = toggleCalls(bindings, id => ha.getState(id), fx);
     if (r.error) return status(r.error);
     try { await Promise.all(r.calls.map(c => ha.callService(c.domain, c.service, {}, c.target))); }
@@ -297,19 +308,34 @@ async function main() {
 
   // ---- entity panel ----
   const rows = {};
-  for (const id of boundEntities(loc)) {
-    const d = document.createElement('div');
-    d.className = 'row';
-    // what a person reads: the name of the lamp in the plan, else Home Assistant's friendly name (filled in below), else the id;
-    // the entity id and its state are in the tooltip, not on the row
-    const named = model.levels.flatMap(l => l.fixtures || []).filter(fx => bindings[fx.id]?.entity === id && fx.name).map(fx => fx.name);
-    d.innerHTML = `<div class="ent"><span class="nm">${esc(named.join(', ') || id)}</span><label class="sw"><input type="checkbox" role="switch" aria-label="${esc(named.join(', ') || id)}"><span class="knob"></span></label></div>${id.startsWith('light.') ? '<input type="range" min="1" max="255" aria-label="Brightness">' : ''}`;
-    $('ents').appendChild(d);
-    const [cb, rg] = d.querySelectorAll('input');
-    rows[id] = { d, cb, rg, nm: d.querySelector('.nm'), named: named.length > 0 };
-    const domain = id.split('.')[0], call = (svc, data) => ha.callService(domain, svc, data, { entity_id: id }).catch(e => status(`HA: ${e.message}`));
-    cb.onchange = () => call(cb.checked ? 'turn_on' : 'turn_off', {});
-    if (rg) rg.onchange = () => call('turn_on', { brightness: +rg.value });
+  // grouped by level and room, highest level first (UX33); what a person reads: the lamp's name in the plan, else what it is and
+  // where ("Terrace ceiling lamp", UX29), else Home Assistant's friendly name (filled in below), else the id; the entity id and
+  // its state are in the tooltip, not on the row
+  const middle = fp => fp && [fp.reduce((t, q) => t + q[0], 0) / fp.length, fp.reduce((t, q) => t + q[1], 0) / fp.length];
+  const groups = lampGroups(model, bindings, (lv, x) => geos.get(lv.id)?.fixturePos(x) ?? null, (lv, o) => middle(geos.get(lv.id)?.objectFootprint(o)));
+  const openGroups = readPrefs().lampGroupsClosed || {};
+  for (const g of groups) {
+    const box = document.createElement('details');
+    box.className = 'lampgroup'; box.open = !openGroups[g.key];
+    const title = g.level ? `${g.room?.name || 'No room'} · ${g.level.name || g.level.id}` : 'Other';
+    box.innerHTML = `<summary><span>${esc(title)}</span>${g.entities.length > 1 ? '<span class="all"><button type="button" data-all="on" title="Every light here on">All on</button><button type="button" data-all="off" title="Every light here off">All off</button></span>' : ''}</summary>`;
+    box.addEventListener('toggle', () => writePrefs({ lampGroupsClosed: { ...(readPrefs().lampGroupsClosed || {}), [g.key]: !box.open } }));
+    box.querySelectorAll('[data-all]').forEach(b => (b.onclick = e => {
+      e.preventDefault();
+      for (const { id } of g.entities) ha.callService(id.split('.')[0], b.dataset.all === 'on' ? 'turn_on' : 'turn_off', {}, { entity_id: id }).catch(err => status(`HA: ${err.message}`));
+    }));
+    $('ents').appendChild(box);
+    for (const { id, name } of g.entities) {
+      const d = document.createElement('div');
+      d.className = 'row';
+      d.innerHTML = `<div class="ent"><span class="nm">${esc(name)}</span><label class="sw"><input type="checkbox" role="switch" aria-label="${esc(name)}"><span class="knob"></span></label></div>${id.startsWith('light.') ? '<input type="range" min="1" max="255" aria-label="Brightness">' : ''}`;
+      box.appendChild(d);
+      const [cb, rg] = d.querySelectorAll('input');
+      rows[id] = { d, cb, rg, nm: d.querySelector('.nm'), named: name !== id };
+      const domain = id.split('.')[0], call = (svc, data) => ha.callService(domain, svc, data, { entity_id: id }).catch(e => status(`HA: ${e.message}`));
+      cb.onchange = () => call(cb.checked ? 'turn_on' : 'turn_off', {});
+      if (rg) rg.onchange = () => call('turn_on', { brightness: +rg.value });
+    }
   }
   if (!Object.keys(rows).length) $('ents').innerHTML = '<small>No bindings in location.json.</small>';
   const refreshRow = id => {

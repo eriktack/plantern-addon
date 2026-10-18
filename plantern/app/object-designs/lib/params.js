@@ -79,6 +79,17 @@ function checkParam(d, where, problems) {
           else if (typeof v !== 'string' || !v.trim()) problems.push(`${where}: the label for "${k}" must be a non-empty string`);
         }
       }
+      // icons (ND5): a model may name the icon of an option itself, else the library's drawing is used
+      if (d.icons !== undefined) {
+        if (!d.icons || typeof d.icons !== 'object' || Array.isArray(d.icons)) {
+          problems.push(`${where}: icons must be an object of option to icon name`);
+        } else {
+          for (const [k, v] of Object.entries(d.icons)) {
+            if (!d.options.some(o => String(o) === k)) problems.push(`${where}: icon for "${k}", which is not an option`);
+            else if (typeof v !== 'string' || !v.trim()) problems.push(`${where}: the icon for "${k}" must be an icon name`);
+          }
+        }
+      }
     }
     return;
   }

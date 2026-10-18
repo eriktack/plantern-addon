@@ -1,535 +1,92 @@
-// Editor page (room-editor.html): click a room or a wall in the plan and edit it; enter measurements
-// room by room, see the solved shape and residuals; undo/redo; save. All logic lives in solve.js,
-// src/edit/ (operations, reconcile, inspect, history) and save.js; this file only wires the DOM.
+// Editor page (room-editor.html): click a room or a wall in the plan and edit it; enter measurements room by room, see the solved shape
+// and residuals; undo/redo; save. All logic lives in solve.js, src/edit/ (operations, reconcile, inspect, history), save.js and the modules
+// in editor/ (one per concern, ui-consistency plan UX34); this file starts the page.
 
-import { wirePanelResize } from '../panel-resize.js';
-import { resolveSettings, DEFAULT_SETTINGS } from '../model/settings.js';
-import { setHouseSettings } from '../edit/house-settings.js';
-import { validateModel } from '../model/validate.js';
-import { formatJson } from '../model/format.js';
-import { buildLevelGeometry, buildModelGeometry, labelObstacles } from '../geometry/level.js';
-import { listHouses, openHouse, houseOptions } from '../model/house.js';
-import { askConflict } from './conflict-ui.js';
-import { createAssetCache, listAssetNames } from '../render3d/assets.js';
-import { ASSET_NAME, assetWarnings, assetKey, builtSizeStatus, assetEntries } from '../model/assets.js';
-import { levelHint, openingHint, openingIcon, wallHint } from './option-hints.js';
-import { colourSwatches } from '../model/swatches.js';
-import { blueprintMap, placeSpec, startPlacement, wallInRoom } from '../blueprints/place.js';
-import { defaultsFor, hostsOf, appliesTo } from '../../object-designs/lib/params.js';
-import { createMenu } from '../menu.js';
-import { addEntries } from './add-menu.js';
-import { sizeFields, sizeEdit, optionsChanged } from '../blueprints/size.js';
-import { litRadius } from '../model/lit.js';
-import { isHosted, hostedWhere } from '../model/hosted.js';
-import { switchPlacement, openingsNear, placedAs } from '../edit/placement.js';
-import { createParamForm } from '../param-form.js';
-import { download } from '../export/download.js';
-import { toSvg } from '../render2d/coords.js';
-import { solveCapture } from './solve.js';
-import { collectSnapPoints, collectSnapLines, collectSnapPointsAround, adjacentOutlines } from '../tools/snap.js';
-import { createEditorMeasure } from './editor-measure.js';
-import { nearestPoint, nearestLine, pointToLine } from '../tools/measure-core.js';
-import { startOptions, startDots, placeAgainstEdge, placeWallAgainstEdge, bestWallAgainst, edgeWallThickness } from './start.js';
-import { overlapsAfterApply, describeOverlaps } from './overlap.js';
-import { bearingFromHeading, northAngleOf, roundDeg } from '../model/orientation.js';
-import { buildCapture, captureToForm, captureFromPolygon, newRoomId, lockOffers, residualCells, describeLockOffer, parseNumbers } from './edit.js';
-import { wallName, wallLabelsSvg } from './labels.js';
-import { placeFields, readPlaceForm, northAngleFromWall, placeSummary } from './place.js';
-import { moveCapture, dragCorner, snapMove, dragWallEnd, moveWall, rotateObject } from './drag.js';
-import { roundCapture, roundToForm, roundMovedTo, crossWall } from './round.js';
-import { solidCircle, roomEdge } from '../geometry/circle.js';
-import { solveExtra, checkRows, checkCorners } from '../model/checks.js';
-import { suggestEntities, setBinding, sameBinding, pruneBindings } from '../ha/suggest.js';
-import { serialRunner } from './save-queue.js';
-import { stripForm } from '../model/fixtures.js';
-import { renameId, renameBinding, idFromName, entityName } from '../edit/rename.js';
-import { openDialog, askConfirm } from './dialog.js';
-import { FITTING_DEFAULTS } from '../geometry/fittings.js';
-import { checkLook } from '../ha/appearance.js';
-import { domainIcon, stateClass } from '../ha/pick.js';
-import { ICONS } from '../icons.js';
-import { compassSvg } from '../render2d/compass.js';
-import { roomNameLayout, labelPoint, pointInPolygon } from '../geometry/polygon.js';
-import { cornerAt } from '../edit/inspect.js';
-import { applySolid, removeSolid, newSolidId, joinableWalls, joinWalls, addWall, cutWall } from '../edit/ops.js';
-import { SOLID_COLOR } from '../model/solids.js';
-import { solidStretches, paintStrip } from '../geometry/solids.js';
-import { wallLookPieces, wallFaceRooms } from '../geometry/paint.js';
-import { applyStairs, removeStairs, newStairsId, addAnchor, deleteAnchor, alignLevel, addObject, setObject, deleteObject, addCheck, setCheck, deleteCheck } from '../edit/ops.js';
-import { hasBody, wallFrame, wallCut } from '../geometry/walls.js';
-import { cornerSvg, dimensionSvg, pointOn } from './plan-marks.js';
-import { refNamer } from './ref-names.js';
-import { displayName, nameChange } from '../model/names.js';
-import { fitTo, pinchView } from './map-view.js';
-import { anchorStatus } from '../model/anchors.js';
-import { modelAreas, fmtArea } from '../geometry/area.js';
-import { stairsPlan, totalRisers, stairLayout } from '../geometry/stairs.js';
-import { stepsOf, runOf, outerOf, landingAfter } from './stair-dims.js';
-import { stairSketch } from './stair-sketch.js';
-import { renameFromName, applyRoom, removeRoom, setWallProps, unbindWall, deleteWall, linkWalls, fillWalls, setSite, splitWall, addOpening, setOpening, deleteOpening, addFixture, setFixture, deleteFixture, setMaterial, deleteMaterial, nameColor, materialFromColor } from '../edit/ops.js';
-import { resolveSide, materialUse, usedColors, materialTable, setDesignLibrary } from '../model/materials.js';
-import { materialKind, materialSwatch, MATERIAL_KINDS } from '../model/material-kind.js';
-import { sideStrips, wallProfile } from '../geometry/walls.js';
-import { wallInfo, wallToForm, wallPropsFromForm, stillToMeasure, openingInfo, openingToForm, openingPropsFromForm, offsetFrom, offsetTo, measureCorners, defaultCorner } from '../edit/inspect.js';
-import { openingSymbol, arcPathSvg } from '../geometry/openings.js';
-import { openingAssumed } from '../model/openings.js';
-import { createHistory } from '../edit/history.js';
-import { levelTree, pathsTo } from '../edit/tree.js';
-import { showLevelForm, showLevelEditForm } from './level-form.js';
-import { chooseLocation, chooseLevel, remember, linkPages } from '../model/current.js';
-import { describeReconcile } from '../edit/reconcile.js';
-import { copySources, shapeDraftFrom, objectCopyProps, canCopyObject, openingSpecFrom, fixtureSpecFrom, stairsWithShapeOf, duplicate, findIn } from '../edit/copy.js';
-import { peekInfo } from '../edit/inspect.js';
-import { adjacentLevels } from '../tools/snap.js';
-import { readPrefs, writePrefs } from '../model/prefs.js';
-import { levelLabel } from '../model/names.js';
-import { coalesce } from '../coalesce.js';
-
-// nicer dropdowns (ND2): every select on the page is drawn as the page menu
+import { enhanceSegmented } from '../segmented.js';
 import { enhanceAll } from '../select.js';
-enhanceAll();
+import { enhanceNumbers } from '../number-input.js';
+import { listHouses, openHouse, houseOptions } from '../model/house.js';
+import { chooseLocation, remember, linkPages, chooseLevel } from '../model/current.js';
+import { setDesignLibrary } from '../model/materials.js';
+import { askConfirm } from './dialog.js';
+import { showLevelForm } from './level-form.js';
+import { createHistory } from '../edit/history.js';
+import { writePrefs } from '../model/prefs.js';
+import { wirePanelResize } from '../panel-resize.js';
+import { newSolidId, unbindWall, deleteMaterial, addOpening, addFixture, deleteObject, addAnchor, removeStairs, deleteFixture, deleteOpening, addCheck } from '../edit/ops.js';
+import { newRoomId, captureFromPolygon } from './edit.js';
+import { wallProfile } from '../geometry/walls.js';
+import { wallInfo } from '../edit/inspect.js';
+import { createMenu } from '../menu.js';
+import { assetEntries } from '../model/assets.js';
+import { pruneBindings } from '../ha/suggest.js';
+import { createEditorMeasure } from './editor-measure.js';
+import { fitTo, pinchView } from './map-view.js';
+import { download } from '../export/download.js';
+import { formatJson } from '../model/format.js';
+import { $, FIELDS, NEW_LEVEL, addSlidersAndDials, commit, esc, level, loadDesignLibrary, locOf, object, opening, opts, params, perfAs, room, touches, wall } from './editor/core.js';
+import { applyObjectForm, assetCache, placeObject, showPlacedChoice } from './editor/panel-object.js';
+import { apply, changedElsewhere, deleteRoom, save } from './editor/room-apply.js';
+import { BAR, FRESH_ERR, PANEL_MSG, SELECT, afterLeave, closeEdit, decideLeave, dropFresh, editDraft, enterEdit, isDirty, isDoubleClick, isFresh, leaveEdit, mayLeave, mayRefill, renameEditing, revertEdit, selected, setStatus, settleFresh, showEditBar, startFresh, syncEdMsg, undoRedo } from './editor/session.js';
+import { endPeek, fillLevels, goToLevel, showPeekCard, showUnderlayMode } from './editor/levels.js';
+import { HS_FIELDS, applyHouse, applyPlace, editLevel, fillHouse, fillPlace, fillPlaceWalls, hideHouseView, newLevel, previewPlace, showHouseView, useWallBearing } from './editor/house.js';
+import { draw, moveViewBox } from './editor/plan-draw.js';
+import { fillRoundWalls, isRound, loadRound, recompute, scheduleOverlaps, syncRound, wireWallTable } from './editor/panel-room.js';
+import { drawWallOverlay, drawingClick, fillWallPos, nearStartDot, pickStart, showWallPos, snapPos, startDrawing, stopDrawing, typedWallEnd, wallPoint } from './editor/walldraw.js';
+import { HEIGHT_BOXES, applyOpening, chooseFrom, linkOpeningHeights, showOpeningRows, startFromPick, stopFromPick, switchFrom, syncOriginPick } from './editor/panel-opening.js';
+import { ntFillOwn, ntPickEdge, ntPreview, ntUse, refresh, refreshNextTo } from './editor/refresh.js';
+import { act, addSwatchPicker, addWallMeasure, assetNote, drawPlacingGhost, finishPlacing, foldHelp, nameColour, placeRoom, refreshWallMeasure, roomSpot, stopPlacing, wallSpot, wireAddMenus } from './editor/add-menus.js';
+import { copyInto, duplicateEdited, useShapeOf } from './editor/copy.js';
+import { linesAround, loadForm, loadFormForSelection, refName, selectNone, selectWall, zoomAt } from './editor/selection.js';
+import { doFillWalls, doLinkWalls, removeWall, splitAtPointer, startSplitPick, stopSplitPick } from './editor/wall-ops.js';
+import { applyMaterial, applyWall, makeMaterialFromSide, materialSwatches, showSideRows, showSlopeRows } from './editor/panel-wall.js';
+import { applyStairsForm, newStairs, syncStairsRows, updateStairsHints } from './editor/panel-stairs.js';
+import { applyFixture, doSplit, showEntityPick, useObjectLight } from './editor/panel-fixture.js';
+import { cancelDrag, dragMove, dragStart, endDrag, freePoint } from './editor/drag.js';
+import { hoverStatus, openContextMenu, planKey, showShortcuts } from './editor/keys.js';
+import { Ed } from './editor/state.js';
 
-const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const params = new URLSearchParams(location.search);
-const FIELDS = ['mode', 'lengths', 'turns', 'corners', 'diagonals', 'originRef', 'ox', 'oy', 'heading', 'closure', 'derived', 'exact', 'checks', 'locks'];
-
-let loc, model, entry, house;   // house: where the model is loaded from and saved to (src/model/house.js)
-let levelId = null;
-let roomId = null;          // selected existing room id, or null while creating a new one
-let draft = null;           // { name, exterior } of a new room ({ name, solid: true } of a new chimney or pillar)
-let shape = 'room';         // what the measurement panel edits: a 'room' or a 'solid' (chimney, pillar)
-let solved = null;          // last solver result for the form
-let dirty = false;
-let saveMode = null;
-let curGeo = null;          // derived geometry of the current level (overlap checks)
-let snaps = [];          // snap points of the current level
-let snapsAround = [];    // …and those of the level below and above (where a room or solid can start)
-let underlay = [];       // faint outlines of those levels
-let wallId = null;       // selected wall id (then no room is selected)
-let openingId = null;    // selected opening id (then no room or wall is selected)
-let fixtureId = null;    // selected lamp or switch
-let stairsId = null;     // selected stairs
-let stairsFormFor = null;
-let objectId = null;     // selected object
-let objectFormFor = null;
-let dragging = null;     // a lamp, switch or object being dragged on the plan
-const expanded = new Set();   // open nodes of the sidebar tree (by key)
-let treeShownFor = null;      // the selection the tree last opened itself to
-let fixtureFormFor = null;
-let openingFormFor = null;
-let wallFormFor = null;  // the wall object the wall panel was last filled from (refill only when it changes)
-let history = null;      // undo/redo snapshots of the model
-let savedModel = null;
-let savedLoc = null;   // the location (bindings) as last loaded or saved
-const locOf = new WeakMap();   // the location each model of the undo history goes with
-const isModelDirty = () => model !== savedModel || loc !== savedLoc;   // the model as last loaded or saved (dirty = anything else)
-let issuesNow = [];      // validation issues of the current model
-let modelGeos = null;    // derived geometry of every level, from the last validation
-// Edit mode: the sidebar shows only the thing being edited, with Apply / Revert / Close in a bar at the
-// bottom. A single click selects; double-click, Enter or ✎ edits. Leaving with unapplied changes asks first.
-let editing = null;      // { kind: 'room' | 'solid' | 'wall' | 'opening' | 'fixture' | 'material', id, back? } or null
-let editBase = null;     // Map(field → its value when the panel was last filled), or null: dirty = any field with another value (by field, not by position: a form that gains fields later, or fills them late, is not a change)
-let measure = null;      // the measuring tool on the plan (also while editing: clicks then measure)
-let peekId = null;       // while editing: another level shown read-only (nothing selected or changed there)
-let peekSel = null;      // { kind, id } picked on the level looked at (its info card)
-let underlayMode = ['auto', 'always', 'off'].includes(readPrefs().editorUnderlay) ? readPrefs().editorUnderlay : 'auto';
-let drawing = null;      // + Wall: { a: point | null, hover } while a wall is being drawn on the plan
-// Zoom and pan: `view` is the part of the plan shown (SVG units, as the viewBox); null = the whole level.
-let view = null, lastFit = null, autoZoomed = false, pan = null, suppressClick = false, panFrame = 0;
-const touches = new Map(); let pinch = null;
-const measureFrom = new Map();  // opening or wall-fixture id → the key of the corner its position is measured from (this session; measureCorners())           // two fingers on the plan: pinch to zoom
-
-const level = () => model.levels.find(l => l.id === levelId);
-const room = () => level()?.[shape === 'solid' ? 'solids' : 'rooms']?.find(r => r.id === roomId);   // the room or solid being measured
-const wall = () => level()?.walls?.find(w => w.id === wallId);
-const opening = () => level()?.openings?.find(o => o.id === openingId);
-const fixture = () => level()?.fixtures?.find(x => x.id === fixtureId);
-const stairs = () => level()?.stairs?.find(s => s.id === stairsId);
-const object = () => level()?.objects?.find(o => o.id === objectId);
-const opts = () => ({ settings: resolveSettings(loc, level()) });
-const innerThickness = () => resolveSettings(loc, level()).wallThickness?.inner ?? 200;   // between rooms, until modelled
-
-/** Every model change ends here: one undo step (same key = same step), then redraw. */
-function commit(next, key = null) {
-  locOf.set(next, loc);
-  model = history.push(next, key);
-  dirty = isModelDirty();
-  refresh();
-  queueMicrotask(afterCommit);              // after the caller has finished (it may reopen a form)
-}
-
-// ---- Place the house (PLANTERN.md §14.4-§14.5, logic in place.js) ----
-const placeFieldsNow = () => ({ position: $('placePos').value, north: $('north').value, height: $('placeHeight').value });
-
-/** Show what the form says, in words, and turn the dial; nothing is stored until Apply. */
-function previewPlace() {
-  const r = readPlaceForm(placeFieldsNow(), model.site);
-  $('placeSays').textContent = [...(r.says ? [r.says] : []), ...r.notes.map(n => `⚠ ${n}`), ...r.errors.map(e => `✗ ${e}`)].join('\n');
-  $('placeSays').style.whiteSpace = 'pre-wrap';
-  $('placeSays').style.color = r.errors.length ? 'var(--bad)' : '';
-  const t = $('north').value.trim().replace(',', '.'), v = t === '' ? 0 : Number(t);
-  $('placeDial').innerHTML = compassSvg(Number.isFinite(v) ? v : northAngleOf(model));
-  $('placeMsg').textContent = '';
-}
-
-/** Fill the section from the model (also after undo and redo, and for Revert). */
-function fillPlace() {
-  const f = placeFields(model.site);
-  $('placePos').value = f.position; $('north').value = f.north; $('placeHeight').value = f.height;
-  $('placeSum').textContent = placeSummary(model.site);
-  $('placeBadge').textContent = model.site?.georef?.origin ? '· placed' : '· not placed';
-  previewPlace();
-}
-
-function fillPlaceWalls() {
-  const sel = $('placeWall'), keep = sel.value, walls = level()?.walls || [];
-  sel.replaceChildren(...walls.map(w => new Option(`${w.name || w.id}: (${Math.round(w.a[0])}, ${Math.round(w.a[1])}) → (${Math.round(w.b[0])}, ${Math.round(w.b[1])})`, w.id)));
-  [...sel.options].forEach((o, i) => { o.dataset.hint = wallHint(walls[i]); });
-  if (keep && walls.some(w => w.id === keep)) sel.value = keep;
-}
-
-/** A wall and the compass bearing of its direction give the north angle. */
-function useWallBearing() {
-  fillPlaceWalls();
-  const w = (level()?.walls || []).find(x => x.id === $('placeWall').value), b = Number($('placeBearing').value.trim().replace(',', '.'));
-  if (!w) { $('placeMsg').textContent = 'Pick a wall first.'; return; }
-  if (!Number.isFinite(b) || $('placeBearing').value.trim() === '') { $('placeMsg').textContent = 'Type the compass bearing in degrees (0 = north, 90 = east).'; return; }
-  $('north').value = String(northAngleFromWall(w, b));
-  previewPlace();
-  $('placeMsg').textContent = 'Worked out; press Apply to keep it.';
-}
-
-function applyPlace() {
-  const r = readPlaceForm(placeFieldsNow(), model.site);
-  if (!r.ok) { previewPlace(); $('placeMsg').textContent = `Not applied: ${r.errors.join(' ')}`; return; }
-  const s = setSite(model, r.props);
-  if (s.report.errors.length) { $('placeMsg').textContent = `Not applied: ${s.report.errors.join(' ')}`; return; }
-  if (!s.report.changed.length) { $('placeMsg').textContent = 'Nothing changed.'; return; }
-  commit(s.model);
-  fillPlace();
-  const warn = (s.report.issues || []).filter(i => i.id === 'site');
-  $('placeMsg').textContent = warn.length ? `Applied, but: ${warn.map(i => i.msg).join(' ')}` : 'Applied.';
-  setStatus('house place changed');
-}
-
-// ---- edit mode ----
-const PANEL = { room: 'editor', solid: 'editor', wall: 'wallPanel', opening: 'openingPanel', fixture: 'fixturePanel', stairs: 'stairsPanel', object: 'objectPanel', material: 'matForm' };
-const BAR = { room: ['apply', 'delRoom'], solid: ['apply', 'delRoom'], wall: ['wApply', 'wDelete'], opening: ['oApply', 'oDelete'], fixture: ['xApply', 'xDelete'], stairs: ['stApply', 'stDelete'], object: ['obApply', 'obDelete'], material: ['mApply', 'mDelete'] };
-const SELECT = { room: id => selectRoom(id), solid: id => selectSolid(id), wall: id => selectWall(id), opening: id => selectOpening(id), fixture: id => selectFixture(id), stairs: id => selectStairs(id), object: id => selectObject(id) };
-
-/** The fields of the edited panel that count for "changed and not applied" (in the order the snapshot keeps them). */
-function panelFields() {
-  const el = editing && $(PANEL[editing.kind]);
-  return el ? [...el.querySelectorAll('input, select, textarea')].filter(c => !c.closest('#nextTo') && !['wSplitAt', 'oFrom', 'xFrom', 'copyFrom', 'obCopy', 'oCopy', 'xCopy', 'stCopy'].includes(c.id)) : [];
-}
-const fieldValue = c => (c.type === 'checkbox' ? c.checked : c.value);
-/** The edited panel's field values, to tell whether anything was changed and not applied. */
-const baseOf = c => { if (!editBase.has(c)) editBase.set(c, fieldValue(c)); return editBase.get(c); };   // a field that appeared after the snapshot (a rebuilt options form) starts as it is
-/** A form that fills fields after the panel was snapshotted (the light of a lit object once its build arrives) says so, so the fill is not a change. */
-function rebase(...ids) { if (editBase) for (const id of ids) { const c = $(id); if (c) editBase.set(c, fieldValue(c)); } }
-/** The fields an unapplied change would drop, as "label: was → now" lines for the dialog (ticket #6). */
-function changedFields() {
-  if (!editing || editBase === null) return [];
-  return panelFields().flatMap(c => {
-    const was = baseOf(c), now = fieldValue(c);
-    if (was === now) return [];
-    const label = [...(c.closest('label')?.childNodes || [])].find(n => n.nodeType === 3 && n.textContent.trim())?.textContent.trim() || c.id || 'a field';
-    const show = v => (typeof v === 'boolean' ? (v ? 'yes' : 'no') : v === '' ? '(blank)' : String(v));
-    return [`${label}: ${show(was)} → ${show(now)}`];
-  });
-}
-const isDirty = () => !!editing && editBase !== null && changedFields().length > 0;
-// A double-click is two clicks on the same thing within DOUBLE ms. Counted here, not with the browser's
-// dblclick: the first click selects, which redraws the plan and the tree, and the browser then sees the
-// second click land on a new element and fires no dblclick.
-const DOUBLE = 450;
-let lastClick = null;
-function isDoubleClick(kind, id) {
-  const now = performance.now(), hit = !!lastClick && lastClick.kind === kind && lastClick.id === id && now - lastClick.t < DOUBLE;
-  lastClick = hit ? null : { kind, id, t: now };
-  return hit;
-}
-// ---- new things are created by their first Apply (decision 120) ----
-// + Object, + Door, + Lamp, + Stairs, a drawn wall and Duplicate put the thing into the model so the plan and its form can
-// show it, but it is "fresh" until its first Apply: leaving the editor (Cancel, Esc, another click) takes it out again, Save
-// waits for it, and its id is made from the name typed (ob_kitchen_cabinet) when it is applied, not before.
-let fresh = null;                                                // { kind, id, autoId, base (the model before it), what }
-const FRESH_ERR = { object: 'obErr', opening: 'oErr', fixture: 'xErr', wall: 'wErr', stairs: 'stErr' };
-const isFresh = () => !!fresh && !!editing && editing.kind === fresh.kind && editing.id === fresh.id;
-const setSelectedId = (kind, id) => { if (kind === 'object') objectId = id; else if (kind === 'opening') openingId = id; else if (kind === 'fixture') fixtureId = id; else if (kind === 'wall') wallId = id; else if (kind === 'stairs') stairsId = id; };
-const forgetForms = () => { objectFormFor = null; openingFormFor = null; fixtureFormFor = null; wallFormFor = null; stairsFormFor = null; };   // the forms refill from the model
-/** Call right after a new thing was made and opened: `base` is the model from before it. */
-function startFresh(kind, id, base, what) { fresh = { kind, id, autoId: id, base, what }; showEditBar(); }
-/** Take the unapplied new thing out again (the model goes back to before it was made). */
-function discardFresh() {
-  const f = fresh; fresh = null;
-  if (!f) return;
-  model = history.rewindTo(f.base) || f.base;
-  dirty = isModelDirty();
-  setSelectedId(f.kind, null);
-  forgetForms();
-}
-/**
- * Before something new is made: a new thing still being edited and never applied is dropped first (asking when it was
- * changed). `hosts` are the ids the new thing goes on (a wall, an opening): when that is the unapplied thing itself it must
- * be applied first, because its id is not settled yet. Returns false when it stays.
- */
-function dropFresh(hosts = []) {
-  if (!isFresh()) { if (fresh && !editing) fresh = null; return true; }
-  if (hosts.includes(fresh.id)) { setStatus(`Apply the new ${fresh.what} first: Apply creates it and gives it its id`); return false; }
-  return leaveEdit();
-}
-/** The first Apply of a new thing worked (or had nothing to change): it exists now, with the id its name makes. */
-function settleFresh() {
-  const f = fresh; fresh = null;
-  $(FRESH_ERR[f.kind]).textContent = '';
-  let id = f.id;
-  const r = id === f.autoId ? renameFromName(model, levelId, f.kind, id, opts()) : null;
-  if (r?.renamed && !r.report.errors.length) {
-    id = r.id; setSelectedId(f.kind, id); if (editing) editing.id = id;           // before the commit redraws, which looks the thing up by its id
-    forgetForms();
-    commit(r.model);
-  }
-  setStatus(`${id} created (not saved yet)`);
-}
-function snap() { if (!editing) return; editBase = new Map(panelFields().map(c => [c, fieldValue(c)])); showEditBar(); }
-function showEditBar() {
-  if (!editing) return;
-  const [a, d] = BAR[editing.kind], changed = isDirty();
-  const isNew = isFresh();
-  $('edApply').disabled = $(a).disabled;
-  $('edApply').textContent = /anyway/.test($(a).textContent) ? 'Apply anyway' : isNew ? 'Apply (create)' : 'Apply';
-  $('edDelete').hidden = $(d).hidden || isNew;                    // a new thing is cancelled, not deleted
-  $('edDup').hidden = isNew || !(['object', 'opening', 'fixture'].includes(editing.kind) || (editing.kind === 'wall' && wall() && !wall().from?.length));
-  $('edId').hidden = isNew;                                       // the id, clickable: a dialog changes it (fixes list 26)
-  $('edId').textContent = editing.id;
-  $('edRevert').disabled = !changed;
-  $('edClose').textContent = changed || isNew ? 'Cancel' : 'Close';
-  $('edState').textContent = isNew ? `● new ${fresh.what}: created when you Apply` : changed ? '● changes not applied yet' : '';
-}
-/** Open the editor for one thing (leaving the current one first, asking if it has unapplied changes). */
-function enterEdit(kind, id, o = {}) {
-  if (editing && !leaveEdit({ ask: o.ask !== false, noBack: true })) return false;
-  if (measure?.isOn()) measure.setOn(false);
-  wallFormFor = null; openingFormFor = null; fixtureFormFor = null; stairsFormFor = null; objectFormFor = null;          // always start from what is stored
-  for (const e of ['wErr', 'oErr', 'xErr', 'stErr', 'obErr', 'mErr']) $(e).textContent = '';
-  if (kind === 'material') { editing = { kind, id, back: o.back }; openMaterial(id, o.forSide); }
-  else { SELECT[kind]?.(id); editing = { kind, id }; }
-  refresh(); snap();
-  $('cap').scrollTop = 0;
-  if (kind === 'room' || kind === 'solid') zoomToIfSmall(room()?.polygon);
-  return true;
-}
-/** A new room or chimney: the editor with an empty measurement form. */
-function editDraft(d) {
-  if (editing && !leaveEdit({ noBack: true })) return false;
-  if (measure?.isOn()) measure.setOn(false);
-  roomId = null; wallId = null; openingId = null; fixtureId = null; stairsId = null; objectId = null; draft = d;
-  loadFormForSelection();
-  editing = { kind: d.solid ? 'solid' : 'room', id: null };
-  refresh(); snap();
-  $('cap').scrollTop = 0;
-  return true;
-}
-/** Back to the house view; false when the user keeps the unapplied changes. */
-function leaveEdit({ ask = true, noBack = false } = {}) {
-  if (!editing) return true;
-  if (ask && isDirty()) return false;                             // unapplied changes: the caller asks first (mayLeave), nothing is dropped here
-  if (isFresh()) discardFresh();                                  // a new thing that was never applied: leaving removes it
-  const was = editing;
-  if (peekId) { peekId = null; peekSel = null; $('peekBar').hidden = true; $('peekCard').hidden = true; }
-  editing = null; editBase = null; draft = null; fromPick = null; startPick = false;
-  wallFormFor = null; openingFormFor = null; fixtureFormFor = null; stairsFormFor = null; objectFormFor = null;           // forms refill from the model next time
-  if (was.kind === 'material') { matId = null; $('matForm').dataset.forSide = ''; }
-  if (roomId) loadFormForSelection();
-  if (autoZoomed) { view = null; autoZoomed = false; }
-  refresh();
-  if (was.back && !noBack) enterEdit(was.back.kind, was.back.id);
-  return true;
-}
-/**
- * Change the id of what is being edited and every reference to it (fixes list 26), from a dialog reached by clicking
- * the id. The dialog checks the new id before it closes, so a taken one is changed first.
- */
-async function renameEditing() {
-  if (!editing) return;
-  if (isDirty() || isFresh()) { setStatus('Apply or revert your changes first, then change the id'); return; }
-  const from = editing.id, kind = editing.kind, name = entityName(model, from);
-  const r = await openDialog({
-    title: `Id of ${refName(from)}`,
-    message: 'Every reference to it is updated. Ids are lowercase letters, digits and _, and keep their prefix (r_, w_ …).',
-    fields: [{ name: 'id', label: 'Id', value: from }],
-    buttons: [
-      { id: 'fromName', label: 'From name', fill: () => ({ id: idFromName(model, from, name) }) },
-      { id: 'save', label: 'Save id', primary: true, check: v => { const t = v.id.trim(); return t === from ? null : renameId(model, from, t).report.errors[0] || null; } },
-      { id: 'cancel', label: 'Cancel' },
-    ],
-  });
-  if (r.button !== 'save') return;
-  const to = r.values.id.trim();
-  if (to === from) return;
-  const res = renameId(model, from, to);
-  if (res.report.errors.length) { setStatus(res.report.errors.join('; ')); return; }
-  // a fixture's link or a door's sensor in location.json moves with it (saved with Save, undone with the rename)
-  let moved = { location: loc, moved: false };
-  if (res.report.fixture || res.report.opening || res.report.object) {
-    moved = renameBinding(loc, from, to);
-    if (moved.conflict) {
-      const linkOf = b => b?.entity ?? 'no entity';
-      const useOld = await askConfirm(`${to} already has a link (${linkOf(moved.conflict.existing)}). Use the link of ${from} (${linkOf(moved.conflict.old)}) instead? Cancel keeps the existing link and drops the one of ${from}.`, { title: 'Two links', ok: `Use ${from}'s link` });
-      moved = renameBinding(loc, from, to, { resolve: useOld ? 'use-old' : 'keep-existing' });
-    }
-  }
-  leaveEdit({ ask: false, noBack: true });
-  loc = moved.location;
-  commit(res.model);
-  setStatus(`${from} is ${to} now: ${res.report.changed} references updated${moved.moved ? '; its link in location.json moved too' : ''} (not saved yet)`);
-  enterEdit(kind, to, { ask: false });
-}
-
-/** Close the editor from a button or Escape: the unapplied-changes question first (decideLeave). */
-const closeEdit = async () => { if (await decideLeave()) leaveEdit({ ask: false }); };
-
-/**
- * Leaving an edit with unapplied changes (or a new thing not created yet): Apply (writes the form into the model, as
- * the bar does; the house is still saved separately), Discard, or Cancel to stay (fixes list 12, 20). Resolves true
- * when the edit may be left.
- */
-async function decideLeave() {
-  if (!editing) return true;
-  const fr = isFresh(), changed = isDirty();
-  if (!fr && !changed) return true;
-  const applyId = BAR[editing.kind][0];
-  // Apply writes the form into the model, as the bar does; the house itself is saved separately (Save in the save bar)
-  const buttons = [
-    { id: 'apply', label: fr ? 'Apply (create)' : 'Apply', primary: true },
-    { id: 'discard', label: fr ? `Discard this new ${fresh.what}` : 'Discard' },
-    { id: 'cancel', label: 'Cancel' },
-  ];
-  const r = await openDialog({
-    title: fr ? `New ${fresh.what} not created yet` : 'Unapplied changes',
-    message: fr ? 'Apply creates it. Discard throws it away. Cancel stays here.' : [
-      'Apply writes these changes into the model. Discard drops them. Cancel stays here. (Save in the save bar stores the house.)',
-      ...(changedFields().length ? ['', 'Not applied yet:', ...changedFields().map(l => `• ${l}`)] : []),
-    ].join('\n'),
-    buttons,
-  });
-  if (r.button === 'cancel') return false;
-  if (r.button === 'discard') { leaveEdit({ ask: false, noBack: true }); return true; }   // drops the changes and leaves
-  if (r.button === 'apply') {
-    if ($(applyId).disabled) { setStatus('Fix the errors in the form first (or discard the changes)'); return false; }
-    // writes the form into the model; awaited, because Apply may ask about changes elsewhere in the plan first,
-    // and when that is cancelled the edit stays open with its changes
-    const h = $(applyId).onclick;
-    if (h) await h.call($(applyId)); else $(applyId).click();
-    if (isDirty()) return false;
-  }
-  return true;
-}
-/** Revert: the form back to what is stored. */
-function revertEdit() {
-  const k = editing.kind;
-  if (k === 'room' || k === 'solid') loadFormForSelection();
-  else if (k === 'wall') wallFormFor = null;
-  else if (k === 'opening') openingFormFor = null;
-  else if (k === 'fixture') fixtureFormFor = null;
-  else if (k === 'stairs') stairsFormFor = null;
-  else if (k === 'object') objectFormFor = null;
-  else if (k === 'material') openMaterial(matId, $('matForm').dataset.forSide);
-  for (const e of ['wErr', 'oErr', 'xErr', 'stErr', 'mErr']) $(e).textContent = '';
-  refresh(); snap();
-}
-/** Unapplied changes stop a synchronous action (it is refused, never dropped): the caller asks first with mayLeave()/mayRefill(). */
-const okToDiscard = () => !isDirty();
-/** Before leaving the edit for another item (or a new one): the unapplied-changes question, in the page. True when it may go on. */
-const mayLeave = async () => !editing || decideLeave();
-/** Before the form is refilled from the model (a refresh, a split, a join …): the question, in the page. Discard reverts the form. */
-async function mayRefill() {
-  if (!isDirty()) return true;
-  if (!(await askConfirm('This refreshes the form: discard the changes you have not applied?', { ok: 'Discard' }))) return false;
-  revertEdit();
-  return true;
-}
-/** A click handler that leaves the edit for another item: the unapplied-changes question first, then the action. */
-const afterLeave = fn => async (...args) => { if (!(await mayLeave())) return; return fn(...args); };
-/** After a change: follow what is edited (a new room got its id, a deleted thing ends the editor). */
-function afterCommit() {
-  if (!editing) return;
-  const k = editing.kind;
-  if (k === 'room' || k === 'solid') editing.id = roomId ?? (draft ? null : editing.id);
-  if (k === 'material' && matId) editing.id = matId;
-  const there = k === 'room' || k === 'solid' ? !!(room() || draft) : k === 'wall' ? !!wall() : k === 'opening' ? !!opening() : k === 'fixture' ? !!fixture() : k === 'stairs' ? !!stairs() : k === 'object' ? !!object() : !!(editing.id && model.materials?.[editing.id]);
-  if (!there) { editing = null; editBase = null; refresh(); return; }
-  snap();
-}
-function undoRedo(which) {
-  if (editing) { setStatus('Close the editor first (Esc); inside a field Ctrl+Z undoes your typing'); return; }
-  model = which === 'undo' ? history.undo() : history.redo();
-  if (locOf.has(model)) loc = locOf.get(model);
-  dirty = isModelDirty();
-  if (!level()) { levelId = model.levels[0].id; roomId = null; wallId = null; draft = null; }
-  fillLevels();
-  if (roomId && !room()) roomId = null;
-  if (wallId && !wall()) wallId = null;
-  if (openingId && !opening()) openingId = null;
-  if (fixtureId && !fixture()) fixtureId = null;
-  if (stairsId && !stairs()) stairsId = null;
-  if (objectId && !object()) objectId = null;
-  openingFormFor = null; fixtureFormFor = null;
-  fillPlace();
-  wallFormFor = null;
-  if (!wallId) loadFormForSelection();
-  refresh();
-  setStatus(which === 'undo' ? 'undone' : 'redone');
-}
-const setStatus = t => ($('status').textContent = t);
-
-// The design library's materials (object-designs/materials/library.json): the names a wall side may use besides the house's own.
-async function loadDesignLibrary() {
-  try {
-    const res = await fetch('object-designs/materials/library.json', { cache: 'no-store' });
-    return res.ok ? await res.json() : {};
-  } catch { return {}; }
-}
+enhanceSegmented();                  // choices of up to four: a row of buttons (UX20); before the menus, which leave these alone
+enhanceAll(document, { skip: '#preview, #tree' });     // the plan and the tree are rebuilt all the time and hold no select (PF16)
+enhanceNumbers();
 
 async function init() {
   const index = await listHouses();
   const locId = chooseLocation(index, params.get('loc'));
-  house = await openHouse(index, locId);
+  Ed.house = await openHouse(index, locId);
   setDesignLibrary(await loadDesignLibrary());
-  entry = house.entry;
-  saveMode = house.canSave ? house.saveMode : null;
+  Ed.entry = Ed.house.entry;
+  Ed.saveMode = Ed.house.canSave ? Ed.house.saveMode : null;
   remember(locId); linkPages(locId);
   $('loc').innerHTML = houseOptions(index, locId);
-  $('loc').onchange = async () => { if (!dirty || await askConfirm('Discard unsaved changes?', { ok: 'Discard' })) { remember($('loc').value); params.set('loc', $('loc').value); params.delete('level'); location.search = params; } else $('loc').value = locId; };
+  $('loc').onchange = async () => { if (!Ed.dirty || await askConfirm('Discard unsaved changes?', { ok: 'Discard' })) { remember($('loc').value); params.set('loc', $('loc').value); params.delete('level'); location.search = params; } else $('loc').value = locId; };
 
-  loc = house.location; model = house.model;
+  Ed.loc = Ed.house.location; Ed.model = Ed.house.model;
   assetCache();                              // the models of this house: the + Asset picker lists them
-  house.watch(changedElsewhere);
-  document.title = `Plantern · Editor · ${loc.name}`;
-  savedModel = model; savedLoc = loc;
+  Ed.house.watch(changedElsewhere);
+  document.title = `Plantern · Editor · ${Ed.loc.name}`;
+  Ed.savedModel = Ed.model; Ed.savedLoc = Ed.loc;
 
-  if (!model.levels.length) {
+  if (!Ed.model.levels.length) {
     // a new house: the first level comes before anything else (it is part of the first undo state)
     setStatus('create the first level to start');
-    const r = await new Promise(resolve => showLevelForm($('levelBox'), model, { onCreate: resolve }));
-    model = r.model; dirty = true;
+    const r = await new Promise(resolve => showLevelForm($('levelBox'), Ed.model, { onCreate: resolve }));
+    Ed.model = r.model; Ed.dirty = true;
   }
-  history = createHistory(model); locOf.set(model, loc);
-  levelId = chooseLevel(model, locId, params.get('level'));
-  remember(locId, levelId); linkPages(locId, levelId);
+  Ed.history = createHistory(Ed.model); locOf.set(Ed.model, Ed.loc);
+  Ed.levelId = chooseLevel(Ed.model, locId, params.get('level'));
+  remember(locId, Ed.levelId); linkPages(locId, Ed.levelId);
   fillLevels();
   $('level').onchange = () => {
-    if ($('level').value === NEW_LEVEL) { $('level').value = levelId; newLevel(); return; }
+    if ($('level').value === NEW_LEVEL) { $('level').value = Ed.levelId; newLevel(); return; }
     goToLevel($('level').value);
   };
-  $('uMode').onclick = () => { underlayMode = { auto: 'always', always: 'off', off: 'auto' }[underlayMode]; writePrefs({ editorUnderlay: underlayMode }); showUnderlayMode(); draw(); };
+  $('uMode').onclick = () => { Ed.underlayMode = { auto: 'always', always: 'off', off: 'auto' }[Ed.underlayMode]; writePrefs({ editorUnderlay: Ed.underlayMode }); showUnderlayMode(); draw(); };
   showUnderlayMode();
 
   FIELDS.filter(f => f !== 'originRef').forEach(f => $(f).addEventListener('input', recompute));
   $('originRef').addEventListener('change', () => pickStart($('originRef').value));
-  $('originPick').onclick = () => { startPick = !startPick; syncOriginPick(); draw(); };
+  $('originPick').onclick = () => { Ed.startPick = !Ed.startPick; syncOriginPick(); draw(); };
   // the panel can be resized by dragging its left edge; the width is remembered in this browser
   wirePanelResize($('resizer'), $('cap'), 'plantern.editor.aside', draw);
   // Place the house: position, north angle and ground-floor height; Apply writes them with setSite() (place.js has the logic)
@@ -551,30 +108,30 @@ async function init() {
   $('placeWall').addEventListener('focus', fillPlaceWalls);
   $('placeSect').addEventListener('toggle', () => { if ($('placeSect').open) fillPlaceWalls(); });
   $('placeUseWall').onclick = useWallBearing;
-  $('name').addEventListener('input', () => { if (draft) { draft.name = $('name').value; $('rid').value = draft.solid ? newSolidId(model, draft.name || $('sKind').value) : newRoomId(model, draft.name); refreshNextTo(); } recompute(); });
-  $('sShape').addEventListener('change', () => { if (isRound()) loadRound(solved?.capture?.mode === 'circle' ? solved.capture : null); else syncRound(); recompute(); });
+  $('name').addEventListener('input', () => { if (Ed.draft) { Ed.draft.name = $('name').value; $('rid').value = Ed.draft.solid ? newSolidId(Ed.model, Ed.draft.name || $('sKind').value) : newRoomId(Ed.model, Ed.draft.name); refreshNextTo(); } recompute(); });
+  $('sShape').addEventListener('change', () => { if (isRound()) loadRound(Ed.solved?.capture?.mode === 'circle' ? Ed.solved.capture : null); else syncRound(); recompute(); });
   $('rRoom').addEventListener('change', () => { fillRoundWalls(); syncRound(); recompute(); });
   for (const id of ['rWA', 'rWB']) $(id).addEventListener('change', recompute);
   for (const id of ['rDia', 'rDA', 'rDB', 'rX', 'rY']) $(id).addEventListener('input', recompute);
   $('sKind').addEventListener('change', () => {
-    if (draft?.solid && !draft.name) $('rid').value = newSolidId(model, $('sKind').value);
+    if (Ed.draft?.solid && !Ed.draft.name) $('rid').value = newSolidId(Ed.model, $('sKind').value);
   });
   // the edit bar: Apply / Revert / Close (Cancel with unapplied changes) / Delete
   $('edApply').onclick = async () => {
-    const f = isFresh() ? fresh : null, before = model;
+    const f = isFresh() ? Ed.fresh : null, before = Ed.model;
     // an Apply that builds on the server (a blueprint object's options or size) is asked to finish before the model is looked at
-    const apply = $(BAR[editing.kind][0]);
+    const apply = $(BAR[Ed.editing.kind][0]);
     if (typeof apply.onclick === 'function') await apply.onclick(new MouseEvent('click')); else apply.click();
     // the first Apply creates a new thing, also when the defaults are fine as they are ("Nothing changed")
-    if (f && fresh === f && (model !== before || $(FRESH_ERR[f.kind]).textContent === 'Nothing changed.')) settleFresh();
+    if (f && Ed.fresh === f && (Ed.model !== before || $(FRESH_ERR[f.kind]).textContent === 'Nothing changed.')) settleFresh();
   };
-  $('edDelete').onclick = () => $(BAR[editing.kind][1]).click();
+  $('edDelete').onclick = () => $(BAR[Ed.editing.kind][1]).click();
   $('edId').onclick = renameEditing;
   $('edRevert').onclick = revertEdit;
   $('edClose').onclick = closeEdit;
   $('edBack').onclick = closeEdit;
   for (const ev of ['input', 'change']) $('edit').addEventListener(ev, () => queueMicrotask(showEditBar));
-  $('exterior').addEventListener('change', () => { if (draft) draft.exterior = $('exterior').checked; recompute(); });
+  $('exterior').addEventListener('change', () => { if (Ed.draft) Ed.draft.exterior = $('exterior').checked; recompute(); });
   act.solid = afterLeave(() => { if (editDraft({ name: '', solid: true })) $('name').focus(); });
   $('copyFrom').onchange = () => { const v = $('copyFrom').value; if (v) useShapeOf(v); };
   for (const [sel, kind] of [['obCopy', 'object'], ['oCopy', 'opening'], ['xCopy', 'fixture'], ['stCopy', 'stairs']]) $(sel).onchange = () => copyInto(kind, $(sel).value);
@@ -593,7 +150,7 @@ async function init() {
   $('wApply').onclick = applyWall;
   $('wUnbind').onclick = async () => {
     if (!(await mayRefill())) return;
-    const id = wallId, r = unbindWall(model, levelId, id, opts());
+    const id = Ed.wallId, r = unbindWall(Ed.model, Ed.levelId, id, opts());
     if (r.report.errors.length) { $('wErr').textContent = r.report.errors.join('; '); return; }
     commit(r.model); setStatus(`${id} is a hand-drawn wall now (not saved yet)`);
   };
@@ -601,7 +158,7 @@ async function init() {
   $('wSloped').addEventListener('change', () => {
     // ticking it starts from the wall's current flat heights at both ends
     if ($('wSloped').checked && !$('wTopA').value && !$('wTopB').value) {
-      const w = level().walls.find(x => x.id === wallId), e = w && wallProfile(w, level()).ends;
+      const w = level().walls.find(x => x.id === Ed.wallId), e = w && wallProfile(w, level()).ends;
       if (e) { $('wTopA').value = e.top.a; $('wTopB').value = e.top.b; $('wBottomA').value = e.bottom.a || ''; $('wBottomB').value = e.bottom.b || ''; }
     }
     showSlopeRows();
@@ -610,21 +167,21 @@ async function init() {
     $(`w${S}Mode`).addEventListener('change', showSideRows);
     $(`w${S}Color`).addEventListener('input', showSideRows);
     // a new material from a wall side: its own editor, back to the wall when closed
-    $(`w${S}Mat`).addEventListener('change', async () => { if ($(`w${S}Mat`).value === '+new') { if (!(await mayLeave())) { $(`w${S}Mat`).value = ''; return; } $(`w${S}Mat`).value = ''; const back = { kind: 'wall', id: wallId }; enterEdit('material', '', { forSide: S.toLowerCase(), back }); } });
+    $(`w${S}Mat`).addEventListener('change', async () => { if ($(`w${S}Mat`).value === '+new') { if (!(await mayLeave())) { $(`w${S}Mat`).value = ''; return; } $(`w${S}Mat`).value = ''; const back = { kind: 'wall', id: Ed.wallId }; enterEdit('material', '', { forSide: S.toLowerCase(), back }); } });
   }
   $('newMat').onclick = afterLeave(() => enterEdit('material', ''));
   $('mApply').onclick = applyMaterial;
   $('mColor').addEventListener('input', materialSwatches);
   $('mClose').onclick = closeEdit;
   $('mDelete').onclick = () => {
-    const r = deleteMaterial(model, matId);
+    const r = deleteMaterial(Ed.model, Ed.matId);
     if (r.report.errors.length) { $('mErr').textContent = r.report.errors.join('; '); return; }
-    matId = null; $('matForm').hidden = true; commit(r.model);
+    Ed.matId = null; $('matForm').hidden = true; commit(r.model);
   };
   for (const type of ['door', 'window', 'passage']) act[type] = async () => {
     if (!(await mayLeave())) return;
-    if (!dropFresh([wallId])) return;
-    const base = model, r = addOpening(model, levelId, wallId, type, {}, opts());
+    if (!dropFresh([Ed.wallId])) return;
+    const base = Ed.model, r = addOpening(Ed.model, Ed.levelId, Ed.wallId, type, {}, opts());
     if (r.report.errors.length) { $('wErr').textContent = r.report.errors.join('; '); return; }
     commit(r.model); enterEdit('opening', r.opening.id, { ask: false }); startFresh('opening', r.opening.id, base, type);
     setStatus(`${r.opening.id} is a new ${type} with default sizes: measure it, name it and Apply to create it`);
@@ -633,7 +190,7 @@ async function init() {
   const placeFixture = async (spec, what) => {
     if (!(await mayLeave())) return;
     if (!dropFresh([spec.attach?.wall, spec.attach?.opening])) return;
-    const base = model, r = addFixture(model, levelId, spec, opts());
+    const base = Ed.model, r = addFixture(Ed.model, Ed.levelId, spec, opts());
     if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
     commit(r.model); enterEdit('fixture', r.fixture.id, { ask: false }); startFresh('fixture', r.fixture.id, base, spec.kind === 'switch' ? 'switch' : spec.kind === 'strip' ? 'LED strip' : 'lamp');
     setStatus(`${r.fixture.id} is new: ${what}. Name it and Apply to create it`);
@@ -649,33 +206,45 @@ async function init() {
   act.box = () => {
     const at = placeRoom();
     if (!at) { setStatus('Add a room first'); return; }
-    placeObject({ pos: labelPoint(at.polygon).pos.map(v => Math.round(v)) }, 'in the middle of the room: drag it where it belongs');
+    placeObject({ pos: roomSpot(at.polygon) }, Ed.addAt ? 'where you clicked: drag it where it belongs' : 'in the middle of the room: drag it where it belongs');
   };
   act.model = async name => {
-    const entry = assetCache().load(name);
+    const spot = Ed.addAt, entry = assetCache().load(name);   // a right-click's place, read before waiting
     await entry.ready;                        // its size comes from its meta.json
     const at = placeRoom();
     if (!at) { setStatus('Add a room first'); return; }
     const missing = ['missing', 'broken'].includes(entry.status) ? ` (${entry.status === 'missing' ? 'not found' : 'cannot be shown'}: a red marker until it is)` : '';
-    placeObject({ asset: name, size: entry.meta?.size, pos: labelPoint(at.polygon).pos.map(v => Math.round(v)) }, `a model of "${name}"${missing} in the middle of the room: drag it where it belongs`);
+    placeObject({ asset: name, size: entry.meta?.size, pos: (() => { Ed.addAt = spot; const p = roomSpot(at.polygon); Ed.addAt = null; return p; })() }, `a model of "${name}"${missing} in the middle of the room: drag it where it belongs`);
   };
-  act.wallBox = () => { const w = wall(); placeObject({ attach: { wall: w.id, side: wallInfo(level(), w.id)?.sides?.right?.length ? 'right' : 'left', offset: Math.max(0, Math.round((Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) - 900) / 2)) } }, 'on the wall: drag it along, or set its position'); };
+  act.wallBox = () => { const w = wall(); placeObject({ attach: { wall: w.id, side: wallInfo(level(), w.id)?.sides?.right?.length ? 'right' : 'left', offset: wallSpot(w, 900) } }, 'on the wall: drag it along, or set its position'); };
   $('obApply').onclick = applyObjectForm;
-  $('obPlaced').addEventListener('change', () => { const o = object(); if (!o || !placeDraft) return; placeDraft.to = $('obPlaced').value; showPlacedChoice(o); });
-  $('obOpening').addEventListener('change', () => { const o = object(); if (!o || !placeDraft) return; placeDraft.opening = $('obOpening').value; showPlacedChoice(o); });
-  $('obAt').addEventListener('change', () => { const o = object(); if (!o || !placeDraft) return; placeDraft.at = $('obAt').value; showPlacedChoice(o); });
+  $('obPlaced').addEventListener('change', () => { const o = object(); if (!o || !Ed.placeDraft) return; Ed.placeDraft.to = $('obPlaced').value; showPlacedChoice(o); });
+  $('obOpening').addEventListener('change', () => { const o = object(); if (!o || !Ed.placeDraft) return; Ed.placeDraft.opening = $('obOpening').value; showPlacedChoice(o); });
+  $('obAt').addEventListener('change', () => { const o = object(); if (!o || !Ed.placeDraft) return; Ed.placeDraft.at = $('obAt').value; showPlacedChoice(o); });
   $('obAsset').addEventListener('input', () => { $('obAssetNote').textContent = assetNote($('obAsset').value.trim()); });
   // the model menu beside the field (ND8): searchable by what is typed; the field still takes any name
   const assetHost = document.createElement('div');
   $('obAsset').after(assetHost);
-  createMenu(assetHost, { label: 'Pick a model', icon: 'model', entries: () => assetEntries(assetPickNames, $('obAsset').value), onPick: e => { $('obAsset').value = e.id; $('obAsset').dispatchEvent(new Event('input')); }, align: 'full' });
+  createMenu(assetHost, { label: 'Pick a model', icon: 'model', entries: () => assetEntries(Ed.assetPickNames, $('obAsset').value), onPick: e => { $('obAsset').value = e.id; $('obAsset').dispatchEvent(new Event('input')); }, align: 'full' });
   // a swatch menu beside each colour input (ND10): the house's palette and colours, the library's, then Other colour…
-  for (const id of ['wLeftColor', 'wRightColor', 'sColor', 'obColor', 'mColor']) addSwatchPicker($(id));
+  // one colour control everywhere (UX21): a colour box and its swatch menu
+  for (const S of ['Left', 'Right']) addSwatchPicker($(`w${S}Color`), {
+    onColour: () => { if ($(`w${S}Mode`).value !== 'color') { $(`w${S}Mode`).value = 'color'; $(`w${S}Mode`).dispatchEvent(new Event('change', { bubbles: true })); } },
+    extra: () => ($(`w${S}Mode`).value === 'color' ? [
+      { id: 'name', label: 'Name this colour…', icon: 'edit', hint: 'So it is easy to find again' },
+      { id: 'mat', label: 'Make a material of it…', icon: 'colour', hint: 'Sides with the material all change together' },
+    ].map(x => ({ ...x, onPick: x.id === 'name' ? () => nameColour($(`w${S}Color`).value) : () => makeMaterialFromSide(S.toLowerCase()) })) : []),
+  });
+  for (const id of ['sColor', 'obColor', 'mColor']) addSwatchPicker($(id), { extra: () => [{ id: 'name', label: 'Name this colour…', icon: 'edit', onPick: () => nameColour($(id).value) }] });
+  // colours behind a "use a colour" box: picking a swatch ticks it
+  for (const [id, box] of [['oColor', 'oColorUse'], ['oSillColor', 'oSillColorUse'], ['xLookColor', 'xLookUseColor'], ['obLookColor', 'obLookUseColor']]) {
+    addSwatchPicker($(id), { onColour: () => { if (!$(box).checked) { $(box).checked = true; $(box).dispatchEvent(new Event('change', { bubbles: true })); } } });
+  }
   $('obDelete').onclick = async () => {
-    if (!(await askConfirm(`Delete ${objectId}?`, { ok: 'Delete' }))) return;
-    const r = deleteObject(model, levelId, objectId, opts());
+    if (!(await askConfirm(`Delete ${Ed.objectId}?`, { ok: 'Delete' }))) return;
+    const r = deleteObject(Ed.model, Ed.levelId, Ed.objectId, opts());
     if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
-    objectId = null; loc = pruneBindings(loc, r.model); commit(r.model);
+    Ed.objectId = null; Ed.loc = pruneBindings(Ed.loc, r.model); commit(r.model);
   };
   $('xEntity').addEventListener('input', () => showEntityPick(true));
   $('xEntity').addEventListener('focus', () => showEntityPick(true));
@@ -689,9 +258,9 @@ async function init() {
   $('xUseLight').onclick = useObjectLight;
   $('preview').addEventListener('pointerdown', dragStart);
   addEventListener('pointermove', dragMove);
-  addEventListener('pointerup', () => { const was = dragging; if (was?.moved) suppressClick = true; dragging = null; if (was?.moved && ['room', 'corner', 'wall', 'wallend'].includes(was.kind)) { draw(); if (was.msg) setStatus(was.msg); } });
+  addEventListener('pointerup', () => { const was = Ed.dragging; if (was?.moved) Ed.suppressClick = true; Ed.dragging = null; if (was?.moved && ['room', 'corner', 'wall', 'wallend'].includes(was.kind)) { draw(); if (was.kind === 'room' || was.kind === 'corner') scheduleOverlaps(0); if (was.msg) setStatus(was.msg); if ((was.kind === 'wall' || was.kind === 'wallend') && was.clean && !isFresh()) { cancelAnimationFrame(was.frame); applyWall(); } } else if (was) { cancelAnimationFrame(was.frame); endDrag(was); } });   // a hand-drawn wall is stored on release (Q1); with unapplied changes before, the form waits for Apply
   $('anAdd').onclick = () => {
-    const r = addAnchor(model, { refs: [$('anA').value, $('anB').value] });
+    const r = addAnchor(Ed.model, { refs: [$('anA').value, $('anB').value] });
     if (r.report.errors.length) { $('anErr').textContent = r.report.errors.join('; '); return; }
     $('anErr').textContent = '';
     commit(r.model);
@@ -699,17 +268,17 @@ async function init() {
   };
   $('stApply').onclick = applyStairsForm;
   $('stDelete').onclick = async () => {
-    if (!(await askConfirm(`Delete ${stairsId}? The opening it makes in the floor above goes with it.`, { ok: 'Delete' }))) return;
-    const r = removeStairs(model, levelId, stairsId, opts());
+    if (!(await askConfirm(`Delete ${Ed.stairsId}? The opening it makes in the floor above goes with it.`, { ok: 'Delete' }))) return;
+    const r = removeStairs(Ed.model, Ed.levelId, Ed.stairsId, opts());
     if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
-    stairsId = null; commit(r.model);
+    Ed.stairsId = null; commit(r.model);
   };
   for (const id of ['stShape', 'stLanding', 'stRef', 'stUnder', 'stRail', 'stRailMount', 'stOpenOn']) $(id).onchange = syncStairsRows;
   $('stairsPanel').addEventListener('input', updateStairsHints);
   $('obAddStrip').onclick = () => {                               // under the front of the object (the side farthest from its wall)
-    const o = object(), fp = o && curGeo.objectFootprint(o);
+    const o = object(), fp = o && Ed.curGeo.objectFootprint(o);
     if (!fp) return;
-    const a = o.attach && curGeo.resolveAttach(o.attach);
+    const a = o.attach && Ed.curGeo.resolveAttach(o.attach);
     const mid = i => [(fp[i][0] + fp[(i + 1) % fp.length][0]) / 2, (fp[i][1] + fp[(i + 1) % fp.length][1]) / 2];
     let edge = 0;
     if (a) { let far = -Infinity; fp.forEach((_, i) => { const d = (mid(i)[0] - a.p[0]) * a.dir[0] + (mid(i)[1] - a.p[1]) * a.dir[1]; if (d > far) { far = d; edge = i; } }); }
@@ -722,11 +291,11 @@ async function init() {
   };
   act.strip = () => {
     const w = wall(), L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), length = Math.min(1200, Math.round(L / 2));
-    placeFixture({ kind: 'strip', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: Math.round((L - length) / 2), length } }, 'along the middle of the wall; set where it starts and how long it is');
+    placeFixture({ kind: 'strip', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: wallSpot(w, length), length } }, 'along the middle of the wall; set where it starts and how long it is');
   };
-  act.ceilingLamp = () => placeFixture({ kind: 'lamp', pos: labelPoint(room().polygon).pos }, 'in the middle of the room; set its position and height');
-  act.switch = () => { const w = wall(), L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]); placeFixture({ kind: 'switch', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: Math.round(L / 2) } }, 'in the middle of the wall'); };
-  act.wallLamp = () => { const w = wall(), L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]); placeFixture({ kind: 'lamp', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: Math.round(L / 2) } }, 'in the middle of the wall'); };
+  act.ceilingLamp = () => placeFixture({ kind: 'lamp', pos: roomSpot(room().polygon) }, `${Ed.addAt ? 'where you clicked' : 'in the middle of the room'}; set its position and height`);
+  act.switch = () => { const w = wall(); placeFixture({ kind: 'switch', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: wallSpot(w) } }, Ed.addAt ? 'where you clicked' : 'in the middle of the wall'); };
+  act.wallLamp = () => { const w = wall(); placeFixture({ kind: 'lamp', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: wallSpot(w) } }, Ed.addAt ? 'where you clicked' : 'in the middle of the wall'); };
   $('xApply').onclick = applyFixture;
   act.openingLamp = () => {                                 // a lamp that stands in this opening (window star, lamp on the sill)
     const o = opening(), w = o && level().walls.find(v => v.id === o.wall);
@@ -734,21 +303,23 @@ async function init() {
     placeFixture({ kind: 'lamp', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: Math.round(o.offset + o.width / 2), opening: o.id }, z: Math.round((o.sill + o.head) / 2), assumed: ['z'] }, 'in the middle of the opening; set its position and height');
   };
   $('xDelete').onclick = async () => {
-    if (!(await askConfirm(`Delete ${fixtureId}? (A Home Assistant binding for it in location.json would then point at nothing.)`, { ok: 'Delete' }))) return;
-    const r = deleteFixture(model, levelId, fixtureId, opts());
+    if (!(await askConfirm(`Delete ${Ed.fixtureId}? (A Home Assistant binding for it in location.json would then point at nothing.)`, { ok: 'Delete' }))) return;
+    const r = deleteFixture(Ed.model, Ed.levelId, Ed.fixtureId, opts());
     if (r.report.errors.length) { $('xErr').textContent = r.report.errors.join('; '); return; }
-    fixtureId = null; loc = pruneBindings(loc, r.model); commit(r.model);
+    Ed.fixtureId = null; Ed.loc = pruneBindings(Ed.loc, r.model); commit(r.model);
   };
   $('oDelete').onclick = async () => {
-    if (!(await askConfirm(`Delete ${openingId}?`, { ok: 'Delete' }))) return;
-    const w = opening()?.wall, r = deleteOpening(model, levelId, openingId, opts());
+    if (!(await askConfirm(`Delete ${Ed.openingId}?`, { ok: 'Delete' }))) return;
+    const w = opening()?.wall, r = deleteOpening(Ed.model, Ed.levelId, Ed.openingId, opts());
     if (r.report.errors.length) { $('oErr').textContent = r.report.errors.join('; '); return; }
-    loc = pruneBindings(loc, r.model); commit(r.model); selectWall(w);
+    Ed.loc = pruneBindings(Ed.loc, r.model); commit(r.model); selectWall(w);
   };
   $('oBack').onclick = afterLeave(() => enterEdit('wall', opening()?.wall));
   for (const id of ['oType', 'oOpens', 'oDoorOpens']) $(id).addEventListener('change', showOpeningRows);
+  for (const [id, k] of HEIGHT_BOXES) $(id).addEventListener('input', () => linkOpeningHeights(k));
   $('wSplit').onclick = async () => { if (await mayRefill()) doSplit(); };
   $('wSplitAt').addEventListener('input', draw);
+  $('wSplitPick').onclick = async () => { if (await mayRefill()) startSplitPick(); };
   for (const id of ['oOffset', 'oWidth', 'xOffset']) $(id).addEventListener('input', draw);
   for (const id of ['stRef', 'wAnchA', 'wAnchB', 'anA', 'anB']) $(id).addEventListener('change', draw);
   $('oFrom').addEventListener('change', () => switchFrom('opening'));
@@ -757,20 +328,30 @@ async function init() {
   $('xFrom').addEventListener('change', () => switchFrom('fixture'));    // the chosen point is ringed on the plan
   $('anchorCount').closest('details').addEventListener('toggle', draw);   // the distance on the plan follows the typing
   wireAddMenus();
+  foldHelp();
+  for (const id of Object.values(PANEL_MSG)) new MutationObserver(syncEdMsg).observe($(id), { childList: true, characterData: true, subtree: true });
+  addSlidersAndDials();
+  addWallMeasure('x'); addWallMeasure('ob');
+  wireWallTable();
+  for (const id of ['obW', 'obD', 'obRot']) $(id).addEventListener('input', () => refreshWallMeasure('ob'));
   $('undo').onclick = () => undoRedo('undo');
   $('redo').onclick = () => undoRedo('redo');
-  measure = createEditorMeasure({
+  Ed.measure = createEditorMeasure({
     svg: $('preview'), dom: { btn: $('mOn'), modes: $('mModes'), read: $('mRead') },
-    snaps: () => snapsAround, lines: linesAround, name: refName,
-    onChange: on => { if (on) { lastClick = null; endPeek(); selectNone(); } },
+    snaps: () => Ed.snapsAround, lines: linesAround, name: refName,
+    onChange: on => { if (on) { Ed.lastClick = null; endPeek(); selectNone(); } },
     onPin: (a, b, measured) => {
-      const r = addCheck(model, { a, b, measured, note: 'measured in the Editor' }, opts());
+      const r = addCheck(Ed.model, { a, b, measured, note: 'measured in the Editor' }, opts());
       if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
       commit(r.model);
       setStatus(`${r.check.id} kept: ${refName(a)} ↔ ${refName(b)}, ${measured} mm (not saved yet)`);
     },
   });
-  $('preview').addEventListener('mousemove', e => { if (drawing) { drawing.hover = wallPoint(e); drawing.shift = e.shiftKey; drawWallOverlay(); } else measure.hover(e); });
+  $('preview').addEventListener('pointerover', hoverStatus);
+  $('preview').addEventListener('contextmenu', openContextMenu);
+  $('keysHelp').onclick = e => { e.preventDefault(); showShortcuts(); };
+  $('preview').addEventListener('pointerleave', () => { $('status').textContent = Ed.baseStatus; });
+  $('preview').addEventListener('mousemove', e => { if (Ed.splitPick) { const at = splitAtPointer(e); if (at !== null && String(at) !== $('wSplitAt').value) { $('wSplitAt').value = at; draw(); setStatus(`Split ${at} mm from the wall's start · click to split, Esc: cancel`); } return; } if (Ed.placing) { drawPlacingGhost(e); return; } if (Ed.drawing) { Ed.drawing.hover = wallPoint(e); Ed.drawing.shift = e.shiftKey; drawWallOverlay(); } else Ed.measure.hover(e); });
   act.wall = startDrawing;
   // a different corner for the start: the wall stays where it is, its start is now counted from that corner
   $('wAnchA').addEventListener('change', () => {
@@ -789,75 +370,81 @@ async function init() {
   $('preview').addEventListener('wheel', e => { e.preventDefault(); zoomAt(Math.exp(Math.max(-0.5, Math.min(0.5, e.deltaY * 0.0015))), e); }, { passive: false });
   $('zIn').onclick = () => zoomAt(1 / 1.4);
   $('zOut').onclick = () => zoomAt(1.4);
-  $('zFit').onclick = () => { view = null; autoZoomed = false; draw(); };
+  $('zFit').onclick = () => { Ed.view = null; Ed.autoZoomed = false; draw(); };
   $('preview').addEventListener('pointerdown', e => {
     touches.set(e.pointerId, [e.clientX, e.clientY]);
-    if (touches.size === 2 && lastFit) {
+    if (touches.size === 2 && Ed.lastFit) {
       // two fingers: pinch to zoom (whatever the first finger had started is dropped)
       const svg = $('preview'), r = svg.getBoundingClientRect(), [a, b] = [...touches.values()].map(p => [p[0] - r.left, p[1] - r.top]);
-      pinch = { vb: fitTo(view || lastFit, svg.clientWidth, svg.clientHeight), m: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], d: Math.hypot(a[0] - b[0], a[1] - b[1]) };
-      pan = null; dragging = null;
+      Ed.pinch = { vb: fitTo(Ed.view || Ed.lastFit, svg.clientWidth, svg.clientHeight), m: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], d: Math.hypot(a[0] - b[0], a[1] - b[1]) };
+      Ed.pan = null; Ed.dragging = null;
       return;
     }
-    if (dragging) return;                                          // this pointer moves a lamp or an object, not the plan
-    if (e.button === 0 || e.button === 1) pan = { x: e.clientX, y: e.clientY, vb: { ...(view || lastFit) }, moved: false };
+    if (Ed.dragging) return;                                          // this pointer moves a lamp or an object, not the plan
+    if (e.button === 0 || e.button === 1) Ed.pan = { x: e.clientX, y: e.clientY, vb: { ...(Ed.view || Ed.lastFit) }, moved: false };
   });
   addEventListener('pointermove', e => {
-    if (pinch && touches.has(e.pointerId)) {
+    if (Ed.pinch && touches.has(e.pointerId)) {
       touches.set(e.pointerId, [e.clientX, e.clientY]);
       if (touches.size < 2) return;
       const svg = $('preview'), r = svg.getBoundingClientRect(), [a, b] = [...touches.values()].map(p => [p[0] - r.left, p[1] - r.top]);
-      view = pinchView(pinch.vb, [svg.clientWidth, svg.clientHeight], pinch.m, pinch.d, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], Math.hypot(a[0] - b[0], a[1] - b[1]), { min: 300, max: lastFit.w * 4 });
-      autoZoomed = false; suppressClick = true;
-      cancelAnimationFrame(panFrame); panFrame = requestAnimationFrame(draw);
+      Ed.view = pinchView(Ed.pinch.vb, [svg.clientWidth, svg.clientHeight], Ed.pinch.m, Ed.pinch.d, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], Math.hypot(a[0] - b[0], a[1] - b[1]), { min: 300, max: Ed.lastFit.w * 4 });
+      Ed.autoZoomed = false; Ed.suppressClick = true;
+      cancelAnimationFrame(Ed.panFrame); Ed.panFrame = requestAnimationFrame(draw);
       return;
     }
-    if (!pan) return;
-    const dx = e.clientX - pan.x, dy = e.clientY - pan.y;
-    if (!pan.moved && Math.hypot(dx, dy) < 5) return;               // a click, not a drag (yet)
-    pan.moved = true; $('preview').classList.add('panning');
+    if (!Ed.pan) return;
+    const dx = e.clientX - Ed.pan.x, dy = e.clientY - Ed.pan.y;
+    if (!Ed.pan.moved && Math.hypot(dx, dy) < 5) return;               // a click, not a drag (yet)
+    Ed.pan.moved = true; $('preview').classList.add('panning');
     const k = 1 / Math.abs($('preview').getScreenCTM()?.a || 1);
-    view = { ...pan.vb, x: pan.vb.x - dx * k, y: pan.vb.y - dy * k }; autoZoomed = false;
-    cancelAnimationFrame(panFrame); panFrame = requestAnimationFrame(draw);
+    Ed.view = { ...Ed.pan.vb, x: Ed.pan.vb.x - dx * k, y: Ed.pan.vb.y - dy * k }; Ed.autoZoomed = false;
+    // PF5: a pan moves the view box only (the content depends on the size of the view, not on where it is); one draw on release
+    cancelAnimationFrame(Ed.panFrame); Ed.panFrame = requestAnimationFrame(moveViewBox);
   });
   const lift = e => {
     touches.delete(e.pointerId);
-    if (touches.size < 2) pinch = null;
-    if (pan?.moved) suppressClick = true;
-    pan = null; $('preview').classList.remove('panning');
+    if (touches.size < 2) Ed.pinch = null;
+    if (Ed.pan?.moved) Ed.suppressClick = true;
+    const panned = !!Ed.pan?.moved;
+    Ed.pan = null; $('preview').classList.remove('panning');
+    if (panned) draw();
     // a finger lifted after a pinch or a drag brings no click: do not swallow the next real one
-    if (!touches.size && suppressClick) setTimeout(() => { suppressClick = false; }, 350);
+    if (!touches.size && Ed.suppressClick) setTimeout(() => { Ed.suppressClick = false; }, 350);
   };
   addEventListener('pointerup', lift);
   addEventListener('pointercancel', lift);
   $('preview').addEventListener('click', async e => {
-    if (suppressClick) { suppressClick = false; return; }        // the end of a drag that moved the plan
-    if (peekId) {                                                // looking at another level: read, never select or leave
+    if (Ed.suppressClick) { Ed.suppressClick = false; return; }        // the end of a drag that moved the plan
+    if (Ed.splitPick) { const at = splitAtPointer(e); stopSplitPick(); if (at !== null) { $('wSplitAt').value = at; doSplit(); } return; }   // UX16
+    if (Ed.placing) { const w = Ed.placing.wall && level().walls.find(x => x.id === Ed.placing.wall); let p = freePoint(e); if (w) { const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), u = [(w.b[0] - w.a[0]) / L, (w.b[1] - w.a[1]) / L], s0 = (p[0] - w.a[0]) * u[0] + (p[1] - w.a[1]) * u[1]; p = [w.a[0] + u[0] * s0, w.a[1] + u[1] * s0]; } finishPlacing(p); return; }   // UX10
+    if (Ed.peekId) {                                                // looking at another level: read, never select or leave
       const pk = e.target.closest('[data-pk]');
-      if (pk) { const [k, id] = pk.dataset.pk.split('|'); showPeekCard(k, id); } else { peekSel = null; $('peekCard').hidden = true; draw(); }
+      if (pk) { const [k, id] = pk.dataset.pk.split('|'); showPeekCard(k, id); } else { Ed.peekSel = null; $('peekCard').hidden = true; draw(); }
       return;
     }
-    if (fromPick) { const fk = e.target.closest('[data-fromkey]'); if (fk) chooseFrom(fk.dataset.fromkey); else stopFromPick(); return; }   // a corner measured from
-    if (drawing) { drawingClick(e); return; }                    // + Wall: the start, then the end
+    if (Ed.fromPick) { const fk = e.target.closest('[data-fromkey]'); if (fk) chooseFrom(fk.dataset.fromkey); else stopFromPick(); return; }   // a corner measured from
+    if (Ed.drawing) { drawingClick(e); return; }                    // + Wall: the start, then the end
     const ntHit = e.target.closest('[data-ntedge]');              // "Place next to another room": a neighbour's wall
     if (ntHit) { ntPickEdge(ntHit.dataset.ntedge); return; }
-    if (measure.click(e)) return;                                // measuring: clicks pick points and planes
+    if (Ed.measure.click(e)) return;                                // measuring: clicks pick points and planes
     const pt = e.target.closest('[data-ref]') || nearStartDot(e);    // a start point for corner 0 (while editing a room)
     if (pt) { pickStart(pt.dataset.ref); return; }
     const el = e.target.closest('[data-kind]'), kind = el?.dataset.kind, id = el?.dataset.id;
-    if (editing) {
-      if (el && editing.kind === kind && editing.id === id) return;          // inside what is being edited
+    if (Ed.editing) {
+      if (el && Ed.editing.kind === kind && Ed.editing.id === id) return;          // inside what is being edited
       if (!(await decideLeave())) return;                                   // anywhere else: leave it (asked when changed)
       leaveEdit({ ask: false });
     }
-    if (!el) { lastClick = null; selectNone(); return; }          // empty space: let go of the selection
+    if (!el) { Ed.lastClick = null; selectNone(); return; }          // empty space: let go of the selection
     if (isDoubleClick(kind, id)) { enterEdit(kind, id); return; }           // double-click: edit it
+    perfAs('select');
     SELECT[kind]?.(id);
   });
   // leaving the page by a link (the tabs, Storage): the same question as leaving an edit (fixes list 32)
   document.addEventListener('click', e => {
     const a = e.target.closest?.('a[href]');
-    if (!a || !editing || a.getAttribute('href').startsWith('#') || (!isDirty() && !isFresh())) return;
+    if (!a || !Ed.editing || a.getAttribute('href').startsWith('#') || (!isDirty() && !isFresh())) return;
     e.preventDefault();                                          // held until the question is answered; then the link is followed
     decideLeave().then(ok => { if (ok) { leaveEdit({ ask: false }); location.href = a.href; } });
   });
@@ -865,1517 +452,45 @@ async function init() {
   addEventListener('keydown', e => {
     const inField = e.target?.closest?.('input, textarea, select');
     if (e.key === 'Escape') {
-      if (drawing) { stopDrawing(); return; }
-      if (fromPick) { stopFromPick(); return; }                           // picking a corner: Esc stops that first
-      if (startPick) { startPick = false; syncOriginPick(); draw(); return; }   // picking a start point: Esc stops it
-      if (peekId) { e.preventDefault(); endPeek(); return; }              // back to the level being edited
-      if (measure.isOn() && !inField) { measure.escape(); return; }         // measuring (also while editing): stop that first
-      if (editing) { e.preventDefault(); e.target?.blur?.(); closeEdit(); return; }
+      if (Ed.dragging?.patch && cancelDrag()) return;
+      if (Ed.placing) { stopPlacing('Placing cancelled'); return; }
+      if (Ed.splitPick) { $('wSplitAt').value = ''; stopSplitPick('Split cancelled'); draw(); return; }
+      if (Ed.drawing) { stopDrawing(); return; }
+      if (Ed.fromPick) { stopFromPick(); return; }                           // picking a corner: Esc stops that first
+      if (Ed.startPick) { Ed.startPick = false; syncOriginPick(); draw(); return; }   // picking a start point: Esc stops it
+      if (Ed.peekId) { e.preventDefault(); endPeek(); return; }              // back to the level being edited
+      if (Ed.measure.isOn() && !inField) { Ed.measure.escape(); return; }         // measuring (also while editing): stop that first
+      if (Ed.editing) { e.preventDefault(); e.target?.blur?.(); closeEdit(); return; }
       if (!inField) { selectNone(); return; }
     }
-    if ((e.key === 'm' || e.key === 'M') && !inField && !e.ctrlKey && !e.metaKey && !e.altKey) { measure.toggle(); return; }
-    if (e.key === 'Enter' && !editing && !inField && !e.target?.closest?.('button')) {
-      const sel = roomId ? [shape, roomId] : wallId ? ['wall', wallId] : openingId ? ['opening', openingId] : fixtureId ? ['fixture', fixtureId] : stairsId ? ['stairs', stairsId] : objectId ? ['object', objectId] : null;
-      if (sel) { e.preventDefault(); enterEdit(...sel); return; }
+    if (Ed.drawing?.a && !inField && !e.ctrlKey && !e.metaKey && !e.altKey) {          // typing a length while drawing a wall (UX12)
+      if (/^[0-9.,cm ]$/i.test(e.key) && (e.key !== ' ' || Ed.drawing.typed)) { e.preventDefault(); Ed.drawing.typed = (Ed.drawing.typed || '') + e.key; drawWallOverlay(); return; }
+      if (e.key === 'Backspace' && Ed.drawing.typed) { e.preventDefault(); Ed.drawing.typed = Ed.drawing.typed.slice(0, -1); drawWallOverlay(); return; }
+      if (e.key === 'Enter' && Ed.drawing.typed) { e.preventDefault(); if (!typedWallEnd()) setStatus(`"${Ed.drawing.typed}" is not a length (mm, or with cm or m)`); return; }
     }
+    if ((e.key === 'm' || e.key === 'M') && !inField && !e.ctrlKey && !e.metaKey && !e.altKey) { Ed.measure.toggle(); return; }
+    if (e.key === 'Enter' && !Ed.editing && !inField && !e.target?.closest?.('button')) {
+      const sel = selected();
+      if (sel) { e.preventDefault(); enterEdit(sel.kind, sel.id); return; }
+    }
+    if (Ed.placing && e.key === 'Enter' && !inField) { e.preventDefault(); finishPlacing(null); return; }
+    if (!inField && planKey(e)) return;                                   // Delete, arrows, F, ?, Ctrl+D, Ctrl+S (UX8)
     if (!(e.ctrlKey || e.metaKey) || e.target.closest('input, textarea, select')) return;   // fields keep their own undo
     const k = e.key.toLowerCase();
     if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoRedo('undo'); }
     else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); undoRedo('redo'); }
   });
   $('save').onclick = save;
-  $('dl').onclick = () => download(new Blob([formatJson(model)], { type: 'application/json' }), 'model.json');
-  $('save').disabled = !saveMode;
-  if (!saveMode) $('saveOut').textContent = house.readOnly ? `${house.where} is read-only: use Download, or copy the house to your own storage on the Storage page.` : 'This page cannot save. Start Plantern with run.cmd (or use Chrome/Edge on the PC); until then use Download and replace the file by hand.';
-  $('save').title = saveMode === 'server' ? `Save into ${house.where}` : saveMode ? 'Save into the repo folder you pick (first time only)' : 'This page cannot save: use Download';
-  addEventListener('beforeunload', e => { if (dirty || isDirty()) { e.preventDefault(); e.returnValue = ''; } });
+  $('dl').onclick = () => download(new Blob([formatJson(Ed.model)], { type: 'application/json' }), 'model.json');
+  $('save').disabled = !Ed.saveMode;
+  if (!Ed.saveMode) $('saveOut').textContent = Ed.house.readOnly ? `${Ed.house.where} is read-only: use Download, or copy the house to your own storage on the Storage page.` : 'This page cannot save. Start Plantern with run.cmd (or use Chrome/Edge on the PC); until then use Download and replace the file by hand.';
+  $('save').title = Ed.saveMode === 'server' ? `Save into ${Ed.house.where}` : Ed.saveMode ? 'Save into the repo folder you pick (first time only)' : 'This page cannot save: use Download';
+  addEventListener('beforeunload', e => { if (Ed.dirty || isDirty()) { e.preventDefault(); e.returnValue = ''; } });
 
-  roomId = null;                                                  // start with nothing selected: the plan and the tree
+  Ed.roomId = null;                                                  // start with nothing selected: the plan and the tree
   loadFormForSelection();
   refresh();
   if (!level().rooms?.length) editDraft({ name: '', exterior: false });   // an empty level: the new-room form (nothing unapplied: the level was just changed)
-}
-
-const NEW_LEVEL = '+new';
-const LEVEL_COLOR = { below: '#7aa2d6', above: '#d6a56b' };   // the level below and above, faintly under the plan
-const DOT_HIT = 0.95;                                            // a start dot reacts this far out (× the label size)
-function fillLevels() {
-  $('level').innerHTML = model.levels.map(l => `<option value="${esc(l.id)}" data-hint="${esc(levelHint(l, model.levels))}">${esc(levelLabel(l))}${l.elevationFrom ? ' ⇅' : ''}</option>`).join('') + `<option value="${NEW_LEVEL}">+ New level…</option>`;
-  $('level').value = levelId;
-}
-/** Show another level (leaving what is edited first, asked when changed); false when the user stays. */
-async function goToLevel(id) {
-  if (!model.levels.some(l => l.id === id)) return false;
-  if (!(await mayLeave())) { $('level').value = levelId; return false; }
-  levelId = id; roomId = null; wallId = null; openingId = null; fixtureId = null; stairsId = null; objectId = null; draft = null; view = null; autoZoomed = false;
-  remember(entry.id, levelId); linkPages(entry.id, levelId);
-  $('level').value = levelId;
-  loadFormForSelection();
-  refresh();
-  return true;
-}
-
-// ---- the levels below and above: faintly under the plan, and looked at while editing ----
-function showUnderlayMode() {
-  $('uMode').textContent = `Levels: ${underlayMode}`;
-  $('uMode').title = { auto: 'Levels below (blue) and above (amber) show faintly while placing something. Click: always', always: 'Levels below and above always show faintly. Click: never', off: 'Levels below and above are not shown. Click: while placing something' }[underlayMode];
-}
-/** Is the faint underlay of the neighbouring levels drawn now? */
-function showUnderlay() {
-  if (underlayMode === 'off') return false;
-  if (underlayMode === 'always') return true;
-  return !!drawing || (!!editing && ['room', 'solid', 'stairs'].includes(editing.kind)) || (!editing && $('anchorCount').closest('details').open);
-}
-/** The level strip on the plan while editing: every level of the building; click one to look at it. */
-function renderLevelStrip() {
-  const lv = level(), same = model.levels.filter(l => (l.building ?? null) === (lv.building ?? null)).sort((a, b) => b.elevation - a.elevation);
-  const show = !!editing && same.length > 1;
-  $('lvStrip').hidden = !show;
-  if (!show) return;
-  const near = adjacentLevels(model, lv).map(l => l.id), shown = peekId || levelId;
-  $('lvStrip').innerHTML = same.map(l => {
-    const cls = [l.id === shown ? 'on' : '', l.id === levelId ? 'edited' : '', near.includes(l.id) ? (l.elevation < lv.elevation ? 'below' : 'above') : ''].filter(Boolean).join(' ');
-    return `<button data-lv="${esc(l.id)}" class="${cls}" title="${l.id === levelId ? 'The level you are editing' : `Look at ${esc(l.name || l.id)} (nothing there is changed; you keep editing)`}">${esc(l.name || l.id)}${l.id === levelId ? ' ✎' : ''}</button>`;
-  }).join('');
-  $('lvStrip').querySelectorAll('[data-lv]').forEach(b => (b.onclick = () => (b.dataset.lv === levelId ? endPeek() : startPeek(b.dataset.lv))));
-}
-function startPeek(id) {
-  if (measure?.isOn()) measure.setOn(false);
-  peekId = id; peekSel = null;
-  const pl = model.levels.find(l => l.id === id);
-  $('peekBar').hidden = false;
-  $('peekBar').innerHTML = `<span>Looking at <b>${esc(pl?.name || id)}</b>, still editing <b>${esc(editing?.id ? nameOf(editing.id) : 'the new one')}</b> on ${esc(level().name || levelId)}. Click a wall or room to read it.</span><button id="peekBack">‹ Back</button>`;
-  $('peekBack').onclick = endPeek;
-  $('peekCard').hidden = true;
-  renderLevelStrip(); draw();
-}
-function endPeek() {
-  if (!peekId) return;
-  peekId = null; peekSel = null;
-  $('peekBar').hidden = true; $('peekCard').hidden = true;
-  renderLevelStrip(); draw();
-}
-/** The info card for something on the level looked at. */
-function showPeekCard(kind, id) {
-  const pl = model.levels.find(l => l.id === peekId), c = pl && peekInfo(pl, kind, id, { name: refName });
-  peekSel = c ? { kind, id } : null;
-  $('peekCard').hidden = !c;
-  if (c) $('peekCard').innerHTML = `<h3>${esc(c.title)} <small class="k">${esc(c.sub)}</small></h3>${c.rows.map(([k, v]) => `<div><span class="k">${esc(k)}:</span> ${esc(v)}</div>`).join('')}`;
-  draw();
-}
-
-/**
- * Another level, read-only, while the editor stays open: its rooms, walls, solids, openings and stairs,
- * clickable for the info card, with the level being edited faintly on top (and the room being measured).
- */
-function drawPeek() {
-  const svg = $('preview'), pl = model.levels.find(l => l.id === peekId), geo = (modelGeos || buildModelGeometry(model)).get(peekId);
-  if (!pl || !geo) { peekId = null; draw(); return; }
-  if (!lastFit) {
-    const pts = (pl.rooms || []).flatMap(r => r.polygon).map(toSvg);
-    if (!pts.length) { svg.innerHTML = ''; return; }
-    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), pad = 1000;
-    lastFit = { x: Math.min(...xs) - pad, y: Math.min(...ys) - pad, w: Math.max(...xs) - Math.min(...xs) + 2 * pad, h: Math.max(...ys) - Math.min(...ys) + 2 * pad };
-  }
-  const vb = view || lastFit;
-  svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
-  const fs = Math.max(vb.w / (svg.clientWidth || 800), vb.h / (svg.clientHeight || 600)) * 16;
-  const poly = (p, style) => `<polygon points="${p.map(q => toSvg(q).join(',')).join(' ')}" ${style}/>`;
-  const on = (k, id) => peekSel?.kind === k && peekSel.id === id;
-  let out = `<defs><pattern id="hatch" patternUnits="userSpaceOnUse" width="${fs * 0.7}" height="${fs * 0.7}" patternTransform="rotate(45)"><rect width="${fs * 0.7}" height="${fs * 0.7}" fill="#6b7482"/><line x1="0" y1="0" x2="0" y2="${fs * 0.7}" stroke="#ffb454" stroke-width="${fs / 6}"/></pattern></defs>`;
-  const obstacles = labelObstacles(pl, geo);
-  for (const r of pl.rooms || []) {
-    if (!(r.polygon?.length >= 3)) continue;
-    out += `<g data-pk="room|${esc(r.id)}" style="cursor:help">${poly(r.polygon, `fill="${r.exterior ? '#243026' : '#252a33'}" stroke="${on('room', r.id) ? '#ffb454' : '#46505f'}" stroke-width="${fs / (on('room', r.id) ? 4 : 8)}"`)}</g>`;
-    const lay = roomNameLayout(r.polygon, r.name || r.id, { maxSize: fs * 1.2, minSize: fs * 0.6, avoid: obstacles }), [cx, cy] = toSvg(lay.pos);
-    out += `<text x="${cx}" y="${cy}" fill="#8b93a1" font-size="${lay.size}" text-anchor="middle" dominant-baseline="central" pointer-events="none">${lay.lines.map((l, k) => `<tspan x="${cx}" dy="${k ? '1.25em' : `${-(lay.lines.length - 1) * 0.625}em`}">${esc(l)}</tspan>`).join('')}</text>`;
-  }
-  for (const s of pl.solids || []) if (s.polygon?.length >= 3) out += `<g data-pk="solid|${esc(s.id)}" style="cursor:help">${poly(s.polygon, `fill="${esc(s.color || SOLID_COLOR)}" stroke="${on('solid', s.id) ? '#ffb454' : '#999'}" stroke-width="${fs / 8}"`)}</g>`;
-  for (const w of pl.walls || []) {
-    const pieces = geo.pieces.get(w.id), sel = on('wall', w.id);
-    out += `<g data-pk="wall|${esc(w.id)}" style="cursor:help"><title>${esc(refName(w.id))} · ${w.kind === 'virtual' ? 'boundary' : `${Math.round(w.thickness)} mm${w.assumed?.includes('thickness') ? ' (assumed)' : ''}`}</title>`;
-    if (pieces?.length) for (const pc of pieces) out += poly(pc, `fill="${w.assumed?.includes('thickness') ? 'url(#hatch)' : '#6b7482'}" ${sel ? `stroke="#ffb454" stroke-width="${fs / 4}"` : 'stroke="none"'}`);
-    else { const [ax, ay] = toSvg(w.a), [bx, by] = toSvg(w.b); out += `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${sel ? '#ffb454' : '#6b7482'}" stroke-width="${fs / 6}" stroke-dasharray="${fs / 2}"/><line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="transparent" stroke-width="${fs}"/>`; }
-    out += '</g>';
-  }
-  for (const o of pl.openings || []) {
-    const f = geo.frames.get(o.wall);
-    if (!f) continue;
-    const [h0, h1] = geo.openingLine(o).map(toSvg), c = on('opening', o.id) ? '#ffb454' : o.type === 'window' ? '#6cb6ff' : o.type === 'door' ? '#e0a060' : '#8b93a1';
-    out += `<g data-pk="opening|${esc(o.id)}" style="cursor:help"><line x1="${h0[0]}" y1="${h0[1]}" x2="${h1[0]}" y2="${h1[1]}" stroke="transparent" stroke-width="${fs * 1.2}"/><line x1="${h0[0]}" y1="${h0[1]}" x2="${h1[0]}" y2="${h1[1]}" stroke="${c}" stroke-width="${fs / 5}"/></g>`;
-  }
-  if (geo.stairs) for (const s of stairsPlan(geo, resolveSettings(loc, pl).cutPlane).up) for (const st of s.steps) out += poly(st.poly, `fill="none" stroke="#9aa3b2" stroke-width="${fs / 14}" pointer-events="none"`);
-  // the level being edited, faintly on top, and what is being measured on it
-  const lv = level(), c = lv.elevation > pl.elevation ? LEVEL_COLOR.above : LEVEL_COLOR.below;
-  for (const pcs of (curGeo?.pieces || new Map()).values()) for (const pc of pcs) out += poly(pc, `fill="${c}" fill-opacity="0.12" stroke="${c}" stroke-opacity="0.6" stroke-width="${fs / 12}" pointer-events="none"`);
-  const cur = solved?.ok && (editing?.kind === 'room' || editing?.kind === 'solid') ? solved.polygon : null;
-  if (cur) out += poly(cur, `fill="none" stroke="#4cc38a" stroke-width="${fs / 5}" stroke-dasharray="${fs / 2} ${fs / 3}" pointer-events="none"`);
-  svg.innerHTML = out;
-  setStatus(`looking at ${pl.name || pl.id}: click a wall, room, solid or opening to read it · Esc or ‹ Back returns`);
-}
-// ---- the House view (✎ House): where the house is (Place the house) and its settings (location.json) ----
-const HS_FIELDS = [   // [input id, the dotted key in settings]
-  ['hs_cutPlane', 'cutPlane'], ['hs_stairHeadroom', 'stairHeadroom'], ['hs_wallOuter', 'wallThickness.outer'], ['hs_wallInner', 'wallThickness.inner'],
-  ['hs_tolOk', 'checkTolerance.ok'], ['hs_tolWarn', 'checkTolerance.warn'], ['hs_lampIntensity', 'render3d.lampIntensity'], ['hs_nightLight', 'render3d.nightLight'],
-  ['hs_shadowsDesktop', 'render3d.shadows.desktop'], ['hs_shadowsMobile', 'render3d.shadows.mobile'],
-];
-const atPath = (obj, path) => path.split('.').reduce((a, k) => a?.[k], obj);
-
-/** Show the house's own settings in the form; a blank box is the default, shown as the placeholder. */
-function fillHouse() {
-  for (const [id, key] of HS_FIELDS) {
-    const v = atPath(loc?.settings, key);
-    $(id).value = v ?? '';
-    $(id).placeholder = String(atPath(DEFAULT_SETTINGS, key) ?? '');
-  }
-  $('hsMsg').textContent = '';
-}
-
-/** Apply the boxes that changed to location.json (one undo step, saved with Save like the rest). */
-function applyHouse() {
-  const changes = {};
-  for (const [id, key] of HS_FIELDS) {
-    const typed = $(id).value.trim(), stored = atPath(loc?.settings, key);
-    if (typed === String(stored ?? '')) continue;          // unchanged: not written
-    changes[key] = typed === '' ? null : typed;
-  }
-  if (!Object.keys(changes).length) { $('hsMsg').textContent = 'Nothing changed.'; return; }
-  const r = setHouseSettings(loc, changes);
-  if (r.errors.length) { $('hsMsg').textContent = `Not applied: ${r.errors.join('; ')}`; return; }
-  loc = r.loc;
-  commit({ ...model });                                    // the same model with the new settings: one undo step
-  fillHouse();
-  refresh();
-  $('hsMsg').textContent = 'Applied.';
-  setStatus(`house settings changed (${r.changed.length}, not saved yet)`);
-}
-
-async function showHouseView() {
-  if (!(await mayLeave())) return;
-  $('levelBox').hidden = true;
-  $('houseBox').hidden = false;
-  syncSideView();
-  fillHouse();
-  fillPlace();
-  setStatus('the house: where it is, which way is north, its ground height and its settings');
-}
-function hideHouseView() { $('houseBox').hidden = true; syncSideView(); }
-
-/** One thing in the sidebar at a time, as for a room: the browse list, the edit view of a room, or the house or
- *  floor form (which take the browse list's place, under the same top row). */
-let sideFormShown = false;
-function syncSideView() {
-  if (editing) { $('houseBox').hidden = true; $('levelBox').hidden = true; }
-  const form = !editing && (!$('houseBox').hidden || !$('levelBox').hidden);
-  $('top').hidden = $('browse').hidden = !!editing || form;
-  $('edit').hidden = $('edBar').hidden = !editing;
-  if (form && !sideFormShown) $('cap').scrollTop = 0;     // a form starts at its top, not where the list was scrolled to
-  sideFormShown = form;
-}
-
-/** ✎ beside the level menu: edit the level itself (name, heights, measurements), or delete it while it is empty. */
-async function editLevel() {
-  if (!(await mayLeave())) return;
-  hideHouseView();
-  const cls = { label: '', input: '', button: '', go: 'primary' };
-  showLevelEditForm($('levelBox'), model, levelId, {
-    cls,
-    onClose: () => syncSideView(),
-    onApply: r => {
-      model = history.push(r.model); dirty = isModelDirty();
-      fillLevels(); refresh();
-      editLevel();                                         // the form again, from what is stored
-      const nm = id => model.levels.find(l => l.id === id)?.name || id;
-      setStatus(`level ${nm(levelId)} changed${r.report.moved?.length ? `; moved: ${r.report.moved.map(m => `${nm(m.level)} to ${m.to} mm`).join(', ')}` : ''} (not saved yet)`);
-    },
-    onDelete: r => {
-      model = history.push(r.model); dirty = isModelDirty();
-      levelId = model.levels[0].id; roomId = null; wallId = null; draft = null;
-      fillLevels(); loadFormForSelection(); refresh();
-      remember(entry.id, levelId); linkPages(entry.id, levelId);
-      setStatus('level deleted (not saved yet)');
-    },
-  });
-  syncSideView();                                          // the form is open now: it takes the browse list's place
-}
-function newLevel() {
-  hideHouseView();
-  showLevelForm($('levelBox'), model, {
-    onCancel: () => syncSideView(),
-    onCreate: r => {
-      levelId = r.level.id; roomId = null; wallId = null; draft = null;
-      model = history.push(r.model); dirty = isModelDirty();
-      fillLevels(); loadFormForSelection(); refresh();
-      editDraft({ name: '', exterior: false });
-      remember(entry.id, levelId); linkPages(entry.id, levelId);
-      setStatus(`level ${r.level.id} created (not saved yet)`);
-    },
-  });
-  syncSideView();
-}
-
-/**
- * Pick the point corner 0 is placed at. A room that already has a shape stays where it is: the
- * offset becomes the distance from the new point to corner 0. A new room starts on the point.
- */
-function pickStart(ref) {
-  const c0 = solved?.ok && (roomId || draft) ? solved.polygon[0] : room()?.polygon?.[0];
-  const p = ref ? snapsAround.find(s => s.ref === ref)?.pos : [0, 0];
-  $('originRef').value = ref;
-  if (c0 && p && roomId) { $('ox').value = Math.round((c0[0] - p[0]) * 10) / 10; $('oy').value = Math.round((c0[1] - p[1]) * 10) / 10; }
-  startPick = false; syncOriginPick(); draw();                  // a point was chosen: the dots go, the list shows it
-  recompute(); showEditBar();
-  if (c0 && p && roomId) setStatus(`corner 0 stays where it is: ${ref || 'the plan origin'} + (${$('ox').value}, ${$('oy').value}) mm`);
-}
-
-/**
- * A click just beside a start dot (while a room or solid is edited) still picks it: the point within
- * 22 px of the click, as { dataset: { ref } } like the dot's element, or null. A near-miss must not
- * fall through to the room underneath, which would leave the editor.
- */
-function nearStartDot(e) {
-  if (!startPick) return null;                                 // the dots show only while Select from point is on
-  if (!(editing?.kind === 'room' || editing?.kind === 'solid') || isRound()) return null;
-  const svg = $('preview'), m = svg.getScreenCTM();
-  if (!m) return null;
-  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
-  const q = pt.matrixTransform(m.inverse()), p = [q.x, -q.y], reach = 22 / Math.abs(m.a);
-  let best = null;
-  for (const o of startDots(snapsAround, { excludeRoom: roomId || $('rid').value })) {
-    const d = Math.hypot(o.pos[0] - p[0], o.pos[1] - p[1]);
-    if (d <= reach && (!best || d < best.d)) best = { d, ref: o.ref };
-  }
-  return best ? { dataset: { ref: best.ref } } : null;
-}
-
-// ---- + Wall: draw a hand-drawn wall with two clicks ----
-/** The plan point under the pointer: a snap point, else a point on a wall face or room edge, else free (Alt: always free). */
-function wallPoint(e) {
-  const svg = $('preview'), m = svg.getScreenCTM(), pt = svg.createSVGPoint();
-  pt.x = e.clientX; pt.y = e.clientY;
-  const q = pt.matrixTransform(m.inverse()), p = [q.x, -q.y], k = 1 / Math.abs(m.a);
-  if (e.altKey) return { pos: p };
-  const s = nearestPoint(p, showUnderlay() ? snapsAround : snaps, 14 * k);   // a corner of the level below or above too
-  if (s) return { pos: s.pos, ref: s.ref };
-  const l = nearestLine(p, collectSnapLines(model, level(), curGeo), 10 * k);
-  if (l) { const f = pointToLine(p, l); return { pos: f.foot.map(v => Math.round(v * 10) / 10), on: l.ref }; }
-  return { pos: p.map(v => Math.round(v)) };
-}
-/** The end point, kept straight along x or y when close to an axis (Shift: always). */
-function straighten(a, b, force) {
-  const dx = b[0] - a[0], dy = b[1] - a[1], ang = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI) % 90;
-  if (!force && Math.min(ang, 90 - ang) > 2) return b;
-  return Math.abs(dx) >= Math.abs(dy) ? [b[0], a[1]] : [a[0], b[1]];
-}
-const ROOM_CORNER = /^r_[^#]+#p\d+$/;
-/** What a wall end at `pos` hangs on: the room corner it was snapped to, else the nearest corner of the room the wall stands in (or of any room). */
-function anchorFor(pos, ref, mid) {
-  if (ref && ROOM_CORNER.test(ref) && snaps.some(s => s.ref === ref)) return { ref, offset: [0, 0] };   // a corner of this level
-  const inRoom = (level().rooms || []).find(r => r.polygon?.length >= 3 && pointInPolygon(mid, r.polygon));
-  const corners = snaps.filter(s => ROOM_CORNER.test(s.ref) && (!inRoom || s.ref.startsWith(`${inRoom.id}#`)));
-  const best = corners.reduce((x, s) => (!x || Math.hypot(s.pos[0] - pos[0], s.pos[1] - pos[1]) < Math.hypot(x.pos[0] - pos[0], x.pos[1] - pos[1]) ? s : x), null);
-  return best ? { ref: best.ref, offset: [Math.round((pos[0] - best.pos[0]) * 10) / 10, Math.round((pos[1] - best.pos[1]) * 10) / 10] } : null;
-}
-// A hand-drawn wall in the panel, as it is measured: its start x/y from the corner it follows (or from the
-// plan origin), then how far it runs (length x east, length y north). The stored wall keeps its two ends.
-const snapPos = ref => snaps.find(s => s.ref === ref)?.pos;
-const r1 = v => Math.round(v * 10) / 10;
-/** The two ends the position fields describe, or null while a field is not a number. */
-function wallEnds() {
-  const o = snapPos($('wAnchA').value) || [0, 0], v = ['wSx', 'wSy', 'wLx', 'wLy'].map(id => Number($(id).value.trim() === '' ? NaN : $(id).value));
-  if (v.some(x => !Number.isFinite(x))) return null;
-  const a = [r1(o[0] + v[0]), r1(o[1] + v[1])];
-  return { a, b: [r1(a[0] + v[2]), r1(a[1] + v[3])] };
-}
-/** Fill the position fields from a wall's ends (start relative to the corner its start follows). */
-function fillWallPos(a, b) {
-  const ref = $('wAnchA').value, o = snapPos(ref) || [0, 0];
-  $('wSx').value = r1(a[0] - o[0]); $('wSy').value = r1(a[1] - o[1]); $('wLx').value = r1(b[0] - a[0]); $('wLy').value = r1(b[1] - a[1]);
-  const where = ref ? $('wAnchA').selectedOptions[0]?.textContent : 'the plan origin';
-  $('wSxNote').textContent = `east of ${where}`; $('wSyNote').textContent = `north of ${where}`;
-  $('wAnchA').dataset.was = ref;
-  showWallPos();
-}
-function showWallPos() {
-  const e = wallEnds();
-  $('wPosOut').textContent = e ? `${Math.round(Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1]))} mm long, from (${e.a.join(', ')}) to (${e.b.join(', ')})` : 'start and lengths: numbers of mm';
-}
-/** The anchors the wall form describes (room corner per end, offsets so the ends stay where the fields say). */
-function anchorForm() {
-  const out = {}, e = wallEnds();
-  if (!e) return wall()?.anchor ?? null;
-  for (const [end, sel] of [['a', 'wAnchA'], ['b', 'wAnchB']]) {
-    const ref = $(sel).value, p = snapPos(ref);
-    if (ref && p) out[end] = { ref, offset: [r1(e[end][0] - p[0]), r1(e[end][1] - p[1])] };
-  }
-  return Object.keys(out).length ? out : null;
-}
-
-async function startDrawing() {
-  if (!(await mayLeave())) return;
-  if (measure?.isOn()) measure.setOn(false);
-  selectNone();
-  drawing = { a: null, hover: null };
-  $('preview').classList.add('measuring');
-  setStatus('+ Wall: click where it starts (corners snap, or a point on a wall face; Alt = anywhere). Esc cancels.');
-}
-function stopDrawing() { drawing = null; $('preview').classList.remove('measuring'); $('preview').querySelector('#dOverlay')?.remove(); setStatus(''); }
-function drawingClick(e) {
-  const p = wallPoint(e);
-  if (!drawing.a) { drawing.a = p; setStatus('+ Wall: click where it ends (it keeps straight near x or y; Shift = always). Esc cancels.'); drawWallOverlay(); return; }
-  const b = straighten(drawing.a.pos, p.pos, e.shiftKey);
-  // each end hangs on a room corner (the one clicked, else the nearest of the room it stands in), so it follows the room
-  const mid = [(drawing.a.pos[0] + b[0]) / 2, (drawing.a.pos[1] + b[1]) / 2];
-  const anchor = { a: anchorFor(drawing.a.pos, drawing.a.ref, mid), b: anchorFor(b, b === p.pos ? p.ref : null, mid) };
-  for (const k of ['a', 'b']) if (!anchor[k]) delete anchor[k];
-  const r = addWall(model, levelId, { a: drawing.a.pos, b, anchor }, opts());
-  if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
-  stopDrawing();
-  const base = model;
-  commit(r.model);
-  enterEdit('wall', r.wall.id, { ask: false }); startFresh('wall', r.wall.id, base, 'wall');
-  setStatus(`${r.wall.id} drawn: set its thickness, height or base (a lintel: its underside), name it and Apply to create it`);
-}
-function drawWallOverlay() {
-  const svg = $('preview');
-  svg.querySelector('#dOverlay')?.remove();
-  if (!drawing) return;
-  const k = 1 / Math.abs(svg.getScreenCTM()?.a || 1), NS = 'http://www.w3.org/2000/svg', g = document.createElementNS(NS, 'g');
-  g.id = 'dOverlay'; g.setAttribute('pointer-events', 'none');
-  const add = (tag, at) => { const el = document.createElementNS(NS, tag); for (const [x, v] of Object.entries(at)) el.setAttribute(x, v); g.appendChild(el); return el; };
-  const dot = (p, c) => { const [x, y] = toSvg(p); add('circle', { cx: x, cy: y, r: 6 * k, fill: 'none', stroke: c, 'stroke-width': 2 * k }); };
-  if (drawing.a) dot(drawing.a.pos, '#4cc38a');
-  if (drawing.hover) {
-    const end = drawing.a ? straighten(drawing.a.pos, drawing.hover.pos, drawing.shift) : drawing.hover.pos;
-    dot(end, '#ffb454');
-    if (drawing.a) {
-      const [x1, y1] = toSvg(drawing.a.pos), [x2, y2] = toSvg(end);
-      add('line', { x1, y1, x2, y2, stroke: '#ffb454', 'stroke-width': 3 * k, 'stroke-dasharray': `${8 * k} ${5 * k}` });
-      const t = add('text', { x: (x1 + x2) / 2, y: (y1 + y2) / 2 - 8 * k, 'text-anchor': 'middle', 'font-size': 13 * k, fill: '#ffb454', 'paint-order': 'stroke', stroke: '#14161a', 'stroke-width': 4 * k });
-      t.textContent = `${Math.round(Math.hypot(end[0] - drawing.a.pos[0], end[1] - drawing.a.pos[1]))} mm`;
-    }
-  }
-  svg.appendChild(g);
-}
-
-/**
- * What a panel's numbers count from, drawn on the plan: the corner named in "mm from corner 3 of Salong"
- * and the distance from it to the opening's near edge (and its width), or to a wall lamp or switch; for a
- * wall, the corners at its ends and its left and right side. Values being typed are shown as typed.
- */
-function selectionMarks(lv, fs) {
-  return pickedPoints(fs) + panelMarks(lv, fs);
-}
-
-/**
- * The points chosen in the pickers of the open panel, ringed and named on the plan: where stairs start,
- * the corners a drawn wall's ends follow, the two points of a new anchor.
- */
-function pickedPoints(fs) {
-  const at = ref => (snapsAround.find(s => s.ref === ref) || snaps.find(s => s.ref === ref))?.pos;
-  const ringAt = (P, text, color = '#4cc38a') => {
-    if (!P) return '';
-    const [x, y] = toSvg(P);
-    return `<g pointer-events="none"><circle cx="${x}" cy="${y}" r="${fs * 0.8}" fill="none" stroke="${color}" stroke-width="${fs / 5}"/>`
-      + `<text x="${x + fs}" y="${y - fs}" fill="${color}" font-size="${fs * 0.8}" font-weight="600" paint-order="stroke" stroke="#14161a" stroke-width="${fs * 0.3}">${esc(text)}</text></g>`;
-  };
-  const ring = (ref, text, color = '#4cc38a') => ringAt(ref && at(ref), text, color);
-  if (editing?.kind === 'stairs') {
-    // the anchor (green) is the point the stair's offset counts from; the starting point (blue) is where the stair itself starts: the front-left corner of its first step
-    const st = curGeo?.stairs?.find(x => x.id === stairsId);
-    return ring($('stRef').value, 'anchor point') + ringAt(st?.layout?.flights?.[0]?.o, 'starting point', '#7aa2d6');
-  }
-  if (editing?.kind === 'wall' && !$('wPosBox').hidden) return ring($('wAnchA').value, 'start follows') + ring($('wAnchB').value, 'end follows', '#ffb454');
-  if (!editing && $('anchorCount').closest('details').open) return ring($('anA').value, 'anchor point 1') + ring($('anB').value, 'anchor point 2', '#ffb454');
-  return '';
-}
-
-function panelMarks(lv, fs) {
-  const typed = (id, v) => { const t = $(id).value.trim(), n = Number(t); return t !== '' && Number.isFinite(n) ? n : v; };
-  // the thing at t0 … t1 along the wall (from its start), measured from corner `c` (measureCorners())
-  const mark = (w, t0, t1, c) => {
-    // dimensions on the side of the wall a room is on (the right side for a wall made from a room edge)
-    const f = wallFrame(w), info = wallInfo(lv, w.id), right = !!info?.sides.right.length || !info?.sides.left.length;
-    const d = right ? f.offR + fs * 2.6 : -(f.offL + fs * 2.6), near = c.dir > 0 ? t0 : t1;
-    let out = Math.abs(near - c.s) >= 1 ? dimensionSvg(pointOn(w.a, w.b, c.s, d), pointOn(w.a, w.b, near, d), { fs, text: Math.round(Math.abs(near - c.s)) }) : '';
-    if (t1 - t0 >= 1) out += dimensionSvg(pointOn(w.a, w.b, t0, d), pointOn(w.a, w.b, t1, d), { fs, color: '#d9dde4', text: Math.round((t1 - t0) * 10) / 10 });
-    out += cornerSvg(c.pos, /#p(\d+)$/.exec(c.key)?.[1] ?? c.key, { fs, active: true, tag: 'from here', toward: pointOn(w.a, w.b, c.s + c.dir * Math.min(f.L / 2, fs * 3), d) });
-    return out;
-  };
-  const o = openingId && lv.openings?.find(x => x.id === openingId), ow = o && lv.walls?.find(x => x.id === o.wall);
-  if (ow) {
-    const c = fromOf(o.id, ow), editingIt = editing?.kind === 'opening', wd = editingIt ? typed('oWidth', o.width) : o.width;
-    const dist = editingIt ? typed('oOffset', offsetFrom(o, c)) : offsetFrom(o, c), t0 = offsetTo(dist, c, wd);
-    return mark(ow, t0, t0 + wd, c);
-  }
-  const x = fixtureId && lv.fixtures?.find(v => v.id === fixtureId), xw = x?.attach && lv.walls?.find(v => v.id === x.attach.wall);
-  if (xw) {
-    const c = fromOf(x.id, xw), shown = offsetFrom({ offset: x.attach.offset, width: 0 }, c);
-    const t = offsetTo(editing?.kind === 'fixture' ? typed('xOffset', shown) : shown, c);
-    return mark(xw, t, t, c);
-  }
-  const w = wallId && wall();
-  if (w) {
-    // the corners named in the panel ("Split at … from corner 2"), and which side is left and right
-    const f = wallFrame(w), ca = cornerAt(lv, w.a), cb = cornerAt(lv, w.b);
-    let out = cornerSvg(w.a, ca ? ca.index : 'a', { fs, active: true, tag: ca ? 'start' : '' }) + (cb ? cornerSvg(w.b, cb.index, { fs, hot: true }) : '');
-    for (const [side, k] of [['left', f.offL + fs * 1.4], ['right', -(f.offR + fs * 1.4)]]) {
-      const P = pointOn(w.a, w.b, f.L / 2, -k), [tx, ty] = toSvg(P);
-      out += `<text x="${tx}" y="${ty}" fill="#d9dde4" font-size="${fs * 0.8}" text-anchor="middle" dominant-baseline="central" paint-order="stroke" stroke="#14161a" stroke-width="${fs * 0.3}" pointer-events="none">${side} side</text>`;
-    }
-    const at = Number($('wSplitAt').value);
-    if (at > 0 && at < f.L) out += dimensionSvg(pointOn(w.a, w.b, 0, f.offR + fs * 2.6), pointOn(w.a, w.b, at, f.offR + fs * 2.6), { fs, color: '#e5534b' });
-    return out;
-  }
-  return '';
-}
-
-/** Zoom by factor f (< 1 = in) around the pointer of event e, or around the middle. */
-function zoomAt(f, e) {
-  const svg = $('preview'), vb = view || lastFit, m = svg.getScreenCTM();
-  if (!vb || !m) return;
-  let c = [vb.x + vb.w / 2, vb.y + vb.h / 2];
-  if (e) { const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; const q = pt.matrixTransform(m.inverse()); c = [q.x, q.y]; }
-  const w = Math.min(Math.max(vb.w * f, 300), lastFit.w * 4), k = w / vb.w;     // from 30 cm across to 4 × the level
-  view = { x: c[0] - (c[0] - vb.x) * k, y: c[1] - (c[1] - vb.y) * k, w: vb.w * k, h: vb.h * k };
-  autoZoomed = false;
-  draw();
-}
-/** Opening something small (a bump, a closet) zooms in on it; leaving the editor zooms back out. */
-function zoomToIfSmall(poly) {
-  if (!poly?.length || !lastFit || view) return;
-  const pts = poly.map(toSvg), xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-  const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys), size = Math.max(w, h);
-  if (size > 0.2 * Math.max(lastFit.w, lastFit.h)) return;
-  const span = Math.max(size * 5, 1500), k = span / Math.max(lastFit.w, lastFit.h);
-  const cx = (Math.max(...xs) + Math.min(...xs)) / 2, cy = (Math.max(...ys) + Math.min(...ys)) / 2;
-  view = { x: cx - lastFit.w * k / 2, y: cy - lastFit.h * k / 2, w: lastFit.w * k, h: lastFit.h * k };
-  autoZoomed = true;
-  draw();
-}
-
-/** A panel title: the friendly name with the id beside it, smaller; just the id without a name. */
-const titleHtml = e => (e?.name ? `${esc(e.name)} <small style="text-transform:none;letter-spacing:0">${esc(e.id)}</small>` : esc(e?.id ?? ''));
-/** A tooltip or status: "Bathroom window (o_window_7)", or the id; `what` adds the kind after the id. */
-const tip = (e, what = '') => (e?.name ? `${e.name} (${e.id}${what ? `, ${what}` : ''})` : `${e?.id ?? ''}${what ? ` (${what})` : ''}`);
-/** The friendly name of anything in the model by id (for messages that carry ids), or the id. */
-function nameOf(id) {
-  for (const lv of model.levels) for (const k of ['rooms', 'walls', 'openings', 'solids', 'objects', 'fixtures', 'stairs']) { const e = lv[k]?.find(x => x.id === id); if (e) return displayName(e); }
-  return id;
-}
-
-/** A snap ref as a person reads it: "Salong wall D", "Salong wall D, room face", "Murstock side 2" (ref-names.js). */
-const refName = ref => refNamer(model)(ref);
-const nameOpts = () => ({ name: refNamer(model), levelName: id => model.levels.find(l => l.id === id)?.name || id });
-
-/** Planes the measure tool can use: wall faces, room edges and solid sides of this level and the ones just below and above. */
-function linesAround() {
-  const geos = modelGeos || buildModelGeometry(model);
-  return [...collectSnapLines(model, level(), curGeo), ...adjacentLevels(model, level()).flatMap(l => collectSnapLines(model, l, geos.get(l.id)))];
-}
-
-/** Nothing selected: the plan alone. A new room being typed is kept (a stray click must not lose it). */
-function selectNone() {
-  if (editing) return;
-  roomId = null; wallId = null; openingId = null; fixtureId = null; stairsId = null; objectId = null;
-  collapseTree();
-  refresh();
-}
-/** Fold the sidebar tree up again (nothing selected, or just saved): only the top level shows. */
-function collapseTree() { expanded.clear(); treeShownFor = null; }
-
-function selectObject(id) { objectId = id; stairsId = null; fixtureId = null; openingId = null; wallId = null; roomId = null; draft = null; objectFormFor = null; refresh(); }
-function selectStairs(id) { stairsId = id; objectId = null; fixtureId = null; openingId = null; wallId = null; roomId = null; draft = null; stairsFormFor = null; refresh(); }
-function selectWall(id) { wallId = id; openingId = null; fixtureId = null; stairsId = null; objectId = null; roomId = null; draft = null; refresh(); }
-function selectOpening(id) { openingId = id; wallId = null; fixtureId = null; stairsId = null; objectId = null; roomId = null; draft = null; openingFormFor = null; refresh(); }
-function selectFixture(id) { fixtureId = id; openingId = null; wallId = null; stairsId = null; objectId = null; roomId = null; draft = null; fixtureFormFor = null; refresh(); }
-
-function loadForm(capture) {
-  const round = capture?.mode === 'circle';
-  if (shape === 'solid') { $('sShape').value = round ? 'round' : 'outline'; loadRound(round ? capture : null); } else syncRound();
-  const f = captureToForm(round ? null : capture);
-  refreshSnaps();
-  if (f.originRef && ![...$('originRef').options].some(o => o.value === f.originRef)) {
-    // the referenced point is not offered (gone or excluded): keep it visible so the error is explicit
-    $('originRef').insertAdjacentHTML('beforeend', `<option value="${esc(f.originRef)}">${esc(f.originRef)} (missing)</option>`);
-  }
-  FIELDS.forEach(k => { $(k).value = f[k]; });
-}
-
-function loadFormForSelection() {
-  if (draft) shape = draft.solid ? 'solid' : 'room';
-  const r = room(), solid = shape === 'solid';
-  $('name').value = r ? r.name ?? '' : draft?.name ?? '';
-  $('rid').value = r ? r.id : solid ? newSolidId(model, draft?.name || $('sKind').value) : newRoomId(model, draft?.name);
-  $('exterior').checked = r ? !!r.exterior : !!draft?.exterior;
-  $('rFloor').value = r?.floor ?? 'slab'; $('rFloorOff').value = r?.floorOffset ?? ''; $('rCeil').value = r?.ceilingHeight ?? '';
-  $('rCeilNote').textContent = `(${level().ceilingHeight ?? 2400})`;
-  $('roomOptions').hidden = solid;
-  // a solid is measured like a room (walking round it, the solid on your right) and has a kind, colour and height
-  $('exteriorRow').hidden = solid; $('solidFields').hidden = !solid; $('addRoom').hidden = solid || !roomId;
-  $('edTitle').textContent = solid ? 'Solid' : 'Room';
-  $('walkHelp').innerHTML = solid
-    ? 'Walk round it <b>clockwise</b>, keeping it on your <b>right</b>; a face hidden in a wall is measured or estimated from the rooms. Corner 0 is where you start; side A runs from corner 0 to 1, and so on. Its faces bound the rooms around it: they need no wall there. All lengths in mm.'
-    : 'Walk <b>clockwise</b>, room on your <b>right</b>. Corner 0 is where you start; wall A runs from corner 0 to 1, B from 1 to 2, and so on (the letters are on the plan). Lengths are listed in that order. All lengths in mm.';
-  $('delRoom').textContent = solid ? 'Delete' : 'Delete room';
-  if (solid) { $('sKind').value = r?.kind || 'chimney'; $('sColor').value = r?.color || SOLID_COLOR; $('sBase').value = r?.base ?? ''; $('sHeight').value = r?.height ?? ''; $('sCuts').checked = r ? !!r.cutsWalls : true; }
-  $('sCutsRow').hidden = !solid;
-  $('sSidesBox').hidden = !solid;
-  if (solid) renderSolidSides();
-  $('name').readOnly = false;
-  loadForm(r?.capture ?? null);
-  fillShapeCopy();
-}
-
-// ---- Copy from another one, Copy to the level below/above, Duplicate (src/edit/copy.js) ----
-const COLL = { room: 'rooms', solid: 'solids', object: 'objects', opening: 'openings', fixture: 'fixtures', stairs: 'stairs' };
-/** <option>s of what can be copied, grouped by level (this one first, then below and above). */
-function copyOptions(coll, keep = () => true, label = x => displayName(x)) {
-  const rel = { here: 'this level', below: 'below', above: 'above', other: '' };
-  return copySources(model, coll, levelId, keep).map(g => `<optgroup label="${esc(g.level.name || g.level.id)}${rel[g.relation] ? ` (${rel[g.relation]})` : ''}">${g.items.map(x => `<option value="${esc(x.id)}">${esc(label(x))}${x.name ? ` · ${esc(x.id)}` : ''}</option>`).join('')}</optgroup>`).join('');
-}
-/** The room form's Copy from (a new room or solid) and Copy to buttons (a stored one). */
-function fillShapeCopy() {
-  const coll = shape === 'solid' ? 'solids' : 'rooms', isNew = !roomId;
-  $('copyRow').hidden = !isNew;
-  if (isNew) $('copyFrom').innerHTML = `<option value="">— measure it from scratch —</option>${copyOptions(coll, x => x.polygon?.length >= 3)}`;
-  const lv = level(), near = isNew ? [] : adjacentLevels(model, lv);
-  $('copyTo').innerHTML = near.map(l => `<button data-copyto="${esc(l.id)}" title="A new ${shape} on ${esc(l.name || l.id)} with this one's shape, exactly ${l.elevation > lv.elevation ? 'above' : 'below'} it (it follows this one when it is re-measured)">Copy to ${esc(l.name || l.id)} ${l.elevation > lv.elevation ? '↑' : '↓'}</button>`).join(' ');
-  $('copyTo').querySelectorAll('[data-copyto]').forEach(b => (b.onclick = () => copyToLevel(b.dataset.copyto)));
-}
-/** Fill the open draft from shapeDraftFrom(): name, options and measurements (nothing stored until Apply). */
-function fillDraft(d) {
-  draft.name = d.name; $('name').value = d.name;
-  if (d.kind === 'solid') {
-    $('rid').value = newSolidId(model, d.name || d.solidKind);
-    $('sKind').value = d.solidKind; $('sColor').value = d.color || SOLID_COLOR; $('sBase').value = d.base ?? ''; $('sHeight').value = d.height ?? ''; $('sCuts').checked = d.cutsWalls;
-  } else {
-    $('rid').value = newRoomId(model, d.name);
-    draft.exterior = d.exterior; $('exterior').checked = d.exterior;
-    $('rFloor').value = d.floor ?? 'slab'; $('rFloorOff').value = d.floorOffset ?? ''; $('rCeil').value = d.ceilingHeight ?? '';
-  }
-  loadForm(d.capture);
-  recompute(); draw(); showEditBar();
-  const src = nameOf(d.source);
-  setStatus(d.placed === 'stacked' ? `the shape of ${src}, exactly over it (it follows ${src} when that is re-measured): check it, then Apply`
-    : d.placed === 'beside' ? `the shape of ${src}, set beside it: pick where corner 0 goes (a dot on the plan, or "Place next to another room"), then Apply`
-      : `the shape of ${src}, at the same place in the plan: pick where corner 0 goes, then Apply`);
-}
-function useShapeOf(srcId) {
-  const d = shapeDraftFrom(model, shape === 'solid' ? 'solids' : 'rooms', srcId, levelId);
-  if (d.error) { setStatus(d.error); return; }
-  fillDraft({ ...d, source: srcId });
-}
-/** A new room (or solid) on the level below or above, stacked on this one. */
-async function copyToLevel(target) {
-  const coll = shape === 'solid' ? 'solids' : 'rooms', src = roomId;
-  const d = shapeDraftFrom(model, coll, src, target);
-  if (d.error) { setStatus(d.error); return; }
-  if (!(await goToLevel(target))) return;
-  if (!editDraft({ name: d.name, ...(coll === 'solids' ? { solid: true } : { exterior: d.exterior }) })) return;
-  fillDraft({ ...d, source: src });             // not applied yet: Close asks before dropping it
-}
-/** Copy from… in the object, opening, fixture and stairs panels: its sizes onto this one, which stays where it is. */
-async function copyInto(kind, srcId) {
-  const sel = { object: 'obCopy', opening: 'oCopy', fixture: 'xCopy', stairs: 'stCopy' }[kind];
-  if (!srcId) return;
-  if (!(await mayRefill())) { $(sel).value = ''; return; }
-  const src = findIn(model, COLL[kind], srcId)?.item, id = editing?.id;
-  let r;
-  if (kind === 'object') {
-    const props = objectCopyProps(src, findIn(model, 'objects', id)?.item);
-    r = props ? setObject(model, levelId, id, props, opts()) : { report: { errors: [`${nameOf(srcId)} cannot be copied onto ${nameOf(id)}: they are not the same kind of object`] } };
-  }
-  else if (kind === 'opening') { const spec = openingSpecFrom(src); for (const k of ['hinge', 'swing', 'opens', 'leaves', 'thickness']) spec[k] ??= null; r = setOpening(model, levelId, id, spec, opts()); }
-  else if (kind === 'fixture') { const { kind: _k, ...spec } = fixtureSpecFrom(src); r = setFixture(model, levelId, id, spec, opts()); }
-  else r = applyStairs(model, levelId, stairsWithShapeOf(stairs(), src), opts());
-  $(sel).value = '';
-  if (!src || r.report.errors.length) { setStatus(src ? r.report.errors.join('; ') : `no ${kind} "${srcId}"`); return; }
-  objectFormFor = null; openingFormFor = null; fixtureFormFor = null; stairsFormFor = null;
-  commit(r.model);
-  setStatus(`${id}: sizes copied from ${nameOf(srcId)}, still where it was (not saved yet)`);
-}
-/** The Copy from list of a panel: the others of the same kind (lamps with lamps, switches with switches). */
-function fillCopyInto(kind, self) {
-  const sel = { object: 'obCopy', opening: 'oCopy', fixture: 'xCopy', stairs: 'stCopy' }[kind];
-  const label = kind === 'opening' ? x => `${displayName(x)} (${x.type} ${x.width} × ${x.head - x.sill})` : kind === 'object' ? x => `${displayName(x)} (${x.size.join(' × ')})` : kind === 'fixture' ? x => `${displayName(x)} (${x.z} mm)` : x => displayName(x);
-  const opts2 = copyOptions(COLL[kind], x => x.id !== self.id && (kind !== 'fixture' || x.kind === self.kind) && (kind !== 'object' || canCopyObject(x, self)), label);
-  $(sel).innerHTML = `<option value="">—</option>${opts2}`;
-  $(sel).closest('label').hidden = !opts2;
-}
-/** Duplicate: a copy beside it, then opened. */
-async function duplicateEdited() {
-  if (!editing || !(await mayRefill())) return;
-  const { kind, id } = editing, base = model, r = duplicate(model, levelId, kind, id, opts());
-  if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
-  commit(r.model);
-  enterEdit(kind, r.id, { ask: false }); startFresh(kind, r.id, base, `copy of ${nameOf(id)}`);
-  setStatus(`${r.id}: a copy of ${nameOf(id)} beside it. Name it and Apply to create it`);
-}
-
-function selectSolid(id) { shape = 'solid'; roomId = id; wallId = null; openingId = null; fixtureId = null; stairsId = null; objectId = null; draft = null; loadFormForSelection(); refresh(); }
-function selectRoom(id) { shape = 'room'; roomId = id; wallId = null; openingId = null; fixtureId = null; stairsId = null; draft = null; loadFormForSelection(); refresh(); }
-
-function refreshSnaps() {
-  const lv = level(), geos = buildModelGeometry(model), geo = geos.get(lv.id);
-  curGeo = geo;
-  snaps = collectSnapPoints(model, lv, geo);
-  snapsAround = collectSnapPointsAround(model, lv, l => geos.get(l.id));
-  underlay = adjacentOutlines(model, lv, l => geos.get(l.id));
-  const keep = $('originRef').value;
-  $('originRef').innerHTML = `<option value="">Plan origin (0, 0)</option>` + startOptions(snapsAround, { excludeRoom: roomId || ($('rid').value || undefined), ...nameOpts() }).map(o => `<option value="${esc(o.ref)}">${esc(o.label)}</option>`).join('');
-  $('originRef').value = [...$('originRef').options].some(o => o.value === keep) ? keep : '';
-}
-
-/** "Place next to another room": pick a shared wall, get corner 0 and the first heading. */
-function ntPick() {
-  const [id, i] = ($('ntEdge').value || '').split('|'), room = level().rooms?.find(r => r.id === id);
-  return { room, i: Number(i) };
-}
-/** This room's outline as solved from the form now (its own walls for "This room's wall"), or null. */
-const ntShape = () => (solved?.ok ? solved.polygon : null);
-function ntPlacement() {
-  const { room, i } = ntPick();
-  if (!room) return { error: 'pick the neighbour\'s wall first' };
-  const t = $('ntT').value.trim(), opts = { thickness: t === '' ? NaN : Number(t), slide: Number($('ntSlide').value) || 0 };
-  const poly = ntShape(), k = Number($('ntOwn').value);
-  // a room with a shape: its chosen wall goes against it; a room not measured yet: its first wall
-  return poly && Number.isInteger(k) ? placeWallAgainstEdge(poly, Number($('heading').value) || 0, k, room, i, opts) : placeAgainstEdge(room, i, opts);
-}
-function ntPreview() {
-  const p = ntPlacement(), { room, i } = ntPick(), k = Number($('ntOwn').value);
-  $('ntOut').textContent = p.error ? p.error
-    : `${ntShape() ? `Wall ${wallName(k)}` : 'The first wall'} goes against ${room.name || room.id} wall ${wallName(i)}${p.rot ? `; the room turns ${p.rot}°` : '; the room only moves'}. Corner 0 at (${p.start[0]}, ${p.start[1]}).`;
-  $('ntUse').disabled = !!p.error;
-  draw();
-}
-/** This room's walls in the second list; keeps the choice when it still exists. */
-function ntFillOwn() {
-  const poly = ntShape(), keep = $('ntOwn').value;
-  $('ntOwn').innerHTML = poly ? poly.map((p, k) => { const q = poly[(k + 1) % poly.length]; return `<option value="${k}">Wall ${wallName(k)} · ${Math.round(Math.hypot(q[0] - p[0], q[1] - p[1]))} mm</option>`; }).join('') : '<option value="">(measure the room first: its first wall then)</option>';
-  if ([...$('ntOwn').options].some(o => o.value === keep)) $('ntOwn').value = keep;
-}
-/** Pick the neighbour's wall (list or plan): its thickness, and this room's wall that already faces it. */
-function ntPickEdge(value) {
-  $('ntEdge').value = value;
-  const { room, i } = ntPick();
-  if (room) $('ntT').value = edgeWallThickness(level(), room, i) ?? $('ntT').value ?? '';
-  $('ntSlide').value = '';
-  ntFillOwn();
-  const poly = ntShape();
-  if (room && poly) $('ntOwn').value = String(bestWallAgainst(poly, room, i));
-  ntPreview();
-}
-function ntUse() {
-  const p = ntPlacement();
-  if (p.error) return;
-  $('originRef').value = p.ref; $('ox').value = p.offset[0]; $('oy').value = p.offset[1]; $('heading').value = p.heading;
-  recompute();
-}
-function refreshNextTo() {
-  const lv = level(), cur = roomId || $('rid').value, keep = $('ntEdge').value;
-  const rooms = (lv.rooms || []).filter(r => r.id !== cur && r.polygon?.length >= 3);
-  $('ntEdge').innerHTML = rooms.flatMap(r => r.polygon.map((p, i) => {
-    const q = r.polygon[(i + 1) % r.polygon.length], t = edgeWallThickness(lv, r, i);
-    return `<option value="${esc(r.id)}|${i}" data-hint="${esc(wallHint({ a: p, b: q }, [r.name || r.id]))}">${esc(r.name || r.id)} · wall ${wallName(i)}: (${Math.round(p[0])}, ${Math.round(p[1])}) → (${Math.round(q[0])}, ${Math.round(q[1])})${t ? ` · wall ${t} mm` : ''}</option>`;
-  })).join('');
-  if ([...$('ntEdge').options].some(o => o.value === keep)) $('ntEdge').value = keep;
-  if ($('ntT').value.trim() === '') { const { room, i } = ntPick(); $('ntT').value = (room && edgeWallThickness(lv, room, i)) || innerThickness(); }
-  ntFillOwn();
-  const p = ntPlacement();
-  $('ntOut').textContent = p.error || ''; $('ntUse').disabled = !!p.error;
-}
-
-function refresh() {
-  refreshSnaps();
-  refreshNextTo();
-  // the house view, or only the thing being edited
-  const k = editing?.kind;
-  syncSideView();
-  $('cap').classList.toggle('editing', !!editing);
-  renderLevelStrip();
-  $('editor').hidden = !(k === 'room' || k === 'solid');
-  $('wallPanel').hidden = k !== 'wall';
-  $('openingPanel').hidden = k !== 'opening';
-  $('fixturePanel').hidden = k !== 'fixture';
-  $('stairsPanel').hidden = k !== 'stairs';
-  $('objectPanel').hidden = k !== 'object';
-  $('matForm').hidden = k !== 'material';
-  $('addRoom').hidden = !roomId || shape === 'solid';
-  showIssues();
-  $('compass').innerHTML = compassSvg(northAngleOf(model));
-  if (wallId) showWall();
-  if (openingId) showOpening();
-  if (fixtureId) showFixture();
-  if (stairsId) showStairs();
-  if (objectId) showObject();
-  const rooms = level().rooms || [];
-  renderTree(rooms);
-  renderMaterials();
-  renderColors();
-  renderAnchors();
-  renderChecks();
-  renderAreas();
-  const todo = stillToMeasure(level());
-  $('todo').innerHTML = todo.map(t => `<div class="chk${t.id === wallId ? ' sel' : ''}" data-id="${esc(t.id)}" data-kind="${esc(t.kind)}"><span class="dot warn"></span><span>${esc(t.id)} <small>${esc(t.kind)}</small></span><small>${esc(t.fields.join(', '))}</small></div>`).join('') || '<small>Nothing assumed on this level.</small>';
-  $('todoCount').textContent = todo.length ? `(${todo.length})` : '';
-  $('todo').querySelectorAll('.chk').forEach(el => (el.onclick = afterLeave(() => { if (SELECT[el.dataset.kind]) enterEdit(el.dataset.kind, el.dataset.id); })));
-  recompute();
-  // the save bar: unsaved or saved, and errors block Save (Download still works)
-  const errs = issuesNow.filter(i => i.severity === 'error').length;
-  $('saveState').classList.toggle('dirty', dirty);
-  $('saveStateTxt').textContent = dirty ? 'Unsaved changes' : 'All saved';
-  $('save').disabled = !saveMode || !dirty || errs > 0;
-  $('save').classList.toggle('primary', !!saveMode && dirty && !errs);
-  $('save').title = errs ? 'Fix the errors below to save (Download still works)' : $('save').title.replace(/^Fix the errors.*$/, `Save into ${house.where}`);
-  $('undo').disabled = !history.canUndo; $('redo').disabled = !history.canRedo;
-  showEditBar();
-}
-
-/**
- * The sidebar tree: rooms → walls → openings and fixtures. A selection (from the plan or the tree)
- * opens the tree down to it; the ▸ opens or closes a node without selecting it.
- */
-function renderTree(rooms) {
-  const tree = levelTree(level()), sel = roomId || wallId || openingId || fixtureId || stairsId || objectId;
-  if (sel && sel !== treeShownFor) {
-    for (const k of pathsTo(tree, sel)) expanded.add(k);
-    const self = nodes => nodes.forEach(n => { if (n.id === sel && n.children.length) expanded.add(n.key); self(n.children); });
-    self(tree);
-  }
-  treeShownFor = sel;
-  const row = (n, depth) => {
-    const open = expanded.has(n.key), has = n.children.length > 0;
-    return `<div class="tn${n.kind === 'group' ? ' group' : ''}${n.id === sel ? ' sel' : ''}" data-key="${esc(n.key)}" data-tkind="${n.kind}" data-tid="${esc(n.id)}" style="padding-left:${depth * 14}px">`
-      + `<span class="caret" data-toggle="${esc(n.key)}">${has ? (open ? '▾' : '▸') : ''}</span><span class="dot${n.warn ? ' warn' : ''}"></span>`
-      + `<span class="lbl">${esc(n.label)}</span><small>${esc(n.note || '')}</small>${n.kind === 'group' ? '<span></span>' : `<button class="ed" data-edit title="Edit (or double-click)">✎</button>`}</div>`
-      + (open ? n.children.map(c => row(c, depth + 1)).join('') : '');
-  };
-  $('tree').innerHTML = tree.map(n => row(n, 0)).join('') || '<small>No rooms on this level yet: + New room, or measure one with the phone wizard.</small>';
-  $('tree').querySelectorAll('.tn').forEach(el => (el.onclick = async e => {
-    const key = el.dataset.key;
-    if (e.target.closest('[data-edit]') || (SELECT[el.dataset.tkind] && !e.target.closest('[data-toggle]') && isDoubleClick(el.dataset.tkind, el.dataset.tid))) { if (!(await mayLeave())) return; enterEdit(el.dataset.tkind, el.dataset.tid); return; }
-    if (e.target.closest('[data-toggle]') || el.dataset.tkind === 'group') { if (expanded.has(key)) expanded.delete(key); else expanded.add(key); renderTree(rooms); return; }
-    expanded.add(key);
-    ({ room: selectRoom, solid: selectSolid, wall: selectWall, opening: selectOpening, fixture: selectFixture, stairs: selectStairs, object: selectObject })[el.dataset.tkind]?.(el.dataset.tid);
-  }));
-}
-
-/** The wall panel: what the selected wall is, and its own properties as a form. */
-function showWall() {
-  const info = wallInfo(level(), wallId, issuesNow);
-  if (!info) { wallId = null; $('wallPanel').hidden = true; return; }
-  const w = info.wall, nm = id => level().rooms?.find(r => r.id === id)?.name || id;
-  const rooms = ids => ids.length ? ids.map(nm).join(', ') : 'no room';
-  $('wTitle').innerHTML = titleHtml(w);
-  $('wInfo').innerHTML = [
-    `${info.length} mm long`,
-    info.bound ? `${info.facade ? 'facade along' : 'follows'} ${esc(rooms(info.sides.right))}${info.shared ? `; ${esc(rooms(info.sides.left))} on the other face` : ''}`
-      : w.anchor ? `hand-drawn, hangs on ${esc([...new Set(Object.values(w.anchor).map(an => nm(an.ref.split('#')[0])))].join(' and '))}: moves and turns with it` : 'hand-drawn: never moved by room changes',
-    info.attached.length ? `attached: ${esc(info.attached.join(', '))}` : '',
-    info.orphan ? `<span style="color:var(--bad)">${esc(info.orphan)}</span>` : '',
-    w.kind !== 'virtual' && curGeo?.pieces.get(w.id)?.length === 0 ? 'hidden: a solid it gives way to stands where it is' : '',
-  ].filter(Boolean).join(' · ');
-  if (wallFormFor !== w) {
-    const f = wallToForm(w);
-    $('wName').value = f.name; $('wKind').value = f.kind; $('wLight').value = f.lightBlocking; $('wThick').value = f.thickness; $('wMeasured').checked = f.measured;
-    $('wHeight').value = f.height; $('wBase').value = f.base;
-    $('wPosBox').hidden = !!w.from?.length;
-    $('wJustify').value = f.justify;
-    $('wLock').checked = f.lock;
-    if (!w.from?.length) {
-      const nm = ref => { const [id, h] = ref.split('#'), r = level().rooms.find(x => x.id === id); return `${r?.name || id} corner ${h.slice(1)}`; };
-      const opts = '<option value="">nothing (stays where it is)</option>' + snaps.filter(s => ROOM_CORNER.test(s.ref)).map(s => `<option value="${esc(s.ref)}">${esc(nm(s.ref))}</option>`).join('');
-      for (const [sel, end] of [['wAnchA', 'a'], ['wAnchB', 'b']]) {
-        $(sel).innerHTML = opts;
-        const ref = w.anchor?.[end]?.ref;
-        if (ref && ![...$(sel).options].some(o => o.value === ref)) $(sel).insertAdjacentHTML('beforeend', `<option value="${esc(ref)}">${esc(ref)} (missing)</option>`);
-        $(sel).value = ref || '';
-      }
-      fillWallPos(w.a, w.b);
-    }
-    $('wSloped').checked = f.sloped; $('wTopA').value = f.topA; $('wTopB').value = f.topB; $('wBottomA').value = f.bottomA; $('wBottomB').value = f.bottomB;
-    $('wTopFlatA').value = f.topFlatA; $('wTopFlatB').value = f.topFlatB; $('wBotFlatA').value = f.bottomFlatA; $('wBotFlatB').value = f.bottomFlatB;
-    fillMaterialSelects();
-    for (const S of ['Left', 'Right']) { const s = S.toLowerCase(); $(`w${S}Mode`).value = f[`${s}Mode`]; $(`w${S}Color`).value = f[`${s}Color`]; $(`w${S}Mat`).value = f[`${s}Mat`]; }
-    // a per-room look on a face that runs along only that room is that face's own look: shown (and saved) as such
-    foldedLooks = new Set();
-    if (w.roomSides) for (const S of ['Left', 'Right']) {
-      const on = [...new Set(wallFaceRooms(w, curGeo.frames.get(w.id), level().rooms).filter(x => x.side === S.toLowerCase()).map(x => x.room))], look = on.length === 1 && w.roomSides[on[0]];
-      if (!look) continue;
-      foldedLooks.add(on[0]);
-      $(`w${S}Mode`).value = look.material ? 'material' : 'color';
-      if (look.color) $(`w${S}Color`).value = look.color;
-      if (look.material) $(`w${S}Mat`).value = look.material;
-    }
-    renderWallRoomLooks(w);
-    $('wErr').textContent = '';
-    wallFormFor = w;
-  }
-  const fixed = info.shared && w.kind !== 'virtual';
-  $('wThick').readOnly = fixed;
-  $('wThickNote').textContent = fixed ? 'mm · the distance between the two rooms (move a room to change it)' : info.assumed.includes('thickness') ? 'mm · still a guess: measure it in a door or window opening in this wall (surface to surface)' : 'mm';
-  $('wMeasuredRow').hidden = !info.assumed.includes('thickness');
-  $('wLeftRoom').textContent = `faces ${rooms(info.sides.left).replace('no room', 'outside')}`;
-  $('wRightRoom').textContent = `faces ${rooms(info.sides.right).replace('no room', 'outside')}`;
-  showSideRows();
-  // the ends of a sloped wall are named by the room corner they are at
-  const endName = p => { const c = cornerAt(level(), p); return c ? `corner ${c.index} of ${c.name}` : `(${Math.round(p[0])}, ${Math.round(p[1])})`; };
-  for (const [k, p] of [['A', w.a], ['B', w.b]]) { const t = endName(p); $(`wEnd${k}`).textContent = t; $('wSlope').querySelector(`.end${k}`).textContent = t; }
-  showSlopeRows();
-  $('wOpenings').innerHTML = info.openings.length ? 'Openings (click to edit): ' + info.openings.map(o => `<a href="#" data-o="${esc(o.id)}">${esc(o.id)}</a> (${esc(o.type)}, ${o.width} mm at ${o.offset})`).join(', ') : 'No openings yet.';
-  $('wOpenings').querySelectorAll('a[data-o]').forEach(a => (a.onclick = e => { e.preventDefault(); afterLeave(() => enterEdit('opening', a.dataset.o))(); }));
-  $('wSplitNote').textContent = info.start ? `mm from corner ${info.start.index} of ${info.start.name} (wall ${info.length} mm)` : `mm from its start (${Math.round(w.a[0])}, ${Math.round(w.a[1])}); wall ${info.length} mm`;
-  // the other part of a split wall (or a hand-drawn wall continuing it): join them into one again
-  const joins = joinableWalls(level(), w.id);
-  $('wJoinRow').hidden = !joins.length;
-  $('wJoinRow').innerHTML = joins.map(j => `<button data-join="${esc(j.id)}" title="One wall again, with this wall's thickness, kind and colours; what is on ${esc(j.id)} moves onto it">Join with ${esc(j.id)} <small>(at its ${j.side === 'b' ? 'end' : 'start'})</small></button>`).join('');
-  $('wJoinRow').querySelectorAll('[data-join]').forEach(b => (b.onclick = () => doJoin(b.dataset.join)));
-  $('wUnbind').hidden = !info.bound;
-  $('wDelete').hidden = info.bound && !info.orphan;
-}
-
-const wallForm = () => ({ name: $('wName').value, kind: $('wKind').value, lightBlocking: $('wLight').value, thickness: $('wThick').value, measured: $('wMeasured').checked, height: $('wHeight').value, base: $('wBase').value,
-  roomSides: readLookRows($('wRoomLooks'), Object.fromEntries(Object.entries(wall()?.roomSides || {}).filter(([id]) => !foldedLooks.has(id)))),
-  ...(wall()?.from?.length ? {} : (() => { const e = wallEnds(); return { ax: e ? String(e.a[0]) : '', ay: e ? String(e.a[1]) : '', bx: e ? String(e.b[0]) : '', by: e ? String(e.b[1]) : '', justify: $('wJustify').value, lock: $('wLock').checked, anchor: anchorForm() }; })()),
-  topFlatA: $('wTopFlatA').value, topFlatB: $('wTopFlatB').value, bottomFlatA: $('wBotFlatA').value, bottomFlatB: $('wBotFlatB').value,
-  sloped: $('wSloped').checked, topA: $('wTopA').value, topB: $('wTopB').value, bottomA: $('wBottomA').value, bottomB: $('wBottomB').value,
-  leftMode: $('wLeftMode').value, leftColor: $('wLeftColor').value, leftMat: $('wLeftMat').value, rightMode: $('wRightMode').value, rightColor: $('wRightColor').value, rightMat: $('wRightMat').value });
-
-/** A sloped wall shows its end heights instead of height and base. */
-function showSlopeRows() {
-  const on = $('wSloped').checked;
-  $('wSlope').hidden = !on;
-  document.querySelectorAll('#wallPanel label.flat').forEach(l => (l.hidden = on));
-}
-
-/** Each side shows the colour picker or the material list, by its mode; colour sides get the palette. */
-function showSideRows() {
-  for (const S of ['Left', 'Right']) {
-    const m = $(`w${S}Mode`).value;
-    $(`w${S}Color`).hidden = m !== 'color'; $(`w${S}Mat`).hidden = m !== 'material';
-    fillSwatches($(`w${S}Swatches`), m === 'material' ? null : $(`w${S}Color`).value, m === 'color', color => {
-      $(`w${S}Mode`).value = 'color'; $(`w${S}Color`).value = color; showSideRows();
-    }, () => $(`w${S}Color`).value, m === 'color', m === 'color' ? () => makeMaterialFromSide(S.toLowerCase()) : null);
-  }
-}
-
-/**
- * The colour palette as swatches: colours already used in the house (named ones first, with their
- * name as tooltip). pick(color) is called on a click; withName adds "Name…" for the current colour.
- */
-function fillSwatches(box, current, highlight, pick, currentColor, withName, makeMaterial = null) {
-  const list = usedColors(model);
-  box.innerHTML = list.map(c => `<button class="sw${highlight && current?.toLowerCase() === c.color ? ' on' : ''}" data-c="${c.color}" style="background:${c.color}" title="${esc(c.name ? `${c.name} (${c.color})` : c.color)}${c.count ? ` · used ${c.count}×` : ''}"></button>`).join('')
-    + (withName ? `<button class="nm" title="Give this colour a name so it is easy to find again">Name…</button>` : '')
-    + (makeMaterial ? `<button class="nm mk" title="Make a material with this colour; wall sides using the material all change when it does">Make material…</button>` : '');
-  box.querySelector('.mk')?.addEventListener('click', makeMaterial);
-  box.querySelectorAll('.sw').forEach(b => (b.onclick = () => pick(b.dataset.c)));
-  box.querySelector('.nm')?.addEventListener('click', () => {
-    const c = currentColor().toLowerCase(), old = usedColors(model).find(x => x.color === c)?.name || '';
-    const name = prompt(`Name for ${c} (empty = no name):`, old);
-    if (name === null) return;
-    const r = nameColor(model, c, name);
-    if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
-    commit(r.model);
-    setStatus(name.trim() ? `${c} is now called "${name.trim()}" (not saved yet)` : `${c} has no name now`);
-  });
-}
-
-/**
- * A material from this side's colour: named (its palette name suggested), used for this side, and
- * for the other sides painted exactly that colour if you say so.
- */
-async function makeMaterialFromSide(side) {
-  const S = side === 'left' ? 'Left' : 'Right', c = $(`w${S}Color`).value.toLowerCase();
-  const name = prompt(`Name for the new material with colour ${c}:`, usedColors(model).find(x => x.color === c)?.name || '');
-  if (name === null) return;
-  const here = { level: levelId, wall: wallId, side };
-  const others = model.levels.flatMap(lv => (lv.walls || []).flatMap(w => ['left', 'right'].filter(s => w.sides?.[s]?.color?.toLowerCase() === c && !w.sides[s].material && !(w.id === wallId && s === side)).map(s => ({ level: lv.id, wall: w.id, side: s }))));
-  const all = others.length && await askConfirm(`${others.length} other wall side${others.length > 1 ? 's are' : ' is'} painted ${c} too. Switch ${others.length > 1 ? 'them' : 'it'} to the new material as well (so they all change together)?`);
-  const r = materialFromColor(model, c, name, [here, ...(all ? others : [])]);
-  if (r.report.errors.length) { $('wErr').textContent = r.report.errors.join('; '); return; }
-  wallFormFor = null;
-  commit(r.model);
-  setStatus(`material ${r.id} made from ${c}, used by ${r.report.replaced.length} wall side${r.report.replaced.length > 1 ? 's' : ''} (not saved yet)`);
-}
-
-/** The named colours, under Materials: click one to rename it. */
-function renderColors() {
-  const named = usedColors(model).filter(c => c.name);
-  $('colorList').innerHTML = named.length ? 'Colours: ' + named.map(c => `<a href="#" data-c="${c.color}" title="${c.color}: click to rename"><span class="swatch" style="background:${c.color}"></span> ${esc(c.name)}</a>`).join(' · ')
-    : 'Colours you use show as swatches under a wall side\'s colour; name one with "Name…" to keep it in the list.';
-  $('colorList').querySelectorAll('a[data-c]').forEach(a => (a.onclick = e => {
-    e.preventDefault();
-    const c = a.dataset.c, name = prompt(`Name for ${c} (empty = no name):`, usedColors(model).find(x => x.color === c)?.name || '');
-    if (name === null) return;
-    const r = nameColor(model, c, name);
-    if (!r.report.errors.length) commit(r.model);
-  }));
-}
-// The design library's names that this house does not override: listed read-only, picked by name (materials-library plan).
-function libraryMaterials() { return Object.entries(materialTable(model)).filter(([, m]) => m.fromLibrary); }
-/**
- * The options of a material list: the house's materials and the library's, grouped by kind with a swatch each (ND3). first and
- * last are options put before and after the groups. A house texture is not drawn in the menu (its path is the house's, not this page's).
- */
-function materialOptionsHtml(first = '', last = '') {
-  const items = [
-    ...Object.entries(model.materials || {}).map(([id, m]) => ({ id, label: m.name || id, entry: { ...m, texture: undefined } })),
-    ...libraryMaterials().map(([id, m]) => ({ id, label: `${m.name || id} (library)`, entry: m })),
-  ];
-  const groups = new Map();
-  for (const it of items) {
-    const k = materialKind(it.id, it.entry).label;
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k).push(it);
-  }
-  const body = MATERIAL_KINDS.filter(k => groups.has(k.label)).map(k => `<optgroup label="${esc(k.label)}">${groups.get(k.label).map(it => `<option value="${esc(it.id)}" data-swatch="${esc(materialSwatch(it.entry, 'object-designs/'))}">${esc(it.label)}</option>`).join('')}</optgroup>`).join('');
-  return first + body + last;
-}
-function fillMaterialSelects() {
-  const opts = materialOptionsHtml('<option value="">choose…</option>', '<option value="+new">+ New material…</option>');
-  for (const S of ['Left', 'Right']) { const keep = $(`w${S}Mat`).value; $(`w${S}Mat`).innerHTML = opts; if ([...$(`w${S}Mat`).options].some(o => o.value === keep)) $(`w${S}Mat`).value = keep; }
-}
-
-// ---- materials ----
-let matId = null;                       // the material being edited ('' = a new one)
-function renderMaterials() {
-  const mats = Object.entries(model.materials || {}), use = materialUse(model);
-  $('matList').innerHTML = mats.map(([id, m]) => `<div class="chk${id === matId ? ' sel' : ''}" data-mat="${esc(id)}"><span class="swatch" style="background:${esc(m.color || '#888')}"></span><span>${esc(m.name || id)} <small>${esc(id)}${m.texture ? ' · texture' : ''}</small></span><small>${use.get(id).length ? `${use.get(id).length} wall${use.get(id).length > 1 ? 's' : ''}` : 'unused'}</small></div>`).join('')
-    || '<small>No materials yet. A wall side can have a colour, or a material that several walls share (with a texture image if you like).</small>';
-  $('matList').querySelectorAll('[data-mat]').forEach(el => (el.onclick = afterLeave(() => enterEdit('material', el.dataset.mat))));
-  // the library's names: read-only here (change them in object-designs/materials/library.json)
-  const lib = libraryMaterials();
-  if (lib.length) {
-    $('matList').insertAdjacentHTML('beforeend', `<small>From the library (read-only):</small>` + lib.map(([id, m]) => `<div class="chk lib"><span class="swatch" style="background:${esc(m.color || '#888')}"></span><span>${esc(id)} <small>library</small></span></div>`).join(''));
-  }
-}
-function openMaterial(id, forSide) {
-  matId = id;
-  const m = (id && model.materials?.[id]) || {}, use = id ? materialUse(model).get(id) || [] : [];
-  $('matForm').hidden = false;
-  $('mName').value = m.name || ''; $('mId').value = id || '(from the name)'; $('mColor').value = m.color || '#cccccc'; $('mTex').value = m.texture || ''; $('mUv').value = m.uvScale ?? '';
-  $('mUse').textContent = id ? (use.length ? `Used by ${use.join(', ')}.` : 'Not used by any wall yet.') : forSide ? `Will be used for the ${forSide} side of ${wallId}.` : '';
-  $('mDelete').hidden = !id; $('mErr').textContent = '';
-  materialSwatches();
-  $('matForm').dataset.forSide = forSide || '';
-  renderMaterials();
-  $('mName').focus();
-}
-/** The palette under the material's colour picker. */
-function materialSwatches() {
-  fillSwatches($('mSwatches'), $('mColor').value, true, c => { $('mColor').value = c; materialSwatches(); }, () => $('mColor').value, false);
-}
-
-function applyMaterial() {
-  const props = { name: $('mName').value.trim() || null, color: $('mColor').value, texture: $('mTex').value.trim() || null, uvScale: $('mUv').value.trim() || null };
-  if (!props.name && !matId) { $('mErr').textContent = 'Give it a name.'; return; }
-  const r = setMaterial(model, matId, props);
-  if (r.report.errors.length) { $('mErr').textContent = r.report.errors.join('; '); return; }
-  let next = r.model;
-  const side = $('matForm').dataset.forSide;
-  if (side && wallId) {
-    // a material made from a wall side: use it there straight away
-    const w = level().walls.find(x => x.id === wallId), sides = { ...(w.sides || {}), [side]: { material: r.id } };
-    const s = setWallProps(next, levelId, wallId, { sides }, opts());
-    if (!s.report.errors.length) next = s.model;
-    wallFormFor = null;
-  }
-  matId = r.id; $('matForm').dataset.forSide = '';
-  commit(next);
-  openMaterial(r.id);
-  setStatus(`material ${r.id} saved in the model (not saved to the repo yet)`);
-}
-
-async function applyWall() {
-  const { props, errors } = wallPropsFromForm(wall(), wallForm());
-  if (errors.length) { $('wErr').textContent = errors.join('; '); return; }
-  if (!Object.keys(props).length) { $('wErr').textContent = 'Nothing changed.'; return; }
-  const id = wallId, r = setWallProps(model, levelId, id, props, opts());
-  if (r.report.errors.length) { $('wErr').textContent = r.report.errors.join('; '); return; }
-  const lines = describeReconcile(r.report);
-  if (r.report.preview.length && !(await askConfirm(['This changes the plan:', ...lines, 'Apply?'].join('\n\n'), { ok: 'Apply' }))) return;
-  $('wallsOut').innerHTML = lines.map(esc).join('<br>');
-  commit(r.model);
-  setStatus(`${id}: ${Object.keys(props).join(', ')} changed (not saved yet)`);
-}
-
-/** The opening panel: where it is, its sizes, and how a door or window opens (into which room). */
-function showOpening() {
-  const info = openingInfo(level(), openingId);
-  if (!info) { openingId = null; $('openingPanel').hidden = true; return; }
-  const o = info.opening, nm = ids => ids.map(id => level().rooms?.find(r => r.id === id)?.name || id).join(', ') || 'outside';
-  showOpeningHosted(o);
-  $('oTitle').innerHTML = titleHtml(o);
-  $('oInfo').innerHTML = `in <a href="#" id="oWall" title="${esc(o.wall)}">${esc(refName(o.wall))}</a> (${info.length} mm, ${info.top} mm high)` + (openingAssumed(o).length ? ` · <b class="warn">still default: ${esc(openingAssumed(o).join(', '))}</b>` : '');
-  $('oWall').onclick = e => { e.preventDefault(); afterLeave(() => enterEdit('wall', o.wall))(); };
-  fillFrom('oFrom', info.wall, o.id);
-  $('oOffsetNote').textContent = 'mm from that corner to the nearer edge';
-  $('oBelowNote').textContent = `mm, top to the ceiling (${info.top})`;
-  // the edges named by the corners of the room it is in, on each side of it
-  const cs = measureCorners(level(), o.wall), before = defaultCorner(cs, o.offset, o.offset + o.width);
-  const after = cs.filter(c => c.dir < 0 && c.s >= o.offset + o.width - 1).sort((a, b) => a.s - b.s)[0];
-  const side = c => (c && /#p\d+$/.test(c.key) ? ` (${c.label.replace(/ of .*/, '')} side)` : '');
-  $('oHinge').options[0].textContent = `near edge${side(before?.dir > 0 ? before : null)}`;
-  $('oHinge').options[1].textContent = `far edge${side(after)}`;
-  $('oHinge').options[2].textContent = 'both sides (double)';
-  // a wall standing inside one room faces it on both sides: then say which side (plan directions)
-  let [onRight, onLeft] = [nm(info.sides.right), nm(info.sides.left)];
-  if (onRight === onLeft) {
-    const w = info.wall, L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) || 1, u = [(w.b[0] - w.a[0]) / L, (w.b[1] - w.a[1]) / L];
-    const dir = v => ['east', 'north-east', 'north', 'north-west', 'west', 'south-west', 'south', 'south-east'][((Math.round(Math.atan2(v[1], v[0]) / (Math.PI / 4)) % 8) + 8) % 8];
-    onRight = `${onRight}, ${dir([u[1], -u[0]])} side`; onLeft = `${onLeft}, ${dir([-u[1], u[0]])} side`;
-  }
-  $('oSwing').options[0].textContent = onRight;
-  $('oSwing').options[1].textContent = onLeft;
-  $('oPlace').options[1].textContent = `flush with the ${onLeft} side`; $('oPlace').options[2].textContent = `flush with the ${onRight} side`;
-  if (openingFormFor !== o) {
-    const f = openingToForm(o, info.top, fromOf(o.id, info.wall));
-    $('oName').value = f.name; $('oType').value = f.type; $('oOffset').value = f.offset; $('oWidth').value = f.width; $('oSill').value = f.sill; $('oHead').value = f.head;
-    $('oHeight').value = f.height; $('oBelow').value = f.below; $('oHinge').value = f.hinge; $('oSwing').value = f.swing;
-    if (f.type === 'door') $('oDoorOpens').value = f.opens; else { $('oDoorOpens').value = 'swing'; $('oOpens').value = f.opens; }
-    for (const [id, k] of [['oOffset', 'offset'], ['oWidth', 'width'], ['oSill', 'sill'], ['oHead', 'head'], ['oHeight', 'height'], ['oBelow', 'below']]) $(id).placeholder = f.placeholders[k];
-    $('oThick').value = f.thickness;
-    $('oColorUse').checked = f.colorUse; $('oColor').value = f.color || FITTING_DEFAULTS[o.type]?.color || '#f2f0ea';
-    $('oPlace').value = f.placement; $('oShift').value = f.shift; $('oSillDepth').value = f.sillDepth; $('oSillColorUse').checked = f.sillColorUse; $('oSillColor').value = f.sillColor || FITTING_DEFAULTS.sill.color;
-    $('oMeasured').checked = f.measured; $('oErr').textContent = '';
-    openingFormFor = o;
-    if (o.type === 'door') showDoorBinding(o);
-    fillCopyInto('opening', o);
-  }
-  $('oMeasuredRow').hidden = !openingAssumed(o).length;
-  showOpeningRows();
-}
-function showOpeningRows() {
-  const t = $('oType').value;
-  $('oBindBox').hidden = t !== 'door' || isFresh();                // a new door gets its sensor after its first Apply (its id is made then)
-  if (t === 'door' && openingFormFor && !entityChoices.o.length) loadDoorChoices(openingFormFor);
-  $('oOpensRow').hidden = t !== 'window';
-  $('oDoorOpensRow').hidden = t !== 'door';
-  $('oLeafRow').hidden = !(t === 'door' || (t === 'window' && ['side-hung', 'tilt-turn'].includes($('oOpens').value)));
-  // a sliding door: which way it slides open, and the side of the wall it runs on (a pocket door runs inside it)
-  const slides = t === 'door' && $('oDoorOpens').value !== 'swing';
-  $('oHingeLbl').textContent = slides ? 'Slides open toward' : 'Hinge';
-  $('oHinge').options[2].textContent = slides ? 'both ways (two leaves)' : 'both sides (double)';
-  $('oSwingLbl').textContent = slides ? 'Runs on the side of' : 'Opens into';
-  $('oSwingRow').hidden = slides && $('oDoorOpens').value === 'pocket';
-  $('oThickRow').hidden = t === 'passage';
-  $('oThickWhat').textContent = t;
-  $('oLookBox').hidden = t === 'passage'; $('oSillRow').hidden = t !== 'window'; $('oShiftRow').hidden = t === 'passage'; $('oPlaceWhat').textContent = t;
-}
-/**
- * The corner an opening's or wall fixture's position is measured from: { key, s, dir, pos, label }
- * (measureCorners()): the one picked in "Measured from", else the nearest room corner before it.
- */
-function fromOf(id, w) {
-  const cs = w ? measureCorners(level(), w.id) : [];
-  const [t0, t1] = spanOf(id);
-  return cs.find(c => c.key === measureFrom.get(id)) || defaultCorner(cs, t0, t1) || { key: 'a', s: 0, dir: 1, pos: w?.a, label: '' };
-}
-
-/** Where an opening or wall fixture is along its wall: [t0, t1] mm from the wall's start. */
-function spanOf(id) {
-  const thing = level().openings?.find(o => o.id === id) || level().fixtures?.find(x => x.id === id);
-  const t0 = thing?.offset ?? thing?.attach?.offset ?? 0;
-  return [t0, t0 + (thing?.width ?? 0)];
-}
-
-/** The "Measured from" picker: every room corner along the wall (both corners of the room you stand in). */
-function fillFrom(sel, w, id) {
-  const cs = measureCorners(level(), w.id), [t0, t1] = spanOf(id);
-  // the rooms whose stretch of this wall the thing is on come first: those are the corners you can reach
-  const here = new Set(cs.filter(c => c.dir > 0 && c.s <= t0 + 1 && cs.some(d => d.dir < 0 && d.s >= t1 - 1 && d.key.split('#')[0] === c.key.split('#')[0])).map(c => c.key.split('#')[0]));
-  const opt = c => `<option value="${esc(c.key)}">${esc(c.label)}</option>`, mine = cs.filter(c => here.has(c.key.split('#')[0])), rest = cs.filter(c => !mine.includes(c));
-  $(sel).innerHTML = mine.length && rest.length ? `<optgroup label="Where it is">${mine.map(opt).join('')}</optgroup><optgroup label="Other corners along this wall">${rest.map(opt).join('')}</optgroup>` : cs.map(opt).join('');
-  $(sel).value = fromOf(id, w).key;
-  measureFrom.set(id, $(sel).value);        // kept, so the corner does not change under you when the thing moves past another one
-}
-
-/**
- * Another corner picked to measure from: a typed position is converted so the opening stays where it is;
- * with nothing typed yet the panel is simply refilled for that corner.
- */
-/** "Measured from … On the plan" (fixes list 16): the corners along the wall are marked, a click on one picks it. */
-let fromPick = null;                                             // { sel, wallId } while picking
-// Select from point (under Corner 0): the start points of the house are on the plan only while it is on
-let startPick = false;
-function syncOriginPick() {
-  const b = $('originPick');
-  b.classList.toggle('on', startPick);
-  b.textContent = startPick ? 'Click a point on the plan (Esc stops)' : 'Select from point';
-}
-function startFromPick(sel) {
-  const wallId = sel === 'oFrom' ? opening()?.wall : fixture()?.attach?.wall;
-  if (!wallId) return;
-  fromPick = { sel, wallId };
-  setStatus('Click the corner on the plan to measure from (Esc or a click elsewhere cancels)');
-  draw();
-}
-function stopFromPick() { if (!fromPick) return; fromPick = null; draw(); }
-function chooseFrom(key) {
-  const sel = fromPick.sel;
-  fromPick = null;
-  $(sel).value = key;
-  $(sel).dispatchEvent(new Event('change'));                     // the same as picking it in the list: the thing keeps its place
-  setStatus(`measured from ${key}`);
-  draw();
-}
-
-function switchFrom(kind) {
-  const isO = kind === 'opening', id = isO ? openingId : fixtureId, thing = isO ? opening() : fixture();
-  if (!thing) return;
-  const w = level().walls.find(v => v.id === (isO ? thing.wall : thing.attach?.wall));
-  if (!w) return;
-  const field = isO ? 'oOffset' : 'xOffset', was = isDirty(), t = $(field).value.trim(), v = Number(t);
-  const width = isO ? (Number($('oWidth').value.trim()) || thing.width) : 0, old = fromOf(id, w);
-  measureFrom.set(id, $(isO ? 'oFrom' : 'xFrom').value);
-  if (was && t !== '' && Number.isFinite(v)) $(field).value = offsetFrom({ offset: offsetTo(v, old, width), width }, fromOf(id, w));
-  else { if (isO) openingFormFor = null; else fixtureFormFor = null; refresh(); snap(); return; }
-  draw();
-}
-
-const openingForm = () => ({ name: $('oName').value, type: $('oType').value, offset: $('oOffset').value, width: $('oWidth').value, sill: $('oSill').value, head: $('oHead').value, height: $('oHeight').value, below: $('oBelow').value, hinge: $('oHinge').value, swing: $('oSwing').value, opens: $('oType').value === 'door' ? $('oDoorOpens').value : $('oOpens').value, thickness: $('oThick').value, measured: $('oMeasured').checked, colorUse: $('oColorUse').checked, color: $('oColor').value, placement: $('oPlace').value, shift: $('oShift').value, sillDepth: $('oSillDepth').value, sillColorUse: $('oSillColorUse').checked, sillColor: $('oSillColor').value });
-
-function applyOpening() {
-  const info = openingInfo(level(), openingId);
-  const { props, errors } = openingPropsFromForm(info.opening, openingForm(), info.top, fromOf(openingId, info.wall));
-  if (errors.length) { $('oErr').textContent = errors.join('; '); return; }
-  const bd = isFresh() ? null : doorBindingDraft(info.opening, props.type ?? info.opening.type);
-  if (bd?.error) { $('oErr').textContent = bd.error; return; }
-  const bindingChanged = !!bd && !sameBinding(loc, bd.next, openingId);
-  if (!Object.keys(props).length && !bindingChanged) { $('oErr').textContent = 'Nothing changed.'; return; }
-  const r = Object.keys(props).length ? setOpening(model, levelId, openingId, props, opts()) : { model, report: { errors: [] } };
-  if (r.report.errors.length) { $('oErr').textContent = r.report.errors.join('; '); return; }
-  if (bindingChanged) loc = bd.next;                              // the sensor is stored with the house (Save), undone with the model
-  commit(bindingChanged && r.model === model ? { ...model } : r.model);
-  setStatus(`${openingId}: ${[...Object.keys(props), ...(bindingChanged ? ['sensor'] : [])].join(', ')} changed (not saved yet)`);
-}
-
-// ---- objects: boxes with a size, on a wall or standing in a room ----
-async function placeObject(spec, what) {
-  if (!(await mayLeave())) return;
-  if (!dropFresh([spec.attach?.wall])) return;
-  const base = model, r = addObject(model, levelId, spec, opts());
-  if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
-  commit(r.model);
-  enterEdit('object', r.object.id, { ask: false }); startFresh('object', r.object.id, base, 'object');
-  setStatus(`${r.object.id} is a new object ${what}. Name it and Apply to create it`);
-}
-
-// The asset models of this house (decision 146). Made when first used, read through the house's own assets/ and the
-// repo's shared ones; a model that loads or fails redraws the plan, and the object panel's list offers the names found.
-let assets = null, assetNameList = [];
-function assetCache() {
-  if (!assets) {
-    const houseBase = house?.baseUrl ?? null;
-    // a model that has loaded redraws the plan and the panels, once after a quiet moment however many arrive in a row
-    assets = createAssetCache({ houseBase, sharedBase: '', house: house?.id ?? null, onChange: coalesce(() => { draw(); showIssues(); showObject(); }) });
-    listAssetNames({ houseBase, sharedBase: '' }).then(names => { assetNameList = names; fillAssetNames(); });
-    loadBlueprintList();
-  }
-  return assets;
-}
-
-// The blueprints this house can use (the built-in library and its own blueprints/), for the validator (decision 188): it then
-// checks a blueprint object's values against its blueprint. Only with Plantern's server; without it those checks are skipped.
-let blueprints = null, blueprintList = null;       // id → meta; and the list itself ({ id, source, meta }), for the Add menus
-function loadBlueprintList() {
-  blueprints = blueprintList = null;
-  if (!house?.server) return;
-  fetch(`api/houses/${encodeURIComponent(house.id)}/blueprints`, { cache: 'no-store' })
-    .then(r => (r.ok ? r.json() : null))
-    .then(list => { if (list) { blueprints = blueprintMap(list); blueprintList = list.blueprints; showIssues(); } })
-    .catch(() => {});
-}
-
-// ---- the Add menus (src/menu.js; the entries are src/capture/add-menu.js): the actions the buttons used to have ----
-const act = {};        // id of an Add entry → what it does; filled in by init() where the panels are wired
-
-/** The room an object is placed in the middle of: the selected one, else the first of the level. */
-const placeRoom = () => (shape === 'room' ? room() : null) || level().rooms?.[0];
-
-function addContext(where) {
-  const lv = level();
-  return {
-    where,
-    roomSelected: shape === 'room' && !!roomId,
-    hasRooms: !!lv.rooms?.length,
-    levelAbove: model.levels.some(l => l.elevation > lv.elevation && (l.building ?? null) === (lv.building ?? null)),
-    blueprints: blueprintList?.map(b => ({ id: b.id, name: b.meta.name, source: b.source, description: b.meta.description, summary: b.meta.summary, light: !!b.light, hosts: hostsOf(b.meta) })) ?? null,
-    models: assetNameList,
-  };
-}
-
-/** Does what an Add entry says, in the panel `where` it was picked. */
-function addPick(where, entry) {
-  const id = entry.id;
-  if (id.startsWith('blueprint:')) { const [bid, at] = id.slice('blueprint:'.length).split('@'); return placeBlueprint(bid, where, at); }
-  if (id.startsWith('model:')) return act.model(id.slice('model:'.length));
-  if (id === 'box') return where === 'wall' ? act.wallBox() : act.box();
-  return act[id]?.();
-}
-
-/**
- * Places an object made from a blueprint with its default options: the server builds it (that gives its size), it stands in
- * the middle of the room or on the selected wall, and it opens as a new object like a box does (Apply creates it; one undo step).
- */
-async function placeBlueprint(id, where, at = 'sill') {
-  const meta = blueprints?.get(id);
-  if (!meta) { setStatus(`The blueprint "${id}" is not available (Plantern's server must be running)`); return; }
-  const params = {};
-  for (const d of meta.params) if (d.type !== 'material') params[d.key] = defaultsFor(meta)[d.key];
-  setStatus(`Building ${meta.name}…`);
-  let built;
-  try { built = await assetCache().rebuild({ blueprint: id, params, partMaterials: {} }); }
-  catch (e) { setStatus(`${meta.name} cannot be built: ${e.message}`); return; }
-  // where it starts comes from the blueprint (meta.placement, decision 230): on the floor, on a wall, or under the ceiling
-  let place, what, room = null;
-  if (where === 'opening') {
-    const o = opening();
-    if (!o) return;
-    // the side is the room's: the object stands on the face the rooms are on (the window's inside)
-    place = { kind: 'opening', opening: o.id, at, side: wallInfo(level(), o.wall)?.sides?.right?.length ? 'right' : 'left' };
-    what = `${hostedWhere(at)} of ${o.id}: its place follows the opening`;
-  } else if (where === 'wall') {
-    const w = wall();
-    if (!w) return;
-    const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), side = wallInfo(level(), w.id)?.sides?.right?.length ? 'right' : 'left';
-    place = { kind: 'wall', wall: w.id, side, offset: Math.max(0, Math.round((L - built.size[0]) / 2)) };
-    room = level().rooms.find(r => wallInfo(level(), w.id)?.sides?.[side]?.includes(r.id)) ?? null;
-    what = 'on the wall: drag it along, or set its position';
-  } else {
-    room = placeRoom();
-    if (!room) { setStatus('Add a room first'); return; }
-    const onWall = startPlacement(meta, built.size, level(), room, params).mount === 'wall' && wallInRoom(level(), room.id, built.size[0]);
-    if (onWall) {
-      place = onWall;
-      what = 'on the longest wall of the room: drag it along, or set its position';
-    } else {
-      const [cx, cy] = labelPoint(room.polygon).pos;
-      place = { kind: 'room', x: cx - built.size[0] / 2, y: cy - built.size[1] / 2, rotationDeg: 0 };
-      what = 'in the middle of the room: drag it where it belongs';
-    }
-  }
-  const { z } = startPlacement(meta, built.size, level(), room, params);
-  const r = placeSpec({ blueprint: id, params, partMaterials: {}, size: built.size, z, place, light: built.light });
-  if (r.error) { setStatus(r.error); return; }
-  placeObject(r.spec, `a ${meta.name} ${what}`);
-}
-
-/** The Add menus of the house view and of the room, wall and opening panels. */
-function wireAddMenus() {
-  for (const [id, where] of [['addHouse', 'house'], ['addRoom', 'room'], ['wAdd', 'wall'], ['oAdd', 'opening']]) {
-    createMenu($(id), { label: 'Add', icon: 'plus', align: 'right', entries: () => addEntries(addContext(where)), onPick: e => addPick(where, e) });
-  }
-}
-let assetPickNames = [];   // the names the model menu lists (fillAssetNames)
-/** A swatch menu beside a colour input (ND10): picking one sets the colour and fires its input and change events, as the picker would. */
-function addSwatchPicker(input) {
-  const host = document.createElement('div');
-  host.className = 'swatchpick';
-  input.after(host);
-  createMenu(host, {
-    label: 'Swatches', icon: 'colour', align: 'right',
-    entries: () => [
-      ...colourSwatches(model, optionLibrary).map(e => ({ id: e.value, label: e.label, hint: e.hint, group: e.group, swatch: e.swatch, current: e.value.toLowerCase() === input.value.toLowerCase() })),
-      { id: 'other', label: 'Other colour…', icon: 'colour', group: 'More' },
-    ],
-    onPick: e => {
-      if (e.id === 'other') { input.click(); return; }
-      input.value = e.id;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    },
-  });
-}
-function fillAssetNames() {
-  const used = (model?.levels || []).flatMap(l => (l.objects || []).filter(o => o.kind === 'asset' && o.asset).map(o => o.asset));
-  const names = [...new Set([...assetNameList, ...used])].sort();
-  assetPickNames = names;
-  $('assetNames').innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
-}
-/** A line for the object panel: where the model of an asset is, or that the field is a box. */
-function assetNote(name) {
-  if (!name) return 'A box. Name a model (a folder in assets/) to draw it instead.';
-  if (!ASSET_NAME.test(name)) return 'A model name is lower-case letters, digits and -.';
-  const st = assetCache().status(name), meta = assetCache().meta(name);
-  if (st === 'missing') return `Model "${name}" is not in this house's assets/ or the shared assets/ (a red marker until it is).`;
-  if (st === 'broken') return `Model "${name}" is there but cannot be shown.`;
-  if (st === 'ok' && meta) return `Model "${name}": ${meta.size.join(' × ')} mm, taken as the object's size on Apply.`;
-  if (st === 'ok') return `Model "${name}" is there (no meta.json, so the size stays as it is).`;
-  return `Model "${name}" is loading.`;
-}
-
-// An object made from a blueprint: which one, a link to its options on the Objects page, and (when the server's build has
-// another size than the one stored) the built size with a button to take it (T7). Its model field is not used.
-// The server's build of each blueprint object this session, by its settings: asked for once, and again on Rebuild.
-const builds = new Map();
-
-/**
- * Asks the server for the build of this object now (once per settings unless `force`), then shows the panel's note again.
- * A check that is made again says whether the build changed since the last one.
- */
-async function checkBuild(o, { force = false } = {}) {
-  const key = assetKey(o), before = builds.get(key);
-  if (!force && before) return;
-  builds.set(key, { state: 'checking' });
-  try {
-    const { size, light } = await assetCache().rebuild(o);
-    builds.set(key, { state: 'ok', size, light: light ?? null, checked: true, changedFrom: before?.state === 'ok' && before.size.join() !== size.join() ? before.size : null });
-  } catch (e) {
-    builds.set(key, { state: 'error', error: e.message });
-  }
-  const shown = object();
-  if (shown?.blueprint && assetKey(shown) === key) showBlueprintNote(shown);
-}
-
-// ---- the options of a blueprint object, edited here (src/param-form.js; the Objects page shows the same form) ----
-let optionsForm = null, optionsShownFor = null;
-const optionLibrary = {};            // the materials library (names and colours), read once for the material fields
-let optionLibraryLoaded = null;
-
-/** Shows the options form for a blueprint object (built again from its stored values when another object, or a changed one, is shown). */
-async function showOptions(o) {
-  const meta = o.blueprint && blueprints?.get(o.blueprint);
-  $('obOptionsBox').hidden = !meta;
-  if (!meta) { optionsShownFor = null; return; }
-  if (optionsShownFor === o) return;
-  optionsShownFor = o;
-  optionLibraryLoaded ??= fetch('object-designs/materials/library.json').then(r => (r.ok ? r.json() : {})).then(l => Object.assign(optionLibrary, l)).catch(() => {});
-  await optionLibraryLoaded;
-  if (optionsShownFor !== o) return;                           // another object was shown meanwhile
-  optionsForm ??= createParamForm({ container: $('obOptions'), summary: $('obOptionsSummary'), library: optionLibrary, onValid: previewOptions });
-  optionsForm.show(meta, { params: o.params, partMaterials: o.partMaterials });
-  $('obOptionsNote').textContent = '';
-}
-
-/** After a pause in the options form: what these options would build (the server's answer), until Apply takes them. */
-async function previewOptions() {
-  const o = object(), meta = o?.blueprint && blueprints?.get(o.blueprint);
-  if (!meta || optionsShownFor !== o) return;
-  const form = optionsForm.readForObject();
-  $('obOptionsNote').textContent = 'Building…';
-  try {
-    const built = await assetCache().rebuild({ ...o, params: form.params, partMaterials: form.partMaterials });
-    if (object()?.id !== o.id) return;
-    optionsForm.setBuildError(null);
-    $('obOptionsNote').textContent = optionsChanged(meta, o, form) ? `With these options it builds ${built.size.join(' × ')} mm. Apply to use them.` : '';
-  } catch (e) {
-    if (object()?.id !== o.id) return;
-    optionsForm.setBuildError(e.message);
-    $('obOptionsNote').textContent = '';
-  }
-}
-
-function showBlueprintNote(o) {
-  const box = $('obBlueprint');
-  $('obAssetRow').hidden = $('obAssetNote').hidden = !!o.blueprint;
-  box.hidden = !o.blueprint;
-  const sizeInputs = ['obW', 'obD', 'obH'];
-  if (!o.blueprint) { for (const id of sizeInputs) { $(id).readOnly = false; $(id).title = ''; } return; }
-  const options = `object-designs/index.html?${new URLSearchParams({ loc: house?.id ?? '', object: o.id })}`;
-  let html = `Made from blueprint <b>${esc(o.blueprint)}</b> · <a href="${esc(options)}">Edit options</a>`;
-  const key = assetKey(o), b = builds.get(key);
-  if (!b) checkBuild(o);
-  if (!b || b.state === 'checking') html += '<div class="help">Checking the build with these options…</div>';
-  else if (b.state === 'error') html += `<div class="help">Plantern's server cannot build it now (${esc(b.error)}), so the size is not checked. The object keeps its size.</div>`;
-  else {
-    const st = builtSizeStatus(o, b.size);
-    if (st.matches) html += `<div class="help">The size is the build's: ${esc(b.size.join(' × '))} mm.</div>`;
-    else html += `<div><b class="warn">The build is ${esc(b.size.join(' × '))} mm.</b> ${esc(st.reason)} The 3D model is the build; the plan and what is attached to the object use the size here.</div>`;
-    if (b.checked) html += `<div class="help">${b.changedFrom ? `Checked now: the build changed from ${esc(b.changedFrom.join(' × '))} mm.` : 'Checked now: the build is unchanged.'}</div>`;
-  }
-  // the size is the outer box of the build, so a typed size changes the option that sets it (src/blueprints/size.js); an axis no option sets is read-only
-  const meta = blueprints?.get(o.blueprint);
-  if (meta) {
-    const fields = sizeFields(meta, o.params);
-    sizeInputs.forEach((id, i) => { $(id).readOnly = !fields[i].param; $(id).title = fields[i].param ? `Set by ${fields[i].param.label}` : 'Set by the build of the blueprint, not by an option'; });
-    const range = p => (p.max === undefined ? `from ${p.min}` : `${p.min}–${p.max}`);
-    html += `<div class="help">Typing a size changes the option that sets it, and the object is built again. ${fields.map(f => `${f.name}: ${f.param ? `${esc(f.param.label)} (${range(f.param)} ${esc(f.param.unit)})` : 'the build (read-only)'}`).join(' · ')}.</div>`;
-  }
-  html += '<div class="btns">' + (b?.state === 'ok' && builtSizeStatus(o, b.size)?.matches === false ? '<button type="button" id="obUseBuilt">Use the built size</button>' : '') + '<button type="button" id="obRebuild">Check the build</button></div>';
-  box.innerHTML = html;
-  $('obUseBuilt')?.addEventListener('click', () => {
-    const size = [...b.size];
-    const r = setObject(model, levelId, o.id, { size, light: b.light ?? null }, opts());
-    if (r.report.errors.length) { $('obErr').textContent = r.report.errors.join('; '); return; }
-    commit(r.model);
-    setStatus(`${o.id}: size is now the built ${size.join(' × ')} mm (not saved yet)`);
-  });
-  $('obRebuild').addEventListener('click', () => checkBuild(o, { force: true }));
-}
-
-function showObject() {
-  const o = object();
-  if (!o) { objectId = null; $('objectPanel').hidden = true; return; }
-  const lv = level(), w = o.attach && lv.walls.find(v => v.id === o.attach.wall);
-  $('obTitle').innerHTML = titleHtml(o);
-  $('obInfo').innerHTML = `${isHosted(o) ? `in ${esc(o.attach.opening)}, ${o.attach.at === 'head' ? 'hanging from its head' : o.attach.at === 'frame' ? 'on the inner sill, in its frame' : 'on its sill'}` : o.attach ? `on wall <a href="#" id="obWall">${esc(o.attach.wall)}</a>` : 'standing in the plan'}${o.assumed?.length ? ` · <b class="warn">still default: ${esc(o.assumed.join(', '))}</b>` : ''}`;
-  $('obWall')?.addEventListener('click', e => { e.preventDefault(); afterLeave(() => enterEdit('wall', o.attach.wall))(); });
-  showBlueprintNote(o);
-  showOptions(o);
-  showObjectLight(o);
-  if (placeDraftFor !== o.id) { placeDraft = null; placeDraftFor = o.id; }
-  showPlacedChoice(o);
-  $('obColorRow').hidden = o.kind === 'asset';      // a model has its own colours (the plan takes its main one)
-  for (const [id, show] of [['obOffsetRow', !!o.attach && !isHosted(o)], ['obSideRow', !!o.attach && !isHosted(o)], ['obGapRow', !!o.attach && !isHosted(o)], ['obXRow', !o.attach], ['obYRow', !o.attach], ['obRotRow', !o.attach]]) $(id).hidden = !show;
-  applyPlacedRows(o);   // after the rows above: the Placed choice decides them for a hosted object
-  if (w) { const start = cornerAt(lv, w.a); $('obOffsetNote').textContent = start ? `mm from corner ${start.index} of ${start.name}` : "mm from the wall's start"; }
-  if (objectFormFor !== o) {
-    $('obName').value = o.name ?? ''; $('obColor').value = o.color || '#888888'; $('obAsset').value = o.asset ?? '';
-    [$('obW').value, $('obD').value, $('obH').value] = o.size; $('obZ').value = isHosted(o) ? (buildModelGeometry(model).get(levelId)?.objectZ(o) ?? '') : (o.z ?? '');
-    if (o.attach) { $('obOffset').value = o.attach.offset ?? ''; $('obSide').value = o.attach.side ?? 'right'; $('obGap').value = (isHosted(o) ? o.attach.depth : o.attach.gap) ?? ''; $('obShift').value = isHosted(o) ? (o.attach.shift ?? '') : ''; }
-    else { $('obX').value = o.pos[0]; $('obY').value = o.pos[1]; $('obRot').value = o.rotationDeg ?? ''; }
-    $('obErr').textContent = ''; $('obAssetNote').textContent = assetNote(o.asset ?? ''); objectFormFor = o;
-    fillCopyInto('object', o);
-  }
-}
-
-// ---- Placed: in the room, on a wall or in an opening (openings-and-lit-objects OB1b) ----
-let placeDraft = null;        // { to, opening, at }: the choice in the object panel, applied with Apply
-let placeDraftFor = null;     // the object the draft is for
-/** The hosts of a blueprint object (placement.hosts, or derived from its mount); null for a box or a model file. */
-const hostsOfObject = o => (o.blueprint && blueprints?.get(o.blueprint) ? hostsOf(blueprints.get(o.blueprint), o.params?.variant) : null);
-/** Which places the object may take, with the reason when it may not (a choice that cannot be used says why). */
-function placedChoices(o) {
-  const hosts = hostsOfObject(o), openings = level()?.openings || [];
-  const at = hosts === null ? ['sill', 'frame', 'head'] : [...(hosts.includes('sill') ? ['sill', 'frame'] : []), ...(hosts.includes('head') ? ['head'] : [])];
-  return {
-    room: { ok: hosts === null || hosts.includes('room'), reason: 'this model does not stand in a room' },
-    wall: { ok: hosts === null || hosts.includes('wall'), reason: 'this model does not stand on a wall' },
-    opening: { ok: openings.length > 0 && at.length > 0, reason: !openings.length ? 'no openings on this level' : 'this model does not stand on a sill or at a head' },
-    at,
-  };
-}
-/** The switch the draft asks for, as the props it gives, or null when the draft is the object's place already. */
-function previewSwitch(o) {
-  if (!placeDraft || placeDraft.to === placedAs(o)) return null;
-  const sw = switchPlacement(o, placeDraft.to, { level: level(), geo: buildLevelGeometry(level()), opening: placeDraft.opening, at: placeDraft.at });
-  return sw.props ?? null;
-}
-/** The rows of the object panel follow the draft: a room shows x, y and turn; a wall shows its offset, side and gap; an opening sets the height. */
-function applyPlacedRows(o) {
-  const to = placeDraft?.to ?? placedAs(o);
-  for (const [id, shown] of Object.entries({ obXRow: to === 'room', obYRow: to === 'room', obRotRow: to === 'room', obOffsetRow: to !== 'room', obSideRow: to !== 'room', obGapRow: to !== 'room', obShiftRow: to === 'opening' })) $(id).hidden = !shown;
-  if (to === 'opening') {
-    $('obOffsetNote').textContent = 'mm from the opening\'s near edge; empty = centred';
-    $('obGapRow').querySelector('small').textContent = 'mm out from the wall (empty = none)';
-    $('obGapRow').hidden = (placeDraft?.at ?? o.attach?.at) === 'frame';   // the inner sill's place is the window's own depth
-  }
-  $('obOpeningRow').hidden = to !== 'opening';
-  $('obAtRow').hidden = to !== 'opening';
-  $('obZ').readOnly = to === 'opening';
-  $('obZ').title = to === 'opening' ? 'the opening sets the height' : '';
-}
-/** The things in an opening (OB4): the objects hosted by it, its lamps and its LED strips, each selectable, each with a remove button. */
-function showOpeningHosted(o) {
-  const lv = level();
-  const things = [...(lv.objects || []).filter(x => x.attach?.opening === o.id).map(x => ({ kind: 'object', id: x.id, name: x.name || x.id, what: hostedWhere(x.attach.at) })),
-    ...(lv.fixtures || []).filter(x => x.attach?.opening === o.id).map(x => ({ kind: 'fixture', id: x.id, name: x.name || x.id, what: x.kind === 'strip' ? 'LED strip' : 'lamp' }))];
-  $('oHosted').innerHTML = things.length
-    ? `<div class="help">In this opening</div>` + things.map(t => `<div class="hosted"><button type="button" data-kind="${t.kind}" data-id="${esc(t.id)}">${esc(t.name)} <small>${esc(t.what)}</small></button><button type="button" class="quiet" data-remove="${t.kind}" data-id="${esc(t.id)}">Remove</button></div>`).join('')
-    : '';
 }
 /** The lists of the opening panel: a click selects the thing, Remove deletes it (after a question). */
 $('oHosted')?.addEventListener('click', async e => {
@@ -2383,1482 +498,12 @@ $('oHosted')?.addEventListener('click', async e => {
   if (rm) {
     const id = rm.dataset.id;
     if (!(await askConfirm(`Remove ${id}?`, { ok: 'Remove' }))) return;
-    const r = rm.dataset.remove === 'object' ? deleteObject(model, levelId, id, opts()) : deleteFixture(model, levelId, id, opts());
+    const r = rm.dataset.remove === 'object' ? deleteObject(Ed.model, Ed.levelId, id, opts()) : deleteFixture(Ed.model, Ed.levelId, id, opts());
     if (r.report.errors.length) { $('oErr').textContent = r.report.errors.join('; '); return; }
-    if (rm.dataset.remove === 'object') loc = pruneBindings(loc, r.model);
+    if (rm.dataset.remove === 'object') Ed.loc = pruneBindings(Ed.loc, r.model);
     commit(r.model);
   } else if (pick) afterLeave(() => enterEdit(pick.dataset.kind, pick.dataset.id))();
 });
-
-/** Shows the Placed choice: what the object may take, the openings nearest first, and the preview of a switch in the fields. */
-function showPlacedChoice(o) {
-  if (!placeDraft) placeDraft = { to: placedAs(o), at: o.attach?.at, opening: o.attach?.opening };
-  const ch = placedChoices(o), sel = $('obPlaced');
-  for (const opt of sel.options) { const c = ch[opt.value]; opt.disabled = c ? !c.ok : false; }
-  sel.value = placeDraft.to;
-  const lv = level(), near = openingsNear(lv, buildModelGeometry(model).get(lv.id), o);
-  $('obOpening').innerHTML = near.map(n => { const wall = (lv.walls || []).find(w => w.id === n.wall), op = (lv.openings || []).find(x => x.id === n.id); return `<option value="${esc(n.id)}" data-icon="${esc(openingIcon(op?.type))}" data-hint="${esc(openingHint(op, displayName(wall ?? { id: n.wall })))}">${esc(nameOf(n.id))} · ${esc(displayName(wall ?? { id: n.wall }))} · ${Math.round(n.distance)} mm</option>`; }).join('');
-  if (!near.some(n => n.id === placeDraft.opening)) placeDraft.opening = near[0]?.id;
-  $('obOpening').value = placeDraft.opening ?? '';
-  if (!ch.at.includes(placeDraft.at)) placeDraft.at = ch.at[0];
-    $('obAt').innerHTML = ch.at.map(a => `<option value="${a}" data-icon="${a === 'sill' ? 'sill' : a === 'head' ? 'head' : 'inOpening'}">${hostedWhere(a)}</option>`).join('');
-  $('obAt').value = placeDraft.at ?? '';
-  const c = ch[placeDraft.to];
-  $('obPlacedNote').textContent = c && !c.ok ? c.reason : '';
-  applyPlacedRows(o);
-  // the fields show what the switch would give (the change is made with Apply)
-  const p = previewSwitch(o);
-  if (p) {
-    if (p.pos) { $('obX').value = p.pos[0]; $('obY').value = p.pos[1]; }
-    if (p.rotationDeg !== undefined && p.rotationDeg !== null) $('obRot').value = p.rotationDeg;
-    if (p.attach?.wall) { $('obOffset').value = p.attach.offset; $('obSide').value = p.attach.side; $('obGap').value = p.attach.gap ?? ''; }
-    $('obZ').value = p.z === null || p.z === undefined ? '' : p.z;
-  }
-}
-
-async function applyObjectForm() {
-  const o = object(), num = numOf, props = {};
-  // a pending switch of place (OB1b) gives the position and height itself: the position fields are not read then
-  const switchingNow = !!placeDraft && placeDraft.to !== placedAs(o);
-  const size = [num('obW'), num('obD'), num('obH')];
-  if (size.some((v, i) => v !== o.size[i])) props.size = size;
-  if (!isHosted(o) && !switchingNow && num('obZ') !== o.z) props.z = num('obZ');   // a hosted object's height is its opening's
-  const name = $('obName').value.trim();
-  if (name !== (o.name ?? '')) props.name = name || null;
-  if (o.kind !== 'asset' && $('obColor').value !== (o.color || '#888888')) props.color = $('obColor').value;
-  // the model: a name makes an asset object (its size is the model's, when its meta.json is there); empty makes a box
-  const asset = $('obAsset').value.trim();
-  if (asset !== (o.asset ?? '')) {
-    if (asset && !ASSET_NAME.test(asset)) { $('obErr').textContent = 'A model name is lower-case letters, digits and -.'; return; }
-    props.kind = asset ? 'asset' : 'box';
-    props.asset = asset || null;
-    const meta = asset ? assetCache().meta(asset) : null;
-    if (meta && Array.isArray(meta.size)) props.size = [...meta.size];
-  }
-  if (switchingNow) {
-    // a switch gives the place itself: nothing here moves it
-  } else if (isHosted(o)) {
-    // hosted: along the opening (empty = centred), out from the wall, on which side, sill or head, and which opening (OB1, OB1b)
-    const blank = id => $(id).value.trim() === '';
-    const next = { opening: placeDraft?.opening ?? o.attach.opening, at: placeDraft?.at ?? o.attach.at, side: $('obSide').value === 'left' ? 'left' : 'right',
-      ...(blank('obOffset') ? {} : { offset: num('obOffset') }), ...(blank('obGap') || num('obGap') <= 0 || (placeDraft?.at ?? o.attach.at) === 'frame' ? {} : { depth: num('obGap') }),
-      ...(blank('obShift') || num('obShift') === 0 ? {} : { shift: num('obShift') }) };
-    if (JSON.stringify(next) !== JSON.stringify(o.attach)) props.attach = next;
-  } else if (o.attach) {
-    const gap = $('obGap').value.trim() === '' ? undefined : num('obGap');
-    if (num('obOffset') !== o.attach.offset || $('obSide').value !== o.attach.side || gap !== o.attach.gap) props.attach = { ...o.attach, offset: num('obOffset'), side: $('obSide').value, ...(gap === undefined ? { gap: undefined } : { gap }) };
-  } else {
-    const rot = $('obRot').value.trim() === '' ? 0 : num('obRot');
-    if (num('obX') !== o.pos[0] || num('obY') !== o.pos[1]) props.pos = [num('obX'), num('obY')];
-    if (rot !== (o.rotationDeg ?? 0)) { props.rotationDeg = rot; props.pos ??= [...o.pos]; }
-  }
-  if (Object.values(props).some(v => Array.isArray(v) ? v.some(n => !Number.isFinite(n)) : typeof v === 'number' && !Number.isFinite(v))) { $('obErr').textContent = 'Sizes, heights and positions must be numbers of mm.'; return; }
-  // the options form of a blueprint object (src/param-form.js): changed options are built again on the server, and the object
-  // takes the size of that build; options and a typed size cannot both be applied at once (the size follows the options)
-  const bpMeta = o.blueprint && blueprints?.get(o.blueprint);
-  let optionsEdit = null;
-  if (bpMeta && optionsForm && optionsShownFor === o) {
-    if (!optionsForm.valid) { $('obErr').textContent = 'Some options need a fix first (see Options above).'; return; }
-    const form = optionsForm.readForObject();
-    if (optionsChanged(bpMeta, o, form)) optionsEdit = form;
-  }
-  if (optionsEdit && props.size) { $('obErr').textContent = 'You changed the options and the size: Apply one, then the other (the size follows the options).'; return; }
-  // a value the variant does not use (it is ignored, and warned about) is dropped by Apply
-  const metaNow = o.blueprint && blueprints?.get(o.blueprint), variantNow = o.params?.variant;
-  const ignored = metaNow ? Object.keys(o.params ?? {}).filter(k => { const d = metaNow.params.find(x => x.key === k); return d && !appliesTo(d, variantNow); }) : [];
-  if (ignored.length && props.params === undefined) props.params = Object.fromEntries(Object.entries(o.params).filter(([k]) => !ignored.includes(k)));
-  // a lit object's link and light radius (LA4): written with the object, undone with the model
-  const bd = !$('obBindBox').hidden ? objectBindingDraft(o) : null;
-  if (bd?.error) { $('obErr').textContent = bd.error; return; }
-  const bindingChanged = !!bd && !sameBinding(loc, bd.next, o.id);
-  if (!$('obBindBox').hidden && $('obLightRadius').value.trim() !== '') {
-    const radius = num('obLightRadius');
-    if (!(radius > 0)) { $('obErr').textContent = 'The light radius is a number of mm above 0.'; return; }
-    if (radius !== o.lightRadius) props.lightRadius = radius;
-  }
-  const switching = !!placeDraft && placeDraft.to !== placedAs(o);
-  if (!Object.keys(props).length && !optionsEdit && !bindingChanged && !switching) { $('obErr').textContent = 'Nothing changed.'; return; }
-  if (optionsEdit) {
-    $('obErr').textContent = 'Building…';
-    let built;
-    try { built = await assetCache().rebuild({ ...o, params: optionsEdit.params, partMaterials: optionsEdit.partMaterials }); }
-    catch (e) { $('obErr').textContent = `The build with these options failed: ${e.message}`; return; }
-    if (object()?.id !== o.id) return;                       // another object was picked meanwhile
-    props.params = optionsEdit.params;
-    props.partMaterials = Object.keys(optionsEdit.partMaterials).length ? optionsEdit.partMaterials : null;
-    props.size = built.size;
-    props.light = built.light ?? null;
-  }
-  // a blueprint object's size is what its options build: a typed size changes the option that sets it, the server builds it again
-  // and the object takes the size of that build (src/blueprints/size.js); nothing is applied when that cannot be done
-  else if (o.blueprint && props.size) {
-    const meta = blueprints?.get(o.blueprint);
-    if (!meta) { $('obErr').textContent = `The size of a blueprint object follows its options, and the blueprint "${o.blueprint}" is not known here (Plantern's server must be running).`; return; }
-    const edit = sizeEdit(meta, o, props.size);
-    if (!edit.ok) { $('obErr').textContent = edit.error; return; }
-    $('obErr').textContent = 'Building…';
-    let built;
-    try { built = await assetCache().rebuild({ ...o, params: edit.params }); }
-    catch (e) { $('obErr').textContent = `The build with the new size failed: ${e.message}`; return; }
-    if (object()?.id !== o.id) return;                       // another object was picked meanwhile
-    props.params = edit.params;
-    props.size = built.size;                                  // setObject then counts the size as measured (no longer "assumed")
-    props.light = built.light ?? null;
-  }
-  if (switching) {
-    // the switch works from the object as it is now, with the size the change gives it (OB1b): the place it takes is the switch's
-    const sw = switchPlacement({ ...o, size: props.size ?? o.size }, placeDraft.to, { level: level(), geo: buildLevelGeometry(level()), opening: placeDraft.opening, at: placeDraft.at });
-    if (sw.error) { $('obErr').textContent = sw.error; return; }
-    Object.assign(props, sw.props);
-  }
-  const r = setObject(model, levelId, objectId, props, opts());
-  if (r.report.errors.length) { $('obErr').textContent = r.report.errors.join('; '); return; }
-  $('obErr').textContent = '';
-  if (bindingChanged) loc = bd.next;                              // the link is stored with the house (Save), undone with the model
-  commit(bindingChanged && r.model === model ? { ...model } : r.model);
-  setStatus(`${objectId}: ${[...Object.keys(props), ...(bindingChanged ? ['light link'] : [])].join(', ')} changed (not saved yet)`);
-}
-
-// ---- dragging a lamp, switch or object on the plan ----
-const r1d = v => Math.round(v * 10) / 10;
-/** Where a thing on a wall goes when its middle is dragged to p: the nearest wall within reach, the side p is on, the offset along it. */
-function attachNear(p, cur, width) {
-  const lv = level(), geo = curGeo;
-  let best = null;
-  for (const w of lv.walls || []) {
-    if (!hasBody(w)) continue;
-    const f = geo.frames.get(w.id), s = (p[0] - w.a[0]) * f.u[0] + (p[1] - w.a[1]) * f.u[1], t = (p[0] - w.a[0]) * f.n[0] + (p[1] - w.a[1]) * f.n[1];
-    const along = Math.min(Math.max(s, 0), f.L), dist = Math.hypot(s - along, t);
-    if (dist < 900 && (!best || dist < best.dist)) best = { w, f, s, t, dist };
-  }
-  if (!best) return cur;
-  const { w, f, s, t } = best;
-  return { ...cur, wall: w.id, side: t >= 0 ? 'left' : 'right', offset: r1d(Math.min(Math.max(s - width / 2, 0), Math.max(f.L - width, 0))) };
-}
-const freePoint = e => wallPoint({ clientX: e.clientX, clientY: e.clientY, altKey: true }).pos;
-function dragStart(e) {
-  if (e.button !== 0 || drawing || measure?.isOn() || peekId) return;
-  if (roomDragStart(e)) return;
-  if (wallDragStart(e)) return;
-  const endEl = e.target.closest('[data-send]');                  // an end of the selected LED strip: drag it to change where it starts or how long it is
-  const endFx = endEl && level().fixtures?.find(f => f.id === endEl.dataset.id);
-  if (endEl && endFx?.attach?.vertical !== true && !(editing && !(editing.kind === 'fixture' && editing.id === endEl.dataset.id))) { pan = null; dragging = { kind: 'send', id: endEl.dataset.id, end: endEl.dataset.send, x: e.clientX, y: e.clientY, moved: false, frame: 0, key: `send:${endEl.dataset.id}:${Math.round(performance.now())}` }; return; }
-  const rotEl = e.target.closest('[data-orot]');
-  if (rotEl) { pan = null; dragging = { kind: 'orot', id: rotEl.dataset.orot, x: e.clientX, y: e.clientY, moved: false, frame: 0, key: `rot:${rotEl.dataset.orot}:${Math.round(performance.now())}` }; return; }
-  const el = e.target.closest('[data-kind="fixture"], [data-kind="object"]');
-  if (!el) return;
-  const kind = el.dataset.kind, id = el.dataset.id;
-  if (editing && !(editing.kind === kind && editing.id === id)) return;
-  { const sx = kind === 'fixture' && level().fixtures?.find(f => f.id === id); if (sx?.kind === 'strip' && stripForm(sx) !== 'wall') return; }   // on an object or a window it follows that: move that
-  pan = null;                                                    // this pointer moves the thing, not the plan
-  // where the thing's middle is against the pointer, kept while dragging (the thing does not jump under the pointer)
-  const lv = level(), thing = kind === 'fixture' ? lv.fixtures?.find(f => f.id === id) : lv.objects?.find(o => o.id === id);
-  const mid = !thing ? null : kind === 'fixture' ? curGeo.fixturePos(thing) : (fp => fp && [fp.reduce((s, q) => s + q[0], 0) / fp.length, fp.reduce((s, q) => s + q[1], 0) / fp.length])(curGeo.objectFootprint(thing));
-  const p0 = freePoint(e);
-  dragging = { kind, id, x: e.clientX, y: e.clientY, moved: false, key: `drag:${id}:${Math.round(performance.now())}`, frame: 0, grab: mid ? [mid[0] - p0[0], mid[1] - p0[1]] : [0, 0] };
-}
-// ---- dragging the room (or solid) being edited: inside it moves it, a corner reshapes it ----
-/** The plan point under the pointer for a room drag, and the start points it may snap to (not its own). */
-function roomDragSnaps() {
-  const own = new Set((level().walls || []).filter(w => (w.from || []).some(f => f.startsWith(`${roomId}#`))).map(w => w.id));
-  return (showUnderlay() ? snapsAround : snaps).filter(s => !(roomId && s.ref.startsWith(`${roomId}#`)) && !own.has(s.ref.split('#')[0]));
-}
-function roomDragStart(e) {
-  if (!solved?.ok || !(roomId || draft) || !solved.capture) return false;
-  const corner = e.target.closest('[data-corner]'), body = !corner && e.target.closest('[data-cur]');
-  if (!corner && !body) return false;
-  if (editing && !(editing.kind === shape && (editing.id ?? null) === (roomId ?? null))) return false;
-  pan = null;
-  dragging = { kind: corner ? 'corner' : 'room', i: corner ? +corner.dataset.corner : null, x: e.clientX, y: e.clientY, moved: false, frame: 0,
-    p0: freePoint(e), cap0: solved.capture, poly0: solved.polygon.map(p => [...p]), pts: roomDragSnaps() };
-  return true;
-}
-function roomDragMove(e, d) {
-  if (!d.moved) {
-    d.moved = true;
-    if (!editing && roomId && !enterEdit(shape, roomId)) { dragging = null; return; }     // the house view: open it first
-  }
-  cancelAnimationFrame(d.frame);
-  d.frame = requestAnimationFrame(() => {
-    if (dragging !== d) return;
-    const svg = $('preview'), k = 1 / Math.abs(svg.getScreenCTM()?.a || 1), q = freePoint(e);
-    let cap, msg;
-    if (d.kind === 'room') {
-      let delta = [q[0] - d.p0[0], q[1] - d.p0[1]], on = null;
-      const sm = e.altKey ? null : snapMove(d.poly0, delta, d.pts, 14 * k);    // a corner lands on a point near it
-      if (sm) { delta = [delta[0] + sm.fix[0], delta[1] + sm.fix[1]]; on = sm.ref; }
-      delta = delta.map(v => Math.round(v));
-      if (d.cap0.mode === 'circle') {
-        // a round pillar: the distances from its two walls (or its middle) follow
-        const c0 = d.cap0.raw.start, f = roundMovedTo(roundForm(), level(), [c0[0] + delta[0], c0[1] + delta[1]], d.cap0.raw.diameter);
-        $('rDA').value = f.distA ?? ''; $('rDB').value = f.distB ?? ''; $('rX').value = f.x ?? ''; $('rY').value = f.y ?? '';
-        recompute(); showEditBar();
-        d.msg = `Moved ${delta[0]} mm east, ${delta[1]} mm north${on ? ` (on ${on})` : ''}. Apply to keep it.`;
-        setStatus(d.msg);
-        return;
-      }
-      cap = moveCapture(d.cap0, delta);
-      msg = `Moved ${delta[0]} mm east, ${delta[1]} mm north${on ? ` (a corner on ${on})` : ''}: only where corner 0 is changes. Apply to keep it.`;
-    } else {
-      let t = q;
-      const sp = e.altKey ? null : nearestPoint(q, d.pts, 14 * k);
-      if (sp) t = sp.pos;
-      if (e.shiftKey) {
-        // along one of the two walls at the corner only: the other wall keeps its place
-        const P = d.poly0[d.i], n = d.poly0.length, dirOf = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / L, (b[1] - a[1]) / L]; };
-        const u = dirOf(d.poly0[(d.i + n - 1) % n], P), v = dirOf(P, d.poly0[(d.i + 1) % n]), w = [t[0] - P[0], t[1] - P[1]];
-        const along = dir => { const s = w[0] * dir[0] + w[1] * dir[1]; return [P[0] + dir[0] * s, P[1] + dir[1] * s]; };
-        const a = along(u), b = along(v);
-        t = Math.hypot(a[0] - t[0], a[1] - t[1]) <= Math.hypot(b[0] - t[0], b[1] - t[1]) ? a : b;
-      }
-      // a corner dropped freely lands on an even centimetre (fixes list 51); a point it snaps to, Alt, and Shift (along a wall) keep it exact
-      t = sp || e.altKey || e.shiftKey ?t.map(v => Math.round(v * 10) / 10) : t.map(v => Math.round(v / 10) * 10);
-      const r = dragCorner(d.cap0, d.poly0, d.i, t, solveCapture);
-      if (r.error) { setStatus(r.error === 'exact' ? `Wall ${r.exact.map(wallName).join(', ')} is marked exact: take it out of Exact lengths to move this corner.` : r.error); return; }
-      cap = r.capture;
-      msg = r.changed.length ? `Corner ${d.i}: wall ${r.changed.map(wallName).join(', ')} worked out${r.checks.length ? `; the measured ${r.checks.map(wallName).join(', ')} kept as checks` : ''}${sp ? ` (on ${sp.ref})` : ''}. Apply to keep it.` : '';
-    }
-    const f = captureToForm(cap);
-    for (const key of ['ox', 'oy', 'lengths', 'derived', 'checks']) $(key).value = f[key];
-    recompute(); showEditBar();
-    d.msg = msg;
-    if (msg) setStatus(msg);
-  });
-}
-// ---- dragging a hand-drawn wall: as a whole, or by one end (the form's position fields follow; Apply keeps it) ----
-function wallDragStart(e) {
-  const w = wallId && wall();
-  if (!w || w.from?.length) return false;
-  const end = e.target.closest('[data-wend]'), body = !end && (e.target.closest('[data-wbody]') || e.target.closest(`[data-kind="wall"][data-id="${CSS.escape(w.id)}"]`));
-  if (!end && !body) return false;
-  if (editing && !(editing.kind === 'wall' && editing.id === w.id)) return false;
-  pan = null;
-  dragging = { kind: end ? 'wallend' : 'wall', end: end?.dataset.wend, x: e.clientX, y: e.clientY, moved: false, frame: 0, p0: freePoint(e),
-    ends0: (editing && wallEnds()) || { a: [...w.a], b: [...w.b] }, pts: (showUnderlay() ? snapsAround : snaps).filter(s => !s.ref.startsWith(`${w.id}#`)) };
-  return true;
-}
-function wallDragMove(e, d) {
-  if (!d.moved) {
-    d.moved = true;
-    if (!editing && !enterEdit('wall', wallId)) { dragging = null; return; }
-  }
-  cancelAnimationFrame(d.frame);
-  d.frame = requestAnimationFrame(() => {
-    if (dragging !== d) return;
-    const k = 1 / Math.abs($('preview').getScreenCTM()?.a || 1), q = freePoint(e);
-    let ends, on = null;
-    if (d.kind === 'wall') {
-      let delta = [q[0] - d.p0[0], q[1] - d.p0[1]];
-      const sm = e.altKey ? null : snapMove([d.ends0.a, d.ends0.b], delta, d.pts, 14 * k);
-      if (sm) { delta = [delta[0] + sm.fix[0], delta[1] + sm.fix[1]]; on = sm.ref; }
-      // a wall moved freely goes in even centimetres (fixes list 51); a snap, Alt and Shift keep it exact
-      ends = moveWall(d.ends0, delta.map(v => (on || e.altKey || e.shiftKey ? Math.round(v) : Math.round(v / 10) * 10)));
-    } else {
-      const sp = e.altKey ? null : nearestPoint(q, d.pts, 14 * k);
-      // a dropped end lands on an even centimetre unless it snaps to a point, or Alt or Shift keep it exact (fixes list 51)
-      const free = e.altKey || e.shiftKey ? q.map(v => Math.round(v)) : q.map(v => Math.round(v / 10) * 10);
-      ends = dragWallEnd(d.ends0, d.end, sp ? sp.pos : free, { lock: $('wLock').checked ? 'axis' : null, force: e.shiftKey });
-      // dropped on a room corner: that end hangs on it from now on
-      const p = ends[d.end], sel = d.end === 'a' ? 'wAnchA' : 'wAnchB';
-      if (sp && Math.hypot(p[0] - sp.pos[0], p[1] - sp.pos[1]) < 0.5) { on = sp.ref; if (ROOM_CORNER.test(sp.ref) && [...$(sel).options].some(o => o.value === sp.ref)) $(sel).value = sp.ref; }
-    }
-    fillWallPos(ends.a, ends.b);
-    draw(); showEditBar();
-    d.msg = `${d.kind === 'wall' ? 'Wall moved' : `${d.end === 'a' ? 'Start' : 'End'} moved`}${on ? ` (on ${on})` : ''}: ${$('wPosOut').textContent}. Apply to keep it.`;
-    setStatus(d.msg);
-  });
-}
-function dragMove(e) {
-  const d = dragging;
-  if (!d || (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6)) return;
-  if (d.kind === 'room' || d.kind === 'corner') { roomDragMove(e, d); return; }
-  if (d.kind === 'wall' || d.kind === 'wallend') { wallDragMove(e, d); return; }
-  if (d.kind === 'send') {
-    d.moved = true;
-    cancelAnimationFrame(d.frame);
-    d.frame = requestAnimationFrame(() => {
-      const x = dragging === d && level().fixtures?.find(f => f.id === d.id), w = x && stripForm(x) === 'wall' && level().walls.find(v => v.id === x.attach.wall);
-      if (!w) return;
-      const f = curGeo.frames.get(w.id), q = freePoint(e), s0 = (q[0] - w.a[0]) * f.u[0] + (q[1] - w.a[1]) * f.u[1], MIN = 50;
-      const s = e.altKey ? s0 : Math.round(s0 / 10) * 10;          // even centimetres unless Alt (fixes list 49, 51)
-      const start = x.attach.offset, end = x.attach.offset + x.attach.length;
-      const offset = d.end === 'a' ? Math.min(Math.max(s, 0), end - MIN) : start, length = d.end === 'a' ? end - offset : Math.min(Math.max(s - start, MIN), f.L - start);
-      const r = setFixture(model, levelId, d.id, { attach: { ...x.attach, offset: r1d(offset), length: r1d(length) } }, opts());
-      if (r.report.errors.length) return;
-      commit(r.model, d.key);
-      setStatus(`${d.id}: ${Math.round(length)} mm long, from ${Math.round(offset)} mm (not saved yet)`);
-    });
-    return;
-  }
-  if (d.kind === 'orot') {
-    d.moved = true;
-    cancelAnimationFrame(d.frame);
-    d.frame = requestAnimationFrame(() => {
-      const o = dragging === d && level().objects?.find(x => x.id === d.id);
-      if (!o) return;
-      const r = setObject(model, levelId, d.id, rotateObject(o, freePoint(e), { free: e.altKey }), opts());
-      if (r.report.errors.length) return;
-      commit(r.model, d.key);                                    // one undo step for the whole turn
-      setStatus(`${d.id} turned to ${level().objects.find(x => x.id === d.id)?.rotationDeg}° (not saved yet)`);
-    });
-    return;
-  }
-  if (!d.moved) { d.moved = true; if (!editing) (d.kind === 'fixture' ? selectFixture : selectObject)(d.id); }
-  cancelAnimationFrame(d.frame);
-  d.frame = requestAnimationFrame(() => {
-    if (dragging !== d) return;
-    const q = freePoint(e), p = [q[0] + d.grab[0], q[1] + d.grab[1]], lv = level();      // p = where the middle of the thing goes
-    let r;
-    if (d.kind === 'fixture') {
-      const x = lv.fixtures.find(f => f.id === d.id);
-      if (!x) return;
-      r = setFixture(model, levelId, d.id, x.attach ? { attach: attachNear(p, x.attach, x.kind === 'strip' ? x.attach.length : 0) } : { pos: [Math.round(p[0]), Math.round(p[1])] }, opts());
-    } else {
-      const o = lv.objects.find(f => f.id === d.id);
-      if (!o) return;
-      if (o.attach) r = setObject(model, levelId, d.id, { attach: attachNear(p, o.attach, o.size[0]) }, opts());
-      else {
-        // pos is the corner the box is measured from: put its middle on the pointer
-        const a = (o.rotationDeg || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a), hw = o.size[0] / 2, hd = o.size[1] / 2;
-        r = setObject(model, levelId, d.id, { pos: [Math.round(p[0] - (hw * c - hd * s)), Math.round(p[1] - (hw * s + hd * c))] }, opts());
-      }
-    }
-    if (r.report.errors.length) return;
-    commit(r.model, d.key);                                      // one undo step for the whole drag
-    setStatus(`${d.id} moved (not saved yet)`);
-  });
-}
-
-/** The Floor areas section: every level's rooms and totals, and the interior total of the house. */
-function renderAreas() {
-  const all = modelAreas(model, modelGeos || buildModelGeometry(model)), house = [...all.values()].reduce((s, a) => s + a.interior, 0);
-  $('areaTotal').textContent = house ? `(${fmtArea(house)})` : '';
-  $('areas').innerHTML = [...model.levels].sort((a, b) => b.elevation - a.elevation).map(lv => {
-    const a = all.get(lv.id);
-    if (!a.rooms.length) return '';
-    const rows = a.rooms.map(r => {
-      const parts = [...r.solids.map(s => `− ${s.id.replace(/^s_/, '')} ${fmtArea(s.area)}`), r.stairwell ? `− stairwell ${fmtArea(r.stairwell)}` : '', r.approx.length ? '(approximate)' : ''].filter(Boolean).join(' ');
-      return `<div class="arow${lv.id === levelId && r.id === roomId ? ' sel' : ''}" data-aroom="${esc(lv.id)}|${esc(r.id)}"><span>${esc(r.name)}${r.exterior ? ' <small>outdoors</small>' : ''}${r.open ? ' <small>open to the level below</small>' : ''}${parts ? `<br><small>${esc(fmtArea(r.gross))} ${esc(parts)}</small>` : ''}</span><b>${r.open ? '–' : esc(fmtArea(r.net))}</b></div>`;
-    }).join('');
-    return `<div class="arow ahead"><span>${esc(lv.name || lv.id)}</span><span>${esc(fmtArea(a.interior))}${a.exterior ? ` <small>+ ${esc(fmtArea(a.exterior))} outdoors</small>` : ''}</span></div>${rows}`;
-  }).join('') || '<small>No rooms yet.</small>';
-  $('areas').querySelectorAll('[data-aroom]').forEach(el => (el.onclick = async () => {
-    const [lv, id] = el.dataset.aroom.split('|');
-    if (lv !== levelId && !(await goToLevel(lv))) return;
-    selectRoom(id);
-  }));
-}
-
-/** The Anchors section: each anchor with how far its levels are apart, and a way to line a level up. */
-function renderAnchors() {
-  const list = anchorStatus(model, modelGeos || buildModelGeometry(model)), lvName = id => model.levels.find(l => l.id === id)?.name || id;
-  $('anchorCount').textContent = list.length ? `(${list.length})` : '';
-  const dir = d => [Math.abs(d[0]) >= 0.5 ? `${Math.round(Math.abs(d[0]))} mm ${d[0] > 0 ? 'east' : 'west'}` : '', Math.abs(d[1]) >= 0.5 ? `${Math.round(Math.abs(d[1]))} mm ${d[1] > 0 ? 'north' : 'south'}` : ''].filter(Boolean).join(' and ');
-  $('anchorList').innerHTML = list.map(a => {
-    const off = Object.entries(a.deltas).filter(([, d]) => Math.hypot(d[0], d[1]) > 5);
-    const state = a.points.some(p => p.error) ? `<span style="color:var(--bad)">${esc(a.points.find(p => p.error).error)}</span>`
-      : off.length ? off.map(([lv, d]) => `<span style="color:var(--warn)">${esc(lvName(lv))} is ${dir(d)} of ${esc(lvName(a.ref))}</span> <button data-align="${esc(a.id)}|${esc(lv)}">Align ${esc(lvName(lv))}</button>`).join('<br>')
-      : '<span style="color:var(--good, #4cc38a)">lined up</span>';
-    return `<div class="arow"><span>${esc(a.name || a.id)} <small>${a.points.map(p => esc(p.ref || `${p.level} (x, y)`)).join(' ↔ ')}</small><br>${state}</span><button data-delanchor="${esc(a.id)}" title="Remove the anchor (nothing moves)">×</button></div>`;
-  }).join('') || '<small>None yet.</small>';
-  $('anchorList').querySelectorAll('[data-align]').forEach(b => (b.onclick = () => {
-    const [id, lv] = b.dataset.align.split('|');
-    const r = alignLevel(model, id, lv, opts());
-    if (r.report.errors.length) { $('anErr').textContent = r.report.errors.join('; '); return; }
-    $('anErr').textContent = '';
-    commit(r.model);
-    setStatus(`${lv} moved ${dir(r.delta)} (not saved yet)`);
-  }));
-  $('anchorList').querySelectorAll('[data-delanchor]').forEach(b => (b.onclick = () => { const r = deleteAnchor(model, b.dataset.delanchor); if (!r.report.errors.length) commit(r.model); }));
-  const opts2 = startOptions(snapsAround, nameOpts()).filter(o => /^(r|s|w|st)_[^#]+#/.test(o.ref)).map(o => `<option value="${esc(o.ref)}">${esc(o.label)}</option>`).join('');
-  for (const id of ['anA', 'anB']) { const keep = $(id).value; $(id).innerHTML = opts2; if (keep && [...$(id).options].some(o => o.value === keep)) $(id).value = keep; }
-  if ($('anB').selectedIndex === $('anA').selectedIndex && $('anB').options.length > 1) $('anB').selectedIndex = $('anB').options.length - 1;
-}
-
-/** The Checks section: every check, worst first, with its place in the solve; a click shows it on the plan. */
-function renderChecks() {
-  const geos = modelGeos || buildModelGeometry(model), index = new Map();
-  for (const lv of model.levels) for (const s of collectSnapPoints(model, lv, geos.get(lv.id))) index.set(s.ref, { pos: s.pos, level: lv.id });
-  const tol = resolveSettings(loc, level()).checkTolerance || { ok: 5, warn: 15 }, rows = checkRows(model.checks, ref => index.get(ref), tol);
-  const rooms = model.levels.flatMap(l => l.rooms || []), off = rows.filter(r => r.cls !== 'ok').length;
-  $('checkCount').textContent = rows.length ? `(${rows.length}${off ? `, ${off} off` : ''})` : '';
-  const sign = v => `${v > 0 ? '+' : ''}${Math.round(v)}`;
-  $('checkList').innerHTML = rows.map(r => {
-    const c = r.check, k = checkCorners(c), room = k && rooms.find(x => x.id === k.room), can = room && checkCorners(c, room.polygon?.length) && room.capture?.mode === 'lengths';
-    const solve = can || c.solve ? `<label class="inl" title="${can ? `Counts as one more diagonal when ${esc(room.name || room.id)} is solved` : 'Only a room measured by lengths and diagonals takes checks into its solve'}"><input type="checkbox" data-cksolve="${esc(c.id)}"${c.solve ? ' checked' : ''}${can || c.solve ? '' : ' disabled'}> in the solve</label>` : '';
-    const what = r.broken ? `<span style="color:var(--bad)">a point is gone: ${esc(r.missing)}</span>` : `${Math.round(r.model)} / ${c.measured} <b class="${r.cls}">${sign(r.delta)}</b>`;
-    return `<div class="arow" style="cursor:pointer" data-ck="${esc(c.id)}"><span><span class="dot ${r.cls}" style="display:inline-block;margin-right:6px"></span>${esc(refName(c.a))} ↔ ${esc(refName(c.b))}<br><small>${esc(c.note || c.id)}</small> ${solve}</span><span>${what} <button data-ckdel="${esc(c.id)}" title="Remove the check">×</button></span></div>`;
-  }).join('') || '<small>None yet.</small>';
-  $('checkList').querySelectorAll('[data-ck]').forEach(el => (el.onclick = async e => {
-    if (e.target.closest('button, input, label')) return;
-    const c = model.checks.find(x => x.id === el.dataset.ck), a = index.get(c.a), b = index.get(c.b);
-    if (!a || !b) return;
-    if (a.level !== levelId && !(await goToLevel(a.level))) return;
-    measure.show({ ref: c.a, pos: a.pos }, { ref: c.b, pos: b.pos });
-  }));
-  const run = r => { if (r.report.errors.length) { $('ckErr').textContent = r.report.errors.join('; '); return; } $('ckErr').textContent = ''; commit(r.model); };
-  $('checkList').querySelectorAll('[data-cksolve]').forEach(b => (b.onchange = () => run(setCheck(model, b.dataset.cksolve, { solve: b.checked }, opts()))));
-  $('checkList').querySelectorAll('[data-ckdel]').forEach(b => (b.onclick = () => run(deleteCheck(model, b.dataset.ckdel, opts()))));
-}
-
-/** + Stairs: a straight stair from the selected room's corner 0 up to the next level, to adjust in its panel. */
-async function newStairs() {
-  if (!(await mayLeave())) return;
-  if (!dropFresh()) return;
-  const lv = level(), above = model.levels.filter(l => l.elevation > lv.elevation && (l.building ?? null) === (lv.building ?? null)).sort((a, b) => a.elevation - b.elevation)[0];
-  if (!above) { setStatus('There is no level above this one: add one first (+ New level…)'); return; }
-  const rm = shape === 'room' ? room() : null, at = rm || lv.rooms?.[0];
-  if (!at) { setStatus('Add a room first: the stairs start at a corner of one'); return; }
-  const risers = Math.max(2, Math.round((above.elevation - lv.elevation) / 180));
-  const st = { id: newStairsId(model, 'stairs'), to: above.id, start: { ref: `${at.id}#p0`, offset: [300, 300] }, heading: 90, width: 900, flights: [{ risers, length: (risers - 1) * 250 }] };
-  const r = applyStairs(model, levelId, st, opts());
-  if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
-  const base = model;
-  commit(r.model);
-  enterEdit('stairs', st.id, { ask: false }); startFresh('stairs', st.id, base, 'stairs');
-  setStatus(`${st.id} is new, at corner 0 of ${at.name || at.id}: set where it starts, which way it goes and how many risers, name it and Apply to create it`);
-}
-
-/** The stairs panel: where they start, the flights, the landing, the underside; what follows from it. */
-function showStairs() {
-  const st = stairs();
-  if (!st) { stairsId = null; $('stairsPanel').hidden = true; return; }
-  const entry = curGeo?.stairs?.find(s => s.id === st.id), L = entry?.layout;
-  $('stTitle').innerHTML = titleHtml(st);
-  const toName = model.levels.find(l => l.id === st.to)?.name || st.to;
-  $('stInfo').innerHTML = entry?.error ? `<span style="color:var(--bad)">${esc(entry.error)}</span>`
-    : L ? `up ${entry.rise} mm to ${esc(toName)} in ${totalRisers(st)} risers of ${L.riser} mm; treads ${(() => { const d = L.depths.map(x => Math.round(x)); return d.length > 1 ? `${d.slice(0, -1).join(', ')} and ${d.at(-1)}` : d.join(''); })()} mm deep${st.flights.some(f => f.treads?.length) ? ` (measured: ${Math.round(Math.min(...L.treadDepths))}–${Math.round(Math.max(...L.treadDepths))})` : ''}${entry.opening.length ? '' : '; no opening in the floor above (it stays under the slab)'}` : '';
-  if (stairsFormFor !== st) {
-    const lv = level(), up = model.levels.filter(l => l.elevation > lv.elevation && (l.building ?? null) === (lv.building ?? null));
-    $('stTo').innerHTML = up.map(l => `<option value="${esc(l.id)}">${esc(l.name || l.id)}</option>`).join('');
-    $('stRef').innerHTML = '<option value="">a point on the plan (x, y)</option>' + startOptions(snapsAround, nameOpts()).map(o => `<option value="${esc(o.ref)}">${esc(o.label)}</option>`).join('');
-    $('stTo').value = st.to;
-    $('stRef').value = st.start?.ref ?? '';
-    if (st.start?.ref && $('stRef').value !== st.start.ref) { $('stRef').insertAdjacentHTML('beforeend', `<option value="${esc(st.start.ref)}">${esc(st.start.ref)} (missing)</option>`); $('stRef').value = st.start.ref; }
-    const off = st.start?.ref ? st.start.offset ?? [0, 0] : st.start?.pos ?? [0, 0];
-    $('stOx').value = off[0]; $('stOy').value = off[1];
-    $('stHead').value = st.heading; $('stWidth').value = st.width;
-    const fl = st.flights;
-    $('stShape').value = String(Math.min(Math.max(fl.length, 1), 3));
-    [1, 2, 3].forEach(k => { const f = fl[k - 1]; $(`stR${k}`).value = f?.risers ?? ''; $(`stL${k}`).value = Number.isFinite(f?.length) ? Math.round(outerOf(f.length, landingAfter(fl, k - 1, st.width))) : ''; $(`stT${k}`).value = (f?.treads || []).join(', '); $(`stW${k}`).value = f?.width ?? ''; });
-    $('stTurn').value = st.turn ?? 'L'; $('stLanding').value = st.landing ?? 'square'; $('stWinders').value = st.winders ?? 3;
-    $('stUnder').value = st.underside ?? 'closed'; $('stSides').value = st.sides ?? 'stepped'; $('stWaist').value = st.waist ?? '';
-    $('stRail').value = st.handrail ?? 'none'; $('stRailH').value = st.handrailHeight ?? '';
-    $('stRailMount').value = st.handrailMount ?? ''; $('stRailD').value = st.handrailDiameter ?? ''; $('stRailS').value = st.handrailStart ?? ''; $('stRailE').value = st.handrailEnd ?? '';
-    $('stIgnore').checked = st.ignoreDepthWarning === true;
-    $('stEdgeOk').checked = st.ignoreEdgeWarning === true;
-    const rc = st.openingRect;
-    $('stOpenOn').checked = !!rc;
-    ['stRx1', 'stRy1', 'stRx2', 'stRy2'].forEach((id, i) => { $(id).value = rc ? (i < 2 ? rc.from[i] : rc.to[i - 2]) : ''; });
-    $('stName').value = st.name ?? ''; $('stErr').textContent = ''; stairsFormFor = st;
-    fillCopyInto('stairs', st);
-  }
-  syncStairsRows();
-}
-/** A number typed in a field: a minus sign may be the typographic one (−), and a decimal comma is accepted (NaN when empty or not a number). */
-const numOf = id => { const t = String($(id).value).trim().replace(/[−–]/g, '-').replace(',', '.'); return t === '' ? NaN : Number(t); };
-/** The stair as the panel's fields say it now, for the sketch: { layout, outer } or null when it does not work out (proposal 2026-10-13). */
-function stairsPreview() {
-  const n = Number($('stShape').value), num = numOf, W = num('stWidth');
-  const flights = [], outer = [];
-  for (let k = 1; k <= n; k++) {
-    const w = num(`stW${k}`);
-    flights.push({ risers: num(`stR${k}`), ...(Number.isFinite(w) ? { width: w } : {}) });
-    outer.push(num(`stL${k}`));
-  }
-  if (!Number.isFinite(W) || flights.some(f => !Number.isFinite(f.risers) || f.risers < 1) || outer.some(o => !Number.isFinite(o))) return null;
-  const runs = flights.map((f, k) => runOf(outer[k], landingAfter(flights, k, W)));
-  if (runs.some(r => !(r > 0))) return null;
-  flights.forEach((f, k) => { f.length = runs[k]; });
-  const layout = stairLayout({ heading: 0, width: W, flights, turn: $('stTurn').value, landing: $('stLanding').value, winders: num('stWinders') }, [0, 0], 2750);
-  return layout && !layout.error ? { layout, outer } : null;
-}
-/** The panel's hints: the steps of each flight (risers − 1) and the sketch, both from the fields as they are now. */
-function updateStairsHints() {
-  const risers = [1, 2, 3].map(k => Number($(`stR${k}`).value));
-  [1, 2, 3].forEach(k => { $(`stSteps${k}`).textContent = Number.isFinite(risers[k - 1]) && risers[k - 1] >= 1 ? `${stepsOf(risers[k - 1])} steps` : '–'; });
-  const prev = stairsPreview();
-  $('stSketch').hidden = !prev;
-  $('stSketch').innerHTML = prev ? stairSketch(prev.layout, prev.outer, { width: 300 }) : '';
-}
-function syncStairsRows() {
-  const n = Number($('stShape').value), ref = $('stRef').value;
-  $('stTwoRows').hidden = $('stT2Row').hidden = $('stTurnRows').hidden = n < 2;
-  $('stThreeRows').hidden = $('stT3Row').hidden = n < 3;
-  $('stWindersRow').hidden = n < 2 || $('stLanding').value !== 'winders';
-  $('stWaistRow').hidden = $('stUnder').value !== 'sloped';
-  const railOn = $('stRail').value !== 'none', roundRail = railOn && $('stRailMount').value !== '';
-  $('stRailHRow').hidden = $('stRailMountRow').hidden = !railOn;
-  $('stRailDRow').hidden = $('stRailSRow').hidden = $('stRailERow').hidden = !roundRail;
-  $('stOpenRow').hidden = !$('stOpenOn').checked;
-  $('stOxLbl').textContent = ref ? 'x offset' : 'x'; $('stOyLbl').textContent = ref ? 'y offset' : 'y';
-  updateStairsHints();
-}
-function applyStairsForm() {
-  const st = stairs(), num = numOf, n = Number($('stShape').value), two = n > 1, ref = $('stRef').value;
-  const flights = [];
-  const outers = [];   // the outer length typed for each flight; the run the model keeps is worked out from it below
-  for (let k = 1; k <= n; k++) {
-    const f = { risers: num(`stR${k}`) }, tr = parseNumbers($(`stT${k}`).value);
-    if ($(`stW${k}`).value.trim() !== '') f.width = num(`stW${k}`);             // its own width, else the stair's (fixes list 3)
-    if (tr.errors.length) { $('stErr').textContent = `Flight ${k} treads: ${tr.errors.join('; ')}`; return; }
-    const o = $(`stL${k}`).value.trim() === '' ? undefined : num(`stL${k}`);
-    if (tr.values.length) { f.treads = tr.values; outers[k - 1] = o; }   // the outer length too: a check on the treads
-    else outers[k - 1] = o ?? null;
-    flights.push(f);
-  }
-  const next = { ...st, to: $('stTo').value, heading: num('stHead'), width: num('stWidth'), flights, start: ref ? { ref, offset: [num('stOx') || 0, num('stOy') || 0] } : { pos: [num('stOx'), num('stOy')] } };
-  flights.forEach((f, k) => {                                     // the run the model keeps: the outer length without the landing after the flight
-    const o = outers[k];
-    if (o === undefined) return;
-    f.length = o === null ? 0 : runOf(o, landingAfter(flights, k, next.width));
-  });
-  delete next.turn; delete next.landing; delete next.winders; delete next.underside; delete next.sides; delete next.waist; delete next.handrail; delete next.handrailHeight; delete next.handrailMount; delete next.handrailDiameter; delete next.handrailStart; delete next.handrailEnd; delete next.ignoreDepthWarning; delete next.ignoreEdgeWarning; delete next.openingRect;
-  if (two) { next.turn = $('stTurn').value; next.landing = $('stLanding').value; if (next.landing === 'winders') next.winders = num('stWinders'); }
-  if ($('stUnder').value !== 'closed') next.underside = $('stUnder').value;
-  if ($('stSides').value === 'sloped') next.sides = 'sloped';
-  if ($('stRail').value !== 'none') {
-    next.handrail = $('stRail').value;
-    if ($('stRailH').value.trim() !== '') next.handrailHeight = num('stRailH');
-    if ($('stRailMount').value !== '') {                          // a round rail on poles or on the wall (stair-handrails plan); empty = the square bar
-      next.handrailMount = $('stRailMount').value;
-      for (const [id, key] of [['stRailD', 'handrailDiameter'], ['stRailS', 'handrailStart'], ['stRailE', 'handrailEnd']]) if ($(id).value.trim() !== '') next[key] = num(id);
-    }
-  }
-  if ($('stUnder').value === 'sloped' && $('stWaist').value.trim() !== '') next.waist = num('stWaist');
-  if ($('stIgnore').checked) next.ignoreDepthWarning = true;      // the steps were checked (fixes list 28)
-  if ($('stEdgeOk').checked) next.ignoreEdgeWarning = true;       // an opening past the rooms' edge is fine (cut there)
-  if ($('stOpenOn').checked) {                                    // only a rectangle of the hole opens (fixes list 8)
-    const c = ['stRx1', 'stRy1', 'stRx2', 'stRy2'].map(num);
-    if (c.some(v => !Number.isFinite(v))) { $('stErr').textContent = 'The opening rectangle needs four numbers in mm (two corners).'; return; }
-    next.openingRect = { from: [c[0], c[1]], to: [c[2], c[3]] };
-  }
-  next.name = $('stName').value.trim() || null;                 // empty: no name (applyStairs drops it)
-  if ([next.heading, next.width, ...flights.map(f => f.risers)].some(v => !Number.isFinite(v))) { $('stErr').textContent = 'Direction, width and risers must be numbers.'; return; }
-  const r = applyStairs(model, levelId, next, opts());
-  if (r.report.errors.length) { $('stErr').textContent = r.report.errors.join('; '); return; }
-  $('stErr').textContent = '';
-  commit(r.model);
-  setStatus(`${st.id} changed (not saved yet)`);
-}
-
-/** The fixture panel: height, where it is (on a wall, or x/y), how far a lamp's light reaches. */
-function showFixture() {
-  const x = fixture();
-  if (!x) { fixtureId = null; $('fixturePanel').hidden = true; return; }
-  const lv = level(), w = x.attach && lv.walls.find(v => v.id === x.attach.wall), info = w && wallInfo(lv, w.id);
-  const form = stripForm(x), onObject = form === 'object' ? lv.objects?.find(o => o.id === x.attach.object) : null, onOpening = form === 'opening' ? lv.openings?.find(o => o.id === x.attach.opening) : null;
-  const nm = ids => ids.map(id => lv.rooms?.find(r => r.id === id)?.name || id).join(', ') || 'outside';
-  $('xTitle').innerHTML = titleHtml(x);
-  $('xInfo').innerHTML = `${x.kind === 'switch' ? 'switch' : x.kind === 'strip' ? 'LED strip' : x.attach ? 'wall lamp' : 'lamp'}${w ? ` on <a href="#" id="xWall" title="${esc(w.id)}">${esc(refName(w.id))}</a>` : ''}${form === 'object' || form === 'opening' ? ` on <a href="#" id="xTargetLink" title="${esc(x.attach.object ?? x.attach.opening)}">${esc(refName(x.attach.object ?? x.attach.opening))}</a>` : ''}` + (x.assumed?.length ? ` · <b class="warn">still default: ${esc(x.assumed.join(', '))}</b>` : '');
-  $('xWall')?.addEventListener('click', e => { e.preventDefault(); afterLeave(() => enterEdit('wall', w.id))(); });
-  $('xTargetLink')?.addEventListener('click', e => { e.preventDefault(); afterLeave(() => enterEdit(form, x.attach.object ?? x.attach.opening))(); });
-  for (const [id, show] of [['xRadiusRow', x.kind !== 'switch'], ['xOffsetRow', !!w], ['xLenRow', (!!w && x.kind === 'strip') || form === 'object'], ['xVertRow', !!w && x.kind === 'strip'], ['xStartRow', form === 'object'], ['xInsetRow', form === 'object'], ['xFromRow', !!w], ['xSideRow', !!w], ['xInRow', !!w && x.kind === 'lamp'], ['xXRow', !x.attach], ['xYRow', !x.attach], ['xTargetRow', !!onObject || !!onOpening || form === 'object' || form === 'opening'], ['xEdgeRow', form === 'object'], ['xAtRow', form === 'object' || form === 'opening']]) $(id).hidden = !show;
-  $('xSideRow').hidden = !(w || form === 'opening');
-  $('xZ').closest('label').hidden = form === 'object' || form === 'opening';                       // its height is the height of what it follows
-  if (w) {
-    fillFrom('xFrom', w, x.id);
-    $('xOffsetNote').textContent = x.kind === 'strip' ? 'mm from that corner to where the strip starts' : 'mm from that corner to its middle';
-    $('xSide').options[0].textContent = nm(info.sides.right); $('xSide').options[1].textContent = nm(info.sides.left);
-    if (fixtureFormFor !== x) {                                   // the openings of this wall a lamp may stand in
-      const here = (lv.openings || []).filter(o => o.wall === w.id);
-      $('xIn').innerHTML = `<option value="">nothing (on the wall face)</option>` + here.map(o => `<option value="${esc(o.id)}">${esc(o.name || refName(o.id))} · ${esc(o.type)}, ${Math.round(o.offset)}–${Math.round(o.offset + o.width)} mm</option>`).join('');
-      if (x.attach.opening && !here.some(o => o.id === x.attach.opening)) $('xIn').insertAdjacentHTML('beforeend', `<option value="${esc(x.attach.opening)}">${esc(x.attach.opening)} (missing)</option>`);
-      $('xIn').value = x.attach.opening || '';
-    }
-  }
-  if (form === 'opening' && onOpening) { const oi = wallInfo(lv, onOpening.wall); if (oi) { $('xSide').options[0].textContent = nm(oi.sides.right); $('xSide').options[1].textContent = nm(oi.sides.left); } }
-  $('xZNote').textContent = `mm above the floor (ceiling ${lv.ceilingHeight ?? 2400})`;
-  if (fixtureFormFor !== x) {
-    $('xName').value = x.name ?? ''; $('xZ').value = x.z ?? ''; $('xRadius').value = x.radius ?? '';
-    if (form === 'object' || form === 'opening') {                // what it follows, and which edge of it
-      const list = form === 'object' ? lv.objects || [] : lv.openings || [];
-      $('xTarget').innerHTML = list.map(o => `<option value="${esc(o.id)}">${esc(o.name || refName(o.id))}</option>`).join('');
-      if (!list.some(o => o.id === (x.attach.object ?? x.attach.opening))) $('xTarget').insertAdjacentHTML('beforeend', `<option value="${esc(x.attach.object ?? x.attach.opening)}">${esc(x.attach.object ?? x.attach.opening)} (missing)</option>`);
-      $('xTarget').value = x.attach.object ?? x.attach.opening;
-      $('xTargetNote').textContent = form === 'object' ? 'the object it runs along (it moves with it)' : 'the window or door it runs along (it moves with it)';
-      $('xAt').innerHTML = form === 'object' ? '<option value="bottom">under the object (its bottom)</option><option value="top">on top of the object</option>' : '<option value="sill">the bottom of the opening (sill)</option><option value="head">the top of the opening</option>';
-      $('xAt').value = x.attach.at ?? (form === 'object' ? 'bottom' : 'sill');
-      $('xAtNote').textContent = form === 'object' ? 'under it, or on top' : 'along its bottom or its top';
-      if (form === 'object') {
-        const fp = curGeo.objectFootprint(onObject || {}) || [];
-        $('xEdge').innerHTML = [0, 1, 2, 3].map(i => `<option value="${i}">side ${wallName(i)}${fp[i] ? ` · ${Math.round(Math.hypot(fp[(i + 1) % fp.length][0] - fp[i][0], fp[(i + 1) % fp.length][1] - fp[i][1]))} mm long` : ''}</option>`).join('');
-        $('xEdge').value = String(x.attach.edge ?? 0);
-        $('xLen').value = x.attach.length ?? ''; $('xStart').value = x.attach.offset ?? ''; $('xInset').value = x.attach.inset ?? '';
-        $('xLenNote').textContent = 'mm, empty = the rest of the side';
-      }
-      if (form === 'opening') $('xSide').value = x.attach.side;
-    }
-    if (w) { $('xOffset').value = offsetFrom({ offset: x.attach.offset, width: 0 }, fromOf(x.id, w)); $('xSide').value = x.attach.side; $('xLen').value = x.attach.length ?? ''; $('xVertical').checked = x.attach.vertical === true; $('xLenNote').textContent = $('xVertical').checked ? 'mm up the wall' : 'mm along the wall'; }
-    else if (!x.attach) { $('xX').value = x.pos[0]; $('xY').value = x.pos[1]; }
-    $('xErr').textContent = ''; fixtureFormFor = x;
-    fillCopyInto('fixture', x);
-    showBinding(x);
-    showUseLight(x);
-  }
-}
-
-// ---- the link to Home Assistant: location.json → bindings (saved at once, a file of its own) ----
-let haStates = null;       // the states of the house's connection kept by Plantern's server, once loaded
-let haAsked = 0;           // when the server was last asked (ms); asked again only after HA_RETRY_MS, never on every click
-const HA_RETRY_MS = 60000;
-/** The states of the house's connection, asked for only when Plantern's server keeps that connection: a computer
- *  without Home Assistant gets no 404 for every lamp shown. The names come first (api/ha/connections). */
-async function loadHaStates() {
-  const name = loc.integrations?.ha?.connection;
-  if (haStates || !name || !house?.server) return haStates;
-  if (Date.now() - haAsked < HA_RETRY_MS) return haStates;
-  haAsked = Date.now();
-  try {
-    const names = (await (await fetch('api/ha/connections')).json()).connections.map(c => c.name);
-    if (names.includes(name)) { const r = await fetch(`api/ha/${encodeURIComponent(name)}/states`); if (r.ok) haStates = (await r.json()).states; }
-  } catch { /* not reachable: type the id */ }
-  return haStates;
-}
-async function showBinding(x) {
-  const b = loc.bindings?.[x.id] || {}, lv = level();
-  $('xEntity').value = b.entity || ''; $('xBindOut').textContent = '';
-  $('xControlsRow').hidden = x.kind !== 'switch';
-  $('xLookRow').hidden = x.kind === 'switch';
-  const lk = b.look || {};
-  $('xLookBri').value = lk.brightness ?? ''; $('xLookK').value = lk.kelvin ?? ''; $('xLookUseColor').checked = !!lk.color; $('xLookColor').value = lk.color || '#ffd6aa';
-  const lamps = model.levels.flatMap(l => (l.fixtures || []).filter(f => f.kind !== 'switch').map(f => ({ f, l })));
-  $('xControls').innerHTML = lamps.map(({ f, l }) => `<label class="inl"><input type="checkbox" value="${esc(f.id)}"${(b.controls || []).includes(f.id) ? ' checked' : ''}> ${esc(displayName(f))}${l.id !== lv.id ? ` <small>${esc(l.name || l.id)}</small>` : ''}</label>`).join('') || 'No lamps yet.';
-  const name = loc.integrations?.ha?.connection;
-  $('xEntityNote').textContent = name ? `in ${name}: type a name or id, the best matches come first; picking one links it when you Apply` : 'pick the house\'s Home Assistant on the Storage page to get a list; or type the entity id';
-  const states = await loadHaStates();
-  if (fixture() !== x) return;
-  const room = (lv.rooms || []).find(r => (x.pos && pointInPolygon(x.pos, r.polygon)) || (x.attach && lv.walls.find(w => w.id === x.attach.wall)?.rooms?.includes(r.id)));
-  entityChoices.x = suggestEntities(states || [], { kind: x.kind, names: [x.name, room?.name, room && loc.areas?.[room.id]] });
-  showEntityPick();
-}
-const entityChoices = { x: [], o: [], ob: [] };
-/** The entity field of a lamp or switch (prefix x) or of a door (prefix o): what is chosen (friendly name, id, state), and while typing a list to pick from (name + id). */
-function showEntityPick(open = false, p = 'x') {
-  const input = $(`${p}Entity`), now = $(`${p}EntityNow`), pick = $(`${p}EntityPick`), choices = entityChoices[p];
-  const v = input.value.trim(), st = haStates?.find(s => s.entity_id === v);
-  now.innerHTML = v ? (st ? `<b>${esc(st.attributes?.friendly_name || v)}</b> <small>${esc(v)} · ${esc(st.state)}</small>` : `<small>${esc(v)}${haStates ? ' · not found in Home Assistant' : ''}</small>`) : '<small>not linked</small>';
-  if (!open || !choices.length) { pick.hidden = true; return; }
-  const q = v.toLowerCase(), shown = choices.filter(e => !q || e.id.toLowerCase().includes(q) || e.label.toLowerCase().includes(q)).slice(0, 40);
-  // a row: the domain's icon and a dot for its state, then the name and the id (ND8)
-  pick.innerHTML = shown.map(e => { const s = haStates?.find(x => x.entity_id === e.id), ic = domainIcon(e.id); return `<div class="pick" data-ent="${esc(e.id)}"><span class="dot ${stateClass(s?.state)}"></span>${ic ? `<span class="pic">${ICONS[ic]}</span>` : ''}<b>${esc(e.label)}</b><small>${esc(e.id)}${s ? ` · ${esc(s.state)}` : ''}</small></div>`; }).join('') || '<div class="help">No entity matches.</div>';
-  pick.hidden = false;
-  now.innerHTML = '';                                                // while searching, the list is what counts
-  pick.querySelectorAll('[data-ent]').forEach(el => (el.onmousedown = ev => { ev.preventDefault(); input.value = el.dataset.ent; showEntityPick(false, p); input.blur(); input.dispatchEvent(new Event('input')); }));
-}
-/** The sensor of a door opening (location.json → bindings[<opening id>].entity): the field and its note, then the sensors that fit. */
-function showDoorBinding(o) {
-  $('oEntity').value = loc.bindings?.[o.id]?.entity || '';
-  entityChoices.o = [];
-  loadDoorChoices(o);
-}
-async function loadDoorChoices(o) {
-  const info = openingInfo(level(), o.id), name = loc.integrations?.ha?.connection;
-  $('oEntityNote').textContent = name ? `in ${name}: a binary_sensor that says open (on) or closed (off); type a name or id, picking one links it when you Apply` : "pick the house's Home Assistant on the Storage page to get a list; or type the entity id (a binary_sensor: on = open)";
-  const states = await loadHaStates();
-  if (opening() !== o) return;
-  const rooms = [...new Set([...(info?.sides?.left || []), ...(info?.sides?.right || [])])].map(id => (level().rooms || []).find(r => r.id === id)).filter(Boolean);
-  entityChoices.o = suggestEntities(states || [], { kind: 'door', names: [o.name, 'door', ...rooms.flatMap(r => [r.name, loc.areas?.[r.id]])] });
-  showEntityPick(false, 'o');
-}
-/** The sensor of a door as its field says it now: { next } is the location with it, or { error } when it is not valid. Written when the opening is applied, with the house's save. */
-function doorBindingDraft(o, type) {
-  if (type !== 'door') return { next: loc.bindings?.[o.id] ? setBinding(loc, o.id, { entity: '' }) : loc };      // not a door any more: no sensor
-  const entity = $('oEntity').value.trim();
-  if (entity && !/^[a-z_]+\.[a-z0-9_]+$/.test(entity)) return { error: 'The Home Assistant sensor looks like binary_sensor.front_door' };
-  return { next: setBinding(loc, o.id, { entity }) };
-}
-
-/**
- * The link of a lamp or switch as its fields say it now (fixes list 34): { next } is the location with it, or { error }
- * when a field is not valid. It is written when the lamp is applied, with the house's save.
- */
-function bindingDraft(x) {
-  const entity = $('xEntity').value.trim(), controls = [...$('xControls').querySelectorAll('input:checked')].map(i => i.value);
-  if (entity && !/^[a-z_]+.[a-z0-9_]+$/.test(entity)) return { error: 'The Home Assistant entity looks like light.kitchen' };
-  const num = id => ($(id).value.trim() === '' ? undefined : Number($(id).value));
-  const look = x.kind !== 'switch' ? { brightness: num('xLookBri'), kelvin: $('xLookUseColor').checked ? undefined : num('xLookK'), color: $('xLookUseColor').checked ? $('xLookColor').value : undefined } : undefined;
-  const bad = look ? checkLook(Object.fromEntries(Object.entries(look).filter(([, v]) => v !== undefined))) : [];
-  if (bad.length) return { error: bad.join('; ') };
-  return { next: setBinding(loc, x.id, { entity, ...(x.kind === 'switch' ? { controls } : {}), ...(look ? { look } : {}) }) };
-}
-
-/** A lit object's light (openings-and-lit-objects LA4, LA5): its link, the look it has when on, and its radius. Shown once the object has a light, stored with it or built by the server. */
-let objectLightFilledFor = null;   // the object whose light fields were last filled from location.json
-const litOf = o => o.light ?? (o.blueprint ? assetCache().light(o) : null);
-function showObjectLight(o) {
-  const lit = !!litOf(o);
-  $('obBindBox').hidden = !lit;
-  if (o.blueprint && !lit) { assetCache().loadFor(o); return; }     // its build says whether it has a light; shown again when it has
-  if (!lit) return;
-  $('obLightRadius').placeholder = String(litRadius(o));
-  if (objectLightFilledFor !== o) {
-    const b = loc.bindings?.[o.id] || {}, l = b.look || {};
-    $('obEntity').value = b.entity || ''; $('obLightRadius').value = o.lightRadius ?? '';
-    $('obLookBri').value = l.brightness ?? ''; $('obLookK').value = l.kelvin ?? ''; $('obLookUseColor').checked = !!l.color; $('obLookColor').value = l.color || '#ffd6aa';
-    objectLightFilledFor = o;
-    rebase('obEntity', 'obLightRadius', 'obLookBri', 'obLookK', 'obLookUseColor', 'obLookColor');   // filled from the house, not typed
-  }
-  loadHaStates().then(states => {
-    if (object() !== o) return;
-    entityChoices.ob = suggestEntities(states || [], { kind: 'lamp', names: [o.name, o.blueprint] });
-    showEntityPick(false, 'ob');
-  });
-}
-/** The link and look of a lit object as its fields say them now: { next } is the location with them, or { error }. Written when the object is applied. */
-function objectBindingDraft(o) {
-  const entity = $('obEntity').value.trim();
-  if (entity && !/^[a-z_]+\.[a-z0-9_]+$/.test(entity)) return { error: 'The Home Assistant entity looks like light.kitchen' };
-  const num = id => ($(id).value.trim() === '' ? undefined : Number($(id).value));
-  const useColor = $('obLookUseColor').checked;
-  const look = Object.fromEntries(Object.entries({ brightness: num('obLookBri'), kelvin: useColor ? undefined : num('obLookK'), color: useColor ? $('obLookColor').value : undefined }).filter(([, v]) => v !== undefined));
-  const bad = Object.keys(look).length ? checkLook(look) : [];
-  if (bad.length) return { error: bad.join('; ') };
-  return { next: setBinding(loc, o.id, { entity, look }) };
-}
-/** A lamp can give way to the light of a lit object on its level (LA6): the lit objects are offered; hidden when there are none. */
-function showUseLight(x) {
-  const lit = x.kind === 'lamp' ? (level().objects || []).filter(o => litOf(o)) : [];
-  $('xUseRow').hidden = !lit.length;
-  $('xUseObject').innerHTML = lit.map(o => `<option value="${esc(o.id)}">${esc(o.name || o.id)}</option>`).join('');
-}
-/** The lamp is removed and the lit object takes its link. A lit object that already has another link is not changed. */
-async function useObjectLight() {
-  const x = fixture(), o = (level().objects || []).find(v => v.id === $('xUseObject').value);
-  if (!x || !o) return;
-  const lampLink = loc.bindings?.[x.id]?.entity, objLink = loc.bindings?.[o.id]?.entity;
-  if (lampLink && objLink && lampLink !== objLink) { $('xErr').textContent = `${o.id} is already linked to ${objLink}: unlink one of them first.`; return; }
-  if (!(await askConfirm(`Use the light of ${o.name || o.id} instead of ${x.name || x.id}?`, { ok: 'Use it' }))) return;
-  const r = deleteFixture(model, levelId, x.id, opts());
-  if (r.report.errors.length) { $('xErr').textContent = r.report.errors.join('; '); return; }
-  let next = setBinding(loc, x.id, { entity: '' });
-  if (lampLink) next = setBinding(next, o.id, { entity: lampLink });
-  fixtureId = null; loc = next; commit(r.model);
-  setStatus(`${x.id} removed: ${o.id} gives its light`);
-}
-
-function applyFixture() {
-  const x = fixture(), props = {}, num = id => Number($(id).value.trim());
-  const bd = !isFresh() && x ? bindingDraft(x) : null;
-  if (bd?.error) { $('xErr').textContent = bd.error; return; }
-  const bindingChanged = !!bd && !sameBinding(loc, bd.next, x.id);
-  const changed = (id, v) => $(id).value.trim() !== String(v ?? '');
-  const nm = nameChange(x.name, $('xName').value);
-  if (nm !== undefined) props.name = nm;
-  for (const [id, k] of [['xZ', 'z'], ['xRadius', 'radius']]) if (!$(id).closest('label').hidden && changed(id, x[k])) props[k] = num(id);
-  const form = stripForm(x);
-  if (form === 'object') {
-    const opt = id => ($(id).value.trim() === '' ? undefined : num(id));
-    const start = opt('xStart'), len = opt('xLen'), inset = opt('xInset');
-    const next = { object: $('xTarget').value, edge: Number($('xEdge').value), at: $('xAt').value, ...(start ? { offset: start } : {}), ...(len !== undefined ? { length: len } : {}), ...(inset ? { inset } : {}) };
-    if (next.object !== x.attach.object || next.edge !== x.attach.edge || next.at !== (x.attach.at ?? 'bottom') || (next.offset ?? 0) !== (x.attach.offset ?? 0) || next.length !== x.attach.length || (next.inset ?? 0) !== (x.attach.inset ?? 0)) props.attach = next;
-  } else if (form === 'opening') {
-    const next = { opening: $('xTarget').value, side: $('xSide').value, at: $('xAt').value };
-    if (next.opening !== x.attach.opening || next.side !== x.attach.side || next.at !== (x.attach.at ?? 'sill')) props.attach = next;
-  } else if (x.attach) {
-    const w = level().walls.find(v => v.id === x.attach.wall), where = fromOf(x.id, w);
-    const shown = offsetFrom({ offset: x.attach.offset, width: 0 }, where), d = num('xOffset');
-    const lenChanged = x.kind === 'strip' && changed('xLen', x.attach.length);
-    const vertNow = $('xVertical').checked, vertBefore = x.attach.vertical === true;   // runs up the wall (fixes list 48)
-    if (changed('xOffset', shown) || $('xSide').value !== x.attach.side || lenChanged || vertNow !== vertBefore) props.attach = { ...x.attach, offset: changed('xOffset', shown) ? offsetTo(d, where) : x.attach.offset, side: $('xSide').value, ...(x.kind === 'strip' ? { length: num('xLen') } : {}) };
-    if (props.attach && x.kind === 'strip') { if (vertNow) props.attach.vertical = true; else delete props.attach.vertical; }
-    if (!$('xInRow').hidden && $('xIn').value !== (x.attach.opening ?? '')) {                 // stands in an opening, or not any more
-      props.attach = { ...(props.attach || x.attach) };
-      if ($('xIn').value) props.attach.opening = $('xIn').value; else delete props.attach.opening;
-    }
-  }
-  if (x.pos && (changed('xX', x.pos[0]) || changed('xY', x.pos[1]))) props.pos = [num('xX'), num('xY')];
-  if (props.attach && [props.attach.offset, props.attach.length, props.attach.inset].some(v => v !== undefined && !Number.isFinite(v))) { $('xErr').textContent = 'Values must be numbers of mm.'; return; }
-  if (Object.entries(props).some(([k, v]) => k !== 'name' && k !== 'attach' && (Array.isArray(v) ? v.some(n => !Number.isFinite(n)) : typeof v === 'object' ? !Number.isFinite(v.offset) : !Number.isFinite(v)))) { $('xErr').textContent = 'Values must be numbers of mm.'; return; }
-  if (!Object.keys(props).length && !bindingChanged) { $('xErr').textContent = 'Nothing changed.'; return; }
-  const r = Object.keys(props).length ? setFixture(model, levelId, fixtureId, props, opts()) : { model, report: { errors: [] } };
-  if (r.report.errors.length) { $('xErr').textContent = r.report.errors.join('; '); return; }
-  if (bindingChanged) loc = bd.next;                              // the link is stored with the house (Save), undone with the model
-  commit(bindingChanged && r.model === model ? { ...model } : r.model);
-  setStatus(`${fixtureId}: ${[...Object.keys(props), ...(bindingChanged ? ['link'] : [])].join(', ')} changed (not saved yet)`);
-}
-
-function doSplit() {
-  const at = Number($('wSplitAt').value);
-  if (!Number.isFinite(at) || $('wSplitAt').value.trim() === '') { $('wErr').textContent = 'Type where to split, in mm from the start.'; return; }
-  const r = splitWall(model, levelId, wallId, at, opts());
-  if (r.report.errors.length) { $('wErr').textContent = r.report.errors.join('; '); return; }
-  $('wSplitAt').value = '';
-  $('wallsOut').innerHTML = [`Split into ${r.report.parts.join(' and ')}: set each part's thickness and kind on its own.`, ...describeReconcile(r.report)].map(esc).join('<br>');
-  commit(r.model);
-  setStatus(`${r.report.parts.join(' + ')} (not saved yet)`);
-}
-
-/** Join the other part of a split wall into this one (its own properties are kept). */
-async function doJoin(otherId) {
-  if (!(await mayRefill())) return;
-  const r = joinWalls(model, levelId, wallId, otherId, opts());
-  if (r.report.errors.length) { $('wErr').textContent = r.report.errors.join('; '); return; }
-  const lost = r.report.dropped.length ? `
-
-${otherId}'s own ${r.report.dropped.join(', ')} ${r.report.dropped.length > 1 ? 'are' : 'is'} dropped: the joined wall keeps ${wallId}'s.` : '';
-  if (!(await askConfirm(`Join ${otherId} into ${wallId}, making one wall again?${lost}`, { ok: 'Join' }))) return;
-  $('wallsOut').innerHTML = [`Joined ${otherId} into ${wallId}.`, ...describeReconcile(r.report)].map(esc).join('<br>');
-  wallFormFor = null;
-  commit(r.model);
-  setStatus(`${otherId} joined into ${wallId} (not saved yet)`);
-}
-
-async function removeWall() {
-  const info = wallInfo(level(), wallId, issuesNow);
-  const lines = [`Delete wall ${wallId}?`];
-  if (info.openings.length) lines.push(`Its openings go too: ${info.openings.map(o => o.id).join(', ')}.`);
-  if (!(await askConfirm(lines.join('\n\n'), { ok: 'Delete' }))) return;
-  const id = wallId, r = deleteWall(model, levelId, id, opts());
-  if (r.report.errors.length) { $('wErr').textContent = r.report.errors.join('; '); return; }
-  wallId = null;
-  loc = pruneBindings(loc, r.model);                              // the sensors of the doors in it go too
-  commit(r.model);
-  setStatus(`deleted ${id} (not saved yet)`);
-}
-
-function doLinkWalls() {
-  const r = linkWalls(model, levelId, opts());
-  $('wallsOut').innerHTML = [
-    r.report.bound.length ? `Linked to their rooms: ${r.report.bound.map(b => esc(b.id)).join(', ')}.` : 'No walls to link.',
-    ...r.report.skipped.map(x => `${esc(x.id)} stays hand-drawn: ${esc(x.reason)}.`),
-  ].join('<br>');
-  if (r.report.bound.length) commit(r.model);
-}
-
-async function doFillWalls() {
-  const r = fillWalls(model, levelId, opts());
-  const lines = describeReconcile(r.report);
-  if (r.report.preview.length && !(await askConfirm(['This changes the plan:', ...lines, 'Apply?'].join('\n\n'), { ok: 'Apply' }))) return;
-  $('wallsOut').innerHTML = lines.length ? lines.map(esc).join('<br>') : 'Every room edge already has a wall.';
-  if (r.report.added.length || r.report.moved.length || r.report.merged.length) commit(r.model);
-}
-
-// ---- a round pillar (capture mode "circle"): diameter, the room it stands in and two walls, or its middle ----
-const isRound = () => shape === 'solid' && $('sShape').value === 'round';
-const roundForm = () => ({ diameter: $('rDia').value, room: $('rRoom').value, edgeA: Number($('rWA').value), distA: $('rDA').value, edgeB: Number($('rWB').value), distB: $('rDB').value, x: $('rX').value, y: $('rY').value });
-function fillRoundWalls(a, b) {
-  const room = (level().rooms || []).find(r => r.id === $('rRoom').value);
-  const opts = room ? room.polygon.map((p, i) => { const q = room.polygon[(i + 1) % room.polygon.length]; return `<option value="${i}">${wallName(i)} · ${Math.round(Math.hypot(q[0] - p[0], q[1] - p[1]))} mm</option>`; }).join('') : '';
-  $('rWA').innerHTML = opts; $('rWB').innerHTML = opts;
-  if (room) { $('rWA').value = String(a ?? 0); $('rWB').value = String(b ?? crossWall(room, Number($('rWA').value))); }
-}
-function loadRound(capture) {
-  const rooms = (level().rooms || []).filter(r => r.polygon?.length >= 3), f = roundToForm(capture);
-  $('rRoom').innerHTML = '<option value="">no room: type its middle</option>' + rooms.map(r => `<option value="${esc(r.id)}">${esc(r.name || r.id)}</option>`).join('');
-  if (!capture) f.room = rooms[0]?.id ?? '';
-  if (f.room && !rooms.some(r => r.id === f.room)) $('rRoom').insertAdjacentHTML('beforeend', `<option value="${esc(f.room)}">${esc(f.room)} (missing)</option>`);
-  $('rRoom').value = f.room;
-  fillRoundWalls(capture ? f.edgeA : undefined, capture ? f.edgeB : undefined);
-  $('rDia').value = f.diameter; $('rDA').value = f.distA; $('rDB').value = f.distB; $('rX').value = f.x; $('rY').value = f.y;
-  syncRound();
-}
-function syncRound() {
-  const round = isRound(), byWalls = !!$('rRoom').value;
-  $('roundBox').hidden = !round; $('polyBox').hidden = round; $('fromPoly').hidden = round;
-  document.querySelectorAll('#roundBox .rWalls').forEach(el => (el.hidden = !byWalls));
-  document.querySelectorAll('#roundBox .rXY').forEach(el => (el.hidden = byWalls));
-}
-
-function currentForm() {
-  const form = {};
-  FIELDS.forEach(f => (form[f] = $(f).value));
-  return form;
-}
-
-function recompute() {
-  if (isRound()) {
-    const { capture, errors } = roundCapture(roundForm(), level());
-    solved = errors.length ? { ok: false, errors } : solveCapture(capture);
-    solved.capture = capture; solved.overlaps = [];
-    showResult(); draw();
-    $('apply').disabled = !solved.ok || (!roomId && !draft); $('delRoom').hidden = !roomId; $('apply').textContent = 'Apply';
-    return;
-  }
-  const mode = $('mode').value;
-  $('turnsRow').hidden = mode === 'traverse';
-  $('cornersRow').hidden = mode === 'rectilinear';
-  $('closureRow').hidden = mode === 'lengths';
-  $('locksRow').hidden = mode === 'lengths';
-  const sq = $('closure').querySelector('[value=square]');
-  sq.disabled = mode !== 'rectilinear';
-  if (sq.disabled && $('closure').value === 'square') $('closure').value = 'line';
-  $('diagRow').hidden = false;
-  const snapPos = ref => snapsAround.find(s => s.ref === ref)?.pos;
-  const { capture, errors } = buildCapture(currentForm(), snapPos);
-  const h = Number($('heading').value || 0);
-  $('headingTrue').textContent = Number.isFinite(h) ? `= compass bearing ${roundDeg(bearingFromHeading(h, northAngleOf(model)))}°` : '';
-  const st = capture.raw.start || [0, 0];
-  $('startAt').textContent = errors.length ? '' : capture.raw.origin ? `corner 0 at (${st[0]}, ${st[1]}) = ${capture.raw.origin.ref} + (${capture.raw.origin.offset.join(', ')})` : capture.raw.start ? `corner 0 at (${st[0]}, ${st[1]})` : 'corner 0 at the plan origin (0, 0)';
-  // checks between two of its corners marked "in the solve" count as measured diagonals (model/checks.js)
-  solved = errors.length ? { ok: false, errors } : solveCapture(capture, shape === 'room' && roomId ? solveExtra(model, { id: roomId, capture }) : {});
-  solved.capture = capture;
-  // checked against the plan as it will be after Apply (walls that follow rooms make way first)
-  solved.overlaps = solved.ok && shape === 'room' ? overlapsAfterApply(model, levelId, { ...(room() || {}), id: roomId || $('rid').value, name: $('name').value, exterior: $('exterior').checked, polygon: solved.polygon, capture: solved.capture }, opts()) : [];
-  showResult();
-  draw();
-  $('apply').disabled = !solved.ok || (!roomId && !draft);
-  $('delRoom').hidden = !roomId;
-  $('apply').textContent = solved.overlaps?.length ? 'Apply anyway (overlaps)' : shape === 'solid' ? 'Apply' : 'Apply to room';
-}
-
-function showResult() {
-  const s = solved, tol = resolveSettings(loc, level()).checkTolerance || { ok: 5, warn: 15 };
-  if (s.ok && s.capture?.mode === 'circle') { const c = s.capture.raw; $('result').innerHTML = `<div class="help">⌀ ${c.diameter} mm, its middle at (${c.start.join(', ')})</div>`; $('resid').innerHTML = ''; $('lockOffers').innerHTML = ''; return; }
-  if (!s.ok) { $('result').innerHTML = s.errors.map(e => `<div class="iss error">${esc(e)}</div>`).join(''); $('resid').innerHTML = ''; $('lockOffers').innerHTML = ''; return; }
-  const ov = s.overlaps?.length ? `<div class="iss error"><b>Overlaps ${esc(describeOverlaps(s.overlaps))}.</b> Rooms must not share floor area: check the measurements or the start position ("Place next to another room" helps).</div>` : '';
-  const head = [`RMS ${s.rms.toFixed(1)} mm`, `max ${s.maxAbs.toFixed(1)} mm`];
-  if (s.closure) head.push(`closure ${s.closure.distance} mm`);
-  if (s.redundancy !== undefined) head.push(`${s.redundancy} redundant`);
-  $('result').innerHTML = ov + `<div class="help">${head.join(' · ')}</div>` + s.warnings.map(w => `<div class="iss">${esc(w)}</div>`).join('');
-  const cls = c => { const a = Math.abs(c.residual), [ok, warn] = c.unit === 'deg' ? [0.2, 0.5] : [tol.ok, tol.warn]; return a <= ok ? 'ok' : a <= warn ? 'warn' : 'bad'; };
-  $('resid').innerHTML = `<table class="res"><tr><th></th><th>measured</th><th>solved</th><th>Δ</th></tr>${s.residuals.map((r, i) => {
-    const c = residualCells(r, s.capture.raw.derived, s.capture.raw.exact);
-    return `<tr${i === s.worst && s.maxAbs > tol.ok ? ' class="worst"' : ''}><td>${esc(c.label)}</td><td>${esc(c.measured)}</td><td>${esc(c.model)}</td><td><b class="${cls(c)}">${esc(c.delta)}</b></td></tr>`;
-  }).join('')}</table>`;
-  // walls that are almost exactly on an axis: offer to lock them (fills the Locked walls field)
-  const offers = lockOffers(s.capture, s.polygon);
-  $('lockOffers').innerHTML = offers.map((o, i) => `<button data-i="${i}" style="margin:2px 0">${esc(describeLockOffer(o))}</button>`).join(' ');
-  $('lockOffers').querySelectorAll('button').forEach(b => (b.onclick = () => {
-    const o = offers[+b.dataset.i];
-    $('locks').value = [$('locks').value.trim(), `${wallName(o.edge)} ${o.axis}`].filter(Boolean).join(', ');
-    recompute();
-  }));
-}
-
-function draw() {
-  const svg = $('preview'), lv = level(), cur = solved?.ok && (roomId || draft) ? solved.polygon : null;
-  const others = (lv.rooms || []).filter(r => shape === 'solid' || r.id !== roomId);
-  const solidsShown = (lv.solids || []).filter(s => s.polygon?.length >= 3);   // the selected one too, under the outline being measured
-  const pts = [...others.flatMap(r => r.polygon), ...solidsShown.flatMap(s => s.polygon), ...(cur || room()?.polygon || [])].map(toSvg);
-  if (!pts.length) { if (peekId) { lastFit = null; drawPeek(); } else svg.innerHTML = ''; return; }
-  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-  const span = Math.max(x1 - x0, y1 - y0, 1000), pad = span * 0.12;
-  lastFit = { x: x0 - pad, y: y0 - pad, w: x1 - x0 + 2 * pad, h: y1 - y0 + 2 * pad };
-  if (peekId) { drawPeek(); return; }                                // another level, read-only, while editing this one
-  const vb = view || lastFit;
-  svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
-  // labels and marks sized in screen pixels, so they read the same on a phone, a big screen and zoomed in
-  const fs = Math.max(vb.w / (svg.clientWidth || 800), vb.h / (svg.clientHeight || 600)) * 16;
-  $('zFit').hidden = !view;
-  const poly = (p, style) => `<polygon points="${p.map(q => toSvg(q).join(',')).join(' ')}" ${style}/>`;
-  // rooms and walls are clickable; assumed thicknesses hatched, orphans red, the selection highlighted
-  let out = `<defs><pattern id="hatch" patternUnits="userSpaceOnUse" width="${fs * 0.7}" height="${fs * 0.7}" patternTransform="rotate(45)"><rect width="${fs * 0.7}" height="${fs * 0.7}" fill="#6b7482"/><line x1="0" y1="0" x2="0" y2="${fs * 0.7}" stroke="#ffb454" stroke-width="${fs / 6}"/></pattern></defs>`;
-  // while placing something (or always, Levels: always): the walls and rooms of the level below (blue) and
-  // above (amber), faintly, with their room names; their corners are start points too
-  const underNames = [];
-  if (showUnderlay()) for (const u of underlay) {
-    const c = LEVEL_COLOR[u.relation];
-    for (const p of u.rooms) out += poly(p, `fill="none" stroke="${c}" stroke-opacity="0.35" stroke-width="${fs / 10}" stroke-dasharray="${fs / 2} ${fs / 3}" pointer-events="none"`);
-    for (const p of u.walls) out += poly(p, `fill="${c}" fill-opacity="0.08" stroke="${c}" stroke-opacity="0.45" stroke-width="${fs / 14}" pointer-events="none"`);
-    for (const r of u.named || []) {
-      // above the room names of this level, moved down a little so the two can both be read
-      const lay = labelPoint(r.polygon), [cx, cy] = toSvg(lay.pos);
-      underNames.push(`<text x="${cx}" y="${cy + fs * 1.3}" fill="${c}" fill-opacity="0.75" font-size="${fs * 0.7}" font-style="italic" text-anchor="middle" dominant-baseline="central" pointer-events="none">${esc(r.name)} · ${esc(u.name)}</text>`);
-    }
-  }
-  const obstacles = labelObstacles(lv, curGeo);         // room names keep clear of lamps, furniture, chimneys and stairs
-  const roomNames = [];                                  // drawn after the stairs, so an opening in the floor does not hide them
-  for (const r of others) {
-    out += `<g data-kind="room" data-id="${esc(r.id)}" style="cursor:pointer">${poly(r.polygon, r.floor === 'none' ? `fill="#1a1d22" stroke="#46505f" stroke-width="${fs / 8}" stroke-dasharray="${fs / 2} ${fs / 3}"` : `fill="${r.exterior ? '#243026' : '#252a33'}" stroke="#46505f" stroke-width="${fs / 8}"`)}</g>`;
-    const lay = roomNameLayout(r.polygon, r.name || r.id, { maxSize: fs * 1.2, minSize: fs * 0.6, avoid: obstacles }), [cx, cy] = toSvg(lay.pos);
-    roomNames.push(`<text x="${cx}" y="${cy}" fill="#8b93a1" font-size="${lay.size}" text-anchor="middle" dominant-baseline="central" pointer-events="none">${lay.lines.map((l, k) => `<tspan x="${cx}" dy="${k ? '1.25em' : `${-(lay.lines.length - 1) * 0.625}em`}">${esc(l)}</tspan>`).join('')}</text>`);
-  }
-  // stairs going up from here (clickable; steps above the cut plane dashed) and the openings of those arriving from below
-  if (curGeo?.stairs) {
-    const sp = stairsPlan(curGeo, resolveSettings(loc, lv).cutPlane);
-    for (const h of sp.down) out += poly(h.poly, `fill="#14161a" stroke="#6b7482" stroke-width="${fs / 10}" stroke-dasharray="${fs / 2} ${fs / 3}" pointer-events="none"`);
-    for (const s of sp.up) {
-      const sel = s.id === stairsId, edge = sel ? '#ffb454' : '#9aa3b2';
-      out += `<g data-kind="stairs" data-id="${esc(s.id)}" style="cursor:pointer"><title>${esc(tip(lv.stairs?.find(x => x.id === s.id) || s))}</title>`;
-      for (const st of s.steps) out += poly(st.poly, st.above ? `fill="transparent" stroke="${edge}" stroke-opacity="0.7" stroke-width="${fs / 12}" stroke-dasharray="${fs / 2} ${fs / 3}"` : `fill="#3a404b" stroke="${edge}" stroke-width="${fs / 12}"`);
-      if (s.arrow.length > 1) out += `<polyline points="${s.arrow.map(q => toSvg(q).join(',')).join(' ')}" fill="none" stroke="${sel ? '#ffb454' : '#e6ebf3'}" stroke-width="${fs / 8}" pointer-events="none"/>`;
-      if (s.head) out += poly(s.head, `fill="${sel ? '#ffb454' : '#e6ebf3'}" pointer-events="none"`);
-      out += '</g>';
-    }
-  }
-  out += roomNames.join('');
-  // wall bodies as they are built (joins and openings included), so a wall reaching into a room shows
-  const orphans = new Set(issuesNow.filter(i => i.severity === 'error' && /orphan/.test(i.msg)).map(i => i.id));
-  for (const w of lv.walls || []) {
-    const pieces = curGeo?.pieces.get(w.id), sel = w.id === wallId, bad = orphans.has(w.id);
-    const fill = w.assumed?.includes('thickness') ? 'url(#hatch)' : w.kind === 'railing' ? '#4a525e' : '#6b7482';
-    const cut = wallCut(w, lv, opts().settings?.cutPlane ?? 1200), overhead = cut === 'above';    // a lintel: dashed, see-through
-    const low = cut === 'low' && w.kind === 'wall';                     // a half-height wall: seen from above, lighter
-    const stroke = sel ? `stroke="#ffb454" stroke-width="${fs / 4}"` : bad ? `stroke="#e5534b" stroke-width="${fs / 4}"` : 'stroke="none"';
-    out += `<g data-kind="wall" data-id="${esc(w.id)}" style="cursor:pointer"><title>${esc(tip(w))}</title>`;
-    if (pieces?.length) for (const pc of pieces) {
-      out += poly(pc, `fill="${fill}"${overhead ? ` fill-opacity="0.3" stroke-dasharray="${fs / 2} ${fs / 3}"` : low ? ' fill-opacity="0.4"' : ''} ${(overhead || low) && !sel && !bad ? `stroke="${fill === 'url(#hatch)' ? '#6b7482' : fill}" stroke-width="${fs / 10}"` : stroke}`);
-      for (const lp of wallLookPieces(w, curGeo.frames.get(w.id), [pc], lv.rooms)) {
-        const strips = sideStrips(lp.poly, w.thickness);
-        for (const side of ['left', 'right']) { const look = resolveSide(lp[side], materialTable(model)); if (look?.color) out += poly(strips[side], `fill="${look.color}" pointer-events="none"`); }
-      }
-    }
-    else {
-      const [ax, ay] = toSvg(w.a), [bx, by] = toSvg(w.b);
-      out += `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${sel ? '#ffb454' : bad ? '#e5534b' : '#6b7482'}" stroke-width="${fs / 6}" stroke-dasharray="${fs / 2}"/>`;
-      out += `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="transparent" stroke-width="${fs}"/>`;   // easier to hit
-    }
-    out += '</g>';
-  }
-  for (const s of solidsShown) {
-    const sel = shape === 'solid' && s.id === roomId;
-    const above = (s.base ?? 0) >= (opts().settings?.cutPlane ?? 1200);   // a beam overhead: dashed, see-through
-    const look = `fill="${esc(s.color || SOLID_COLOR)}" fill-opacity="${above ? 0.35 : 1}" stroke="${sel ? '#ffb454' : '#999'}" stroke-width="${fs / (sel ? 4 : 10)}"${above ? ` stroke-dasharray="${fs / 2} ${fs / 3}"` : ''}`, circ = solidCircle(s);
-    const body = circ ? (([cx, cy]) => `<circle cx="${cx}" cy="${cy}" r="${circ.diameter / 2}" ${look}/>`)(toSvg(circ.center)) : poly(s.polygon, look);   // a round pillar: the true circle
-    out += `<g data-kind="solid" data-id="${esc(s.id)}" style="cursor:pointer"><title>${esc(s.name || s.kind || s.id)} (${esc(s.id)})</title>${body}`;
-    if (s.sides) for (const st of solidStretches(s, lv.rooms)) { const look = resolveSide(s.sides[st.room], materialTable(model)); if (look?.color) out += poly(paintStrip(st), `fill="${look.color}" pointer-events="none"`); }
-    out += '</g>';
-  }
-  const curCircle = cur && solved.capture?.mode === 'circle' ? solved.capture.raw : null;
-  if (curCircle) {
-    // a round pillar as the form puts it: the circle, its middle, and the two distances it was measured with
-    const [cx, cy] = toSvg(curCircle.start), attrs = `fill="#ffb45422" stroke="#ffb454" stroke-width="${fs / 5}"`;
-    out += roomId ? `<g data-kind="solid" data-id="${esc(roomId)}" data-cur="1" style="cursor:move"><circle cx="${cx}" cy="${cy}" r="${curCircle.diameter / 2}" ${attrs}/></g>` : `<g data-cur="1" style="cursor:move"><circle cx="${cx}" cy="${cy}" r="${curCircle.diameter / 2}" ${attrs}/></g>`;
-    out += `<circle cx="${cx}" cy="${cy}" r="${fs / 5}" fill="#ffb454" pointer-events="none"/>`;
-    for (const f of curCircle.from || []) {
-      const e = roomEdge(lv, f.ref);
-      if (!e) continue;
-      const L = Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1]), u = [(e.b[0] - e.a[0]) / L, (e.b[1] - e.a[1]) / L], inward = [u[1], -u[0]], c = curCircle.start;
-      const s0 = (c[0] - e.a[0]) * u[0] + (c[1] - e.a[1]) * u[1], foot = [e.a[0] + u[0] * s0, e.a[1] + u[1] * s0], surf = [foot[0] + inward[0] * f.distance, foot[1] + inward[1] * f.distance];
-      out += dimensionSvg(foot, surf, { fs, text: `${f.distance}` });
-    }
-  } else if (cur) {
-    // the selected room (or chimney) as solved from its form; clickable like the rest (double-click edits it)
-    // dragged inside, it moves as a whole; dragged by a corner, it reshapes (roadmap 8)
-    out += roomId ? `<g data-kind="${shape}" data-id="${esc(roomId)}" data-cur="1" style="cursor:move">${poly(cur, `fill="#ffb45422" stroke="#ffb454" stroke-width="${fs / 5}"`)}</g>` : `<g data-cur="1" style="cursor:move">${poly(cur, `fill="#ffb45422" stroke="#ffb454" stroke-width="${fs / 5}"`)}</g>`;
-    out += wallLabelsSvg(cur, { fs });                                  // "A · 4000" inside the room, along each wall
-    cur.forEach((p, i) => { out += cornerSvg(p, i, { fs, hot: i === 0, active: dragging?.kind === 'corner' && dragging.i === i && dragging.moved }); });
-    // arrow on edge 0 shows the walking direction
-    const [a, b] = [toSvg(cur[0]), toSvg(cur[1])], d = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, ux = (b[0] - a[0]) / d, uy = (b[1] - a[1]) / d, ax = a[0] + ux * d * 0.5, ay = a[1] + uy * d * 0.5, k = fs;
-    out += `<path d="M${ax - ux * k - uy * k * 0.5},${ay - uy * k + ux * k * 0.5} L${ax + ux * k},${ay + uy * k} L${ax - ux * k + uy * k * 0.5},${ay - uy * k - ux * k * 0.5}" fill="none" stroke="#ffb454" stroke-width="${fs / 5}"/>`;
-  }
-  // openings: door leaf and swing, window frame, passage faces; clickable, the selected one highlighted
-  for (const o of lv.openings || []) {
-    const ow = lv.walls?.find(x => x.id === o.wall), f = ow && curGeo?.frames.get(ow.id);
-    if (!f) continue;
-    const sym = openingSymbol(ow, f, o), sel = o.id === openingId;
-    const color = sel ? '#ffb454' : o.type === 'window' ? '#6cb6ff' : o.type === 'door' ? '#e0a060' : '#8b93a1', sw = fs / (sel ? 5 : 8);
-    const seg = ([p, q], dash) => { const [a, b] = [toSvg(p), toSvg(q)]; return `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${color}" stroke-width="${sw}"${dash ? ` stroke-dasharray="${fs / 3} ${fs / 4}"` : ''}/>`; };
-    const s0 = curGeo.openingLine(o), [h0, h1] = s0.map(toSvg);
-    out += `<g data-kind="opening" data-id="${esc(o.id)}" style="cursor:pointer"><title>${esc(tip(o, o.type))}</title>`;
-    out += `<line x1="${h0[0]}" y1="${h0[1]}" x2="${h1[0]}" y2="${h1[1]}" stroke="${openingAssumed(o).length ? '#ffb45455' : 'transparent'}" stroke-width="${fs * 1.2}"/>`;   // hit area (tinted while still default)
-    out += sym.lines.map(l => seg(l, false)).join('') + sym.dashed.map(l => seg(l, true)).join('');
-    for (const a of sym.arcs) out += `<path d="${arcPathSvg(toSvg(a.c), a.r, toSvg(a.from), toSvg(a.to))}" fill="none" stroke="${color}" stroke-width="${sw * 0.7}" stroke-dasharray="${fs / 3} ${fs / 4}"/>`;
-    out += '</g>';
-  }
-  let onTop = '';                                                      // handles drawn last, over lamps and start dots
-  // objects: boxes (dashed above the cut plane, like a wall cabinet), clickable and draggable
-  for (const o of lv.objects || []) {
-    const fp = curGeo?.objectFootprint(o);
-    if (!fp) continue;
-    if (o.kind === 'asset') assetCache().loadFor(o);
-    const sel = o.id === objectId, above = (o.z ?? 0) >= resolveSettings(loc, lv).cutPlane;
-    // an asset whose model is missing is red and dashed, so it is seen and fixed (decision 146)
-    const missing = o.kind === 'asset' && ['missing', 'broken'].includes(assetCache().status(assetKey(o)));
-    const col = sel ? '#ffb454' : missing ? '#b00020' : o.assumed?.length ? '#e5a93a' : (o.color || (o.kind === 'asset' && assetCache().mainColour(assetKey(o))) || '#888');
-    const made = o.blueprint ? `blueprint "${o.blueprint}"` : `model "${o.asset}"`;
-    const what = o.kind === 'asset' ? (missing ? ` · ${made} is missing` : ` · ${made}`) : '';
-    out += `<g data-kind="object" data-id="${esc(o.id)}" style="cursor:grab"><title>${esc(o.name || o.id)} (${esc(o.id)})${esc(what)}</title>${poly(fp, `fill="${col}" fill-opacity="0.25" stroke="${col}" stroke-width="${fs / (sel ? 5 : 9)}"${above || missing ? ` stroke-dasharray="${fs / 2} ${fs / 3}"` : ''}`)}</g>`;
-    if (sel && !o.attach && o.pos) {
-      // a handle in front of it: drag it round to turn the object about its middle (15° steps snap; Alt: free)
-      const a = (o.rotationDeg || 0) * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a), hw = o.size[0] / 2, hd = o.size[1] / 2;
-      const mid = [o.pos[0] + hw * c - hd * sn, o.pos[1] + hw * sn + hd * c], f = [-sn, c], front = [mid[0] + f[0] * hd, mid[1] + f[1] * hd], h = [front[0] + f[0] * fs * 2, front[1] + f[1] * fs * 2];
-      const [x1, y1] = toSvg(front), [x2, y2] = toSvg(h);
-      onTop += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#ffb454" stroke-width="${fs / 8}" pointer-events="none"/><circle cx="${x2}" cy="${y2}" r="${fs * 0.4}" fill="#14161a" stroke="#ffb454" stroke-width="${fs / 7}" pointer-events="none"/><circle data-orot="${esc(o.id)}" cx="${x2}" cy="${y2}" r="${fs * 0.8}" fill="transparent" style="cursor:grab"><title>Drag round to turn it (${o.rotationDeg || 0}°; 15° steps snap, Alt: free)</title></circle>`;
-    }
-  }
-  // lamps (circles) and switches (squares), clickable; tinted while a value is still a default
-  for (const x of lv.fixtures || []) {
-    const P = curGeo?.fixturePos(x);
-    if (!P) continue;
-    const [cx, cy] = toSvg(P), sel = x.id === fixtureId, c = sel ? '#ffb454' : x.assumed?.length ? '#e5a93a' : '#f5d76e', r = fs * 0.4;
-    const line = curGeo.fixtureLine?.(x), lc = line ? line.map(q => toSvg(q).join(',')).join(' ') : '';
-    out += `<g data-kind="fixture" data-id="${esc(x.id)}" style="cursor:pointer"><title>${esc(tip(x))}</title>` + (line ? `<polyline points="${lc}" fill="none" stroke="transparent" stroke-width="${fs * 1.6}" stroke-linecap="round"/><polyline points="${lc}" fill="none" stroke="${c}" stroke-width="${fs / 3}" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>` : '') + `<circle cx="${cx}" cy="${cy}" r="${fs}" fill="transparent"/>` + (x.kind === 'strip' ? `<circle cx="${cx}" cy="${cy}" r="${r * 0.7}" fill="${c}" stroke="${sel ? '#fff' : '#14161a'}" stroke-width="${fs / 10}"/>` : x.kind === 'switch'
-      ? `<rect x="${cx - r}" y="${cy - r}" width="${2 * r}" height="${2 * r}" rx="${r / 3}" fill="#14161a" stroke="${c}" stroke-width="${fs / (sel ? 5 : 8)}"/>`
-      : `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${c}" stroke="${sel ? '#fff' : '#14161a'}" stroke-width="${fs / 10}"/>`) + '</g>';
-  }
-  for (const x of lv.fixtures || []) {                            // the ends of the selected LED strip on a wall: handles to drag
-    if (x.id !== fixtureId || stripForm(x) !== 'wall' || x.attach?.vertical === true) continue;   // a vertical strip is sized by its height, not dragged (fixes list 48)
-    const line = curGeo.fixtureLine?.(x);
-    if (line) [['a', line[0]], ['b', line[1]]].forEach(([end, q]) => { const [hx, hy] = toSvg(q); out += `<circle data-send="${end}" data-id="${esc(x.id)}" cx="${hx}" cy="${hy}" r="${fs * 0.55}" fill="#fff" fill-opacity=".85" stroke="#ffb454" stroke-width="${fs / 8}" style="cursor:ew-resize"><title>Drag to change where the strip ${end === 'a' ? 'starts' : 'ends'}</title></circle>`; });
-  }
-  out += underNames.join('');
-  out += selectionMarks(lv, fs);
-  // the split point being typed for the selected wall
-  const sw = wallId && wall(), at = sw && Number($('wSplitAt').value);
-  if (sw && at > 0) {
-    const L = Math.hypot(sw.b[0] - sw.a[0], sw.b[1] - sw.a[1]), u = [(sw.b[0] - sw.a[0]) / L, (sw.b[1] - sw.a[1]) / L], n = [-u[1], u[0]];
-    if (at < L) {
-      const P = [sw.a[0] + u[0] * at, sw.a[1] + u[1] * at], k = fs * 1.2, [x1, y1] = toSvg([P[0] + n[0] * k, P[1] + n[1] * k]), [x2, y2] = toSvg([P[0] - n[0] * k, P[1] - n[1] * k]);
-      out += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#e5534b" stroke-width="${fs / 5}" pointer-events="none"/>`;
-    }
-  }
-  // a corner to measure from (fixes list 16): every corner along the wall marked and named, the chosen one green
-  if (fromPick && editing) {
-    const chosenKey = $(fromPick.sel).value;
-    for (const c of measureCorners(level(), fromPick.wallId)) {
-      const [x, y] = toSvg(c.pos), on = c.key === chosenKey;
-      out += `<g data-fromkey="${esc(c.key)}" style="cursor:pointer"><title>${esc(c.label)}</title><circle cx="${x}" cy="${y}" r="${fs * DOT_HIT}" fill="transparent"/>`
-        + `<circle cx="${x}" cy="${y}" r="${fs * 0.5}" fill="${on ? '#4cc38a' : '#ffb454'}" stroke="#14161a" stroke-width="${fs / 10}"/>`
-        + `<text x="${x}" y="${y - fs * 0.9}" fill="${on ? '#4cc38a' : '#ffb454'}" font-size="${fs * 0.7}" text-anchor="middle" paint-order="stroke" stroke="#14161a" stroke-width="${fs * 0.25}" pointer-events="none">${esc(c.label)}</text></g>`;
-    }
-  }
-  // where corner 0 is placed: every start point as a dot (click to pick), the chosen one ringed and named
-  if (editing && (roomId || draft) && !isRound()) {
-    const ex = roomId || $('rid').value, chosen = $('originRef').value;
-    // each dot sits on a larger invisible disc: a click anywhere on it picks the point (a hollow ring of
-    // another level included), never the room under it
-    for (const o of startPick ? startDots(snapsAround, { excludeRoom: ex, ...nameOpts() }) : []) {
-      const [x, y] = toSvg(o.pos), on = o.ref === chosen, ring = o.adjacent ? LEVEL_COLOR[o.relation] : null;
-      out += `<g data-ref="${esc(o.ref)}" style="cursor:pointer"><title>${esc(o.label)}</title><circle cx="${x}" cy="${y}" r="${fs * DOT_HIT}" fill="transparent"/>`
-        + `<circle cx="${x}" cy="${y}" r="${on ? fs * 0.55 : fs * 0.4}" fill="${on ? '#4cc38a' : ring ? '#14161a' : '#8b93a1'}" fill-opacity="${on ? 1 : ring ? 0.6 : 0.55}" stroke="${ring && !on ? ring : '#14161a'}" stroke-width="${ring ? fs / 7 : fs / 12}" pointer-events="none"/></g>`;
-    }
-    const sel = snapsAround.find(s => s.ref === chosen), c0 = cur?.[0];
-    const [sx, sy] = toSvg(sel ? sel.pos : [0, 0]);
-    out += `<circle cx="${sx}" cy="${sy}" r="${fs * 0.9}" fill="none" stroke="#4cc38a" stroke-width="${fs / 6}" pointer-events="none"/>`;
-    out += `<text x="${sx}" y="${sy - fs * 1.3}" fill="#4cc38a" font-size="${fs * 0.75}" text-anchor="middle" paint-order="stroke" stroke="#14161a" stroke-width="${fs * 0.3}" pointer-events="none">${esc(sel ? refName(sel.ref) : 'origin (0, 0)')}</text>`;
-    if (c0 && Math.hypot(c0[0] - (sel ? sel.pos[0] : 0), c0[1] - (sel ? sel.pos[1] : 0)) > 1) {
-      const [cx, cy] = toSvg(c0);
-      out += `<line x1="${sx}" y1="${sy}" x2="${cx}" y2="${cy}" stroke="#4cc38a" stroke-width="${fs / 8}" stroke-dasharray="${fs / 2} ${fs / 3}" pointer-events="none"/>`;
-    }
-  }
-  // "Place next to another room" open: the other rooms' walls with their letters, clickable; the chosen
-  // one highlighted with the end "Start" counts from, and this room's wall that goes against it
-  if (editing && (roomId || draft) && $('nextTo').open) {
-    const [nid, ni] = ($('ntEdge').value || '').split('|');
-    for (const r of (lv.rooms || []).filter(r => r.id !== roomId && r.polygon?.length >= 3)) {
-      out += wallLabelsSvg(r.polygon, { fs: fs * 1.2, lengths: false, fill: '#aeb6c2' });
-      r.polygon.forEach((p, i) => {
-        const q = r.polygon[(i + 1) % r.polygon.length], [x1, y1] = toSvg(p), [x2, y2] = toSvg(q), on = r.id === nid && String(i) === ni;
-        out += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${on ? '#ffb454' : '#8b93a1'}" stroke-width="${on ? fs / 2.5 : fs / 8}" stroke-linecap="round" pointer-events="none"/>`;
-        out += `<line data-ntedge="${esc(r.id)}|${i}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="transparent" stroke-width="${fs * 1.6}" style="cursor:pointer"><title>${esc(r.name || r.id)} · wall ${wallName(i)}</title></line>`;
-        if (on) { const [qx, qy] = toSvg(q); out += `<rect x="${qx - fs * 0.45}" y="${qy - fs * 0.45}" width="${fs * 0.9}" height="${fs * 0.9}" fill="#4cc38a" stroke="#14161a" stroke-width="${fs / 10}" pointer-events="none"/>`; }
-      });
-    }
-    const k = Number($('ntOwn').value);
-    if (cur && Number.isInteger(k) && cur[k]) { const [x1, y1] = toSvg(cur[k]), [x2, y2] = toSvg(cur[(k + 1) % cur.length]); out += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#4cc38a" stroke-width="${fs / 3}" stroke-dasharray="${fs / 2} ${fs / 3}" pointer-events="none"/>`; }
-  }
-  // a hand-drawn wall selected or edited: where the form puts it (dashed while it differs from what is stored), its ends draggable
-  const hw = wallId && wall();
-  const wEditing = editing?.kind === 'wall' && editing.id === hw?.id;
-  if (hw && !hw.from?.length && (wEditing || !editing)) {
-    const e = (wEditing && wallEnds()) || { a: hw.a, b: hw.b }, L = Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1]);
-    if (L > 1) {
-      const n = [-(e.b[1] - e.a[1]) / L, (e.b[0] - e.a[0]) / L], t = (wEditing && Number($('wThick').value)) || hw.thickness || 0, j = (wEditing && $('wJustify').value) || hw.justify || 'center';
-      const [o0, o1] = j === 'left' ? [0, t] : j === 'right' ? [-t, 0] : [-t / 2, t / 2], at = (p, o) => [p[0] + n[0] * o, p[1] + n[1] * o];
-      const moved = Math.hypot(e.a[0] - hw.a[0], e.a[1] - hw.a[1]) > 0.5 || Math.hypot(e.b[0] - hw.b[0], e.b[1] - hw.b[1]) > 0.5;
-      if (moved) out += `<g data-wbody="1" style="cursor:move">${poly([at(e.a, o0), at(e.b, o0), at(e.b, o1), at(e.a, o1)], `fill="#ffb45433" stroke="#ffb454" stroke-width="${fs / 6}" stroke-dasharray="${fs / 2} ${fs / 3}"`)}</g>`;
-      for (const [end, p] of [['a', e.a], ['b', e.b]]) { const [x, y] = toSvg(p); out += `<rect x="${x - fs * 0.35}" y="${y - fs * 0.35}" width="${fs * 0.7}" height="${fs * 0.7}" fill="${end === 'a' ? '#4cc38a' : '#ffb454'}" stroke="#14161a" stroke-width="${fs / 10}" pointer-events="none"/><circle data-wend="${end}" cx="${x}" cy="${y}" r="${fs * 0.75}" fill="transparent" style="cursor:crosshair"><title>Drag the ${end === 'a' ? 'start' : 'end'} (snaps to corners; Shift: straight, Alt: free)</title></circle>`; }
-    }
-  }
-  // the corners of the room being edited can be dragged (on top of the start dots: a click without a drag still picks the dot under it)
-  out += onTop;
-  if (cur && !$('nextTo').open && !['lengths', 'circle'].includes(solved.capture?.mode) && cur.length > 3) cur.forEach((p, i) => { const [x, y] = toSvg(p); out += `<circle data-corner="${i}" cx="${x}" cy="${y}" r="${fs * 0.75}" fill="transparent" style="cursor:crosshair"><title>Drag corner ${i} to reshape (the walls keep their directions; Shift: along one wall, Alt: no snapping)</title></circle>`; });
-  svg.innerHTML = out;
-  measure?.draw();
-  drawWallOverlay();                                                   // the measurement on top
-  setStatus(cur ? `${roomId || 'new room'} · walking direction shown on wall A` : wallId ? `wall ${tip(wall())}` : openingId ? tip(opening(), opening()?.type) : fixtureId ? tip(fixture()) : 'click a room, a wall, an opening or a lamp');
-}
-
-async function apply() {
-  if (!solved?.ok) return;
-  if (shape === 'solid') return applySolidForm();
-  const base = room() || {};
-  const id = roomId || $('rid').value;
-  const next = { ...base, id, name: $('name').value.trim() || id, exterior: $('exterior').checked, polygon: solved.polygon, capture: solved.capture };
-  delete next.floor; delete next.floorOffset; delete next.ceilingHeight;
-  const off = $('rFloorOff').value.trim(), ceil = $('rCeil').value.trim();
-  if ($('rFloor').value === 'none') next.floor = 'none';
-  if (off !== '') next.floorOffset = Number(off);
-  if (ceil !== '') next.ceilingHeight = Number(ceil);
-  if ((off !== '' && !Number.isFinite(next.floorOffset)) || (ceil !== '' && !(next.ceilingHeight > 0))) { setStatus('Floor level and ceiling height must be numbers of mm (ceiling more than 0)'); return; }
-  const r = applyRoom(model, levelId, next, { settings: resolveSettings(loc, level()) });
-  if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
-  const lines = describeReconcile(r.report);
-  // moves over 5 mm are confirmed first; smaller ones just happen (and are listed under Walls)
-  if (r.report.preview.length && !(await askConfirm(['Applying this room changes the plan:', ...lines, 'Apply?'].join('\n\n'), { ok: 'Apply' }))) return;
-  roomId = id; draft = null;
-  $('wallsOut').innerHTML = lines.map(esc).join('<br>');
-  commit(r.model);
-}
-
-/**
- * The chimney's sides, one row per room it borders: default (its own colour), a colour or a material,
- * like a wall side. Filled from the stored solid; the rows are read back by applySolidForm().
- */
-function renderSolidSides() {
-  const s = room();
-  if (!s) { $('sSides').innerHTML = '<small>Apply it first; then each room around it can have its own colour or material on it.</small>'; return; }
-  const rooms = [...new Set(solidStretches(s, level().rooms).map(x => x.room))], stale = Object.keys(s.sides || {}).filter(id => !rooms.includes(id));
-  if (!rooms.length && !stale.length) { $('sSides').innerHTML = '<small>It borders no room yet.</small>'; return; }
-  const nm = id => level().rooms.find(r => r.id === id)?.name || id;
-  fillLookRows($('sSides'), [...rooms.map(id => ({ key: id, label: `Facing ${nm(id)}` })), ...stale.map(id => ({ key: id, label: `Facing ${nm(id)}: no longer bordering it (default removes it)` }))], s.sides);
-}
-const solidSidesForm = () => readLookRows($('sSides'), room()?.sides);
-
-/**
- * Rows to paint something per room (a chimney's sides, a wall side along several rooms): each row is
- * default / colour / material with the palette, like a wall side. rows = [{ key: roomId, label }].
- */
-function fillLookRows(box, rows, looks = {}) {
-  const matOpts = materialOptionsHtml('');
-  box.innerHTML = rows.map(r => `<div class="sideLook" data-room="${esc(r.key)}"><label>${esc(r.label)}
-      <select class="sMode"><option value="">default</option><option value="color">colour</option><option value="material"${matOpts ? '' : ' disabled'}>material</option></select></label>
-      <input type="color" class="sCol" title="Colour: ${esc(r.label)}"><select class="sMat">${matOpts}</select></div><div class="swatches"></div>`).join('');
-  box.querySelectorAll('.sideLook').forEach(row => {
-    const look = looks?.[row.dataset.room] || {}, mode = row.querySelector('.sMode'), col = row.querySelector('.sCol'), mat = row.querySelector('.sMat');
-    mode.value = look.material ? 'material' : look.color ? 'color' : '';
-    col.value = look.color || '#e6e2da'; if (look.material) mat.value = look.material;
-    const show = () => {
-      col.hidden = mode.value !== 'color'; mat.hidden = mode.value !== 'material';
-      fillSwatches(row.nextElementSibling, mode.value === 'material' ? null : col.value, mode.value === 'color', c => { mode.value = 'color'; col.value = c; show(); }, () => col.value, mode.value === 'color');
-    };
-    mode.onchange = show; col.oninput = show;
-    show();
-  });
-}
-/** The looks from fillLookRows() rows over `base` (rooms without a row keep theirs); null when none. */
-function readLookRows(box, base) {
-  const out = { ...(base || {}) };
-  box.querySelectorAll('.sideLook').forEach(row => {
-    const m = row.querySelector('.sMode').value, id = row.dataset.room;
-    if (m === 'color') out[id] = { color: row.querySelector('.sCol').value };
-    else if (m === 'material' && row.querySelector('.sMat').value) out[id] = { material: row.querySelector('.sMat').value };
-    else delete out[id];
-  });
-  return Object.keys(out).length ? out : null;
-}
-
-/** A wall side running along several rooms (a facade): one row per room on that side. */
-let foldedLooks = new Set();   // per-room looks shown as their face's own look (the face runs along only that room)
-function renderWallRoomLooks(w) {
-  const along = wallFaceRooms(w, curGeo.frames.get(w.id), level().rooms), nm = id => level().rooms.find(r => r.id === id)?.name || id;
-  const rows = [], alongIds = new Set(along.map(x => x.room));
-  for (const side of ['left', 'right']) {
-    const ids = [...new Set(along.filter(x => x.side === side).map(x => x.room))];
-    if (ids.length > 1) for (const id of ids) rows.push({ key: id, label: `${side === 'left' ? 'Left' : 'Right'} side · facing ${nm(id)}` });
-  }
-  // a look for a room it no longer runs along (and no other wall took over): shown so it can be set back to default
-  for (const id of Object.keys(w.roomSides || {})) if (!rows.some(r => r.key === id) && !alongIds.has(id)) rows.push({ key: id, label: `Facing ${nm(id)}: no longer along this wall (default removes it)` });
-  $('wRoomLooksBox').hidden = !rows.length;
-  fillLookRows($('wRoomLooks'), rows, w.roomSides);
-}
-
-/** Apply the measured chimney or pillar (kind, colour, base, height and sides from the form). */
-async function applySolidForm() {
-  const id = roomId || $('rid').value, num = t => { t = String(t).trim(); if (t === '') return null; const v = Number(t); return Number.isFinite(v) ? v : NaN; };
-  const base = num($('sBase').value), height = num($('sHeight').value);
-  if (Number.isNaN(base) || Number.isNaN(height)) { setStatus('base and height are numbers of mm'); return; }
-  const s = { ...(room() || {}), id, name: $('name').value.trim() || null, kind: $('sKind').value, color: $('sColor').value, base: base || null, height, cutsWalls: $('sCuts').checked || null, polygon: solved.polygon, capture: solved.capture, sides: room() ? solidSidesForm() : null };
-  const r = applySolid(model, levelId, s, opts());
-  if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
-  const lines = describeReconcile(r.report);
-  if (r.report.preview.length && !(await askConfirm([`Applying ${id} changes the plan:`, ...lines, 'Apply?'].join('\n\n'), { ok: 'Apply' }))) return;
-  shape = 'solid'; roomId = id; draft = null;
-  $('wallsOut').innerHTML = lines.map(esc).join('<br>');
-  commit(r.model);
-  renderSolidSides();
-  zoomToIfSmall(s.polygon);
-}
-
-async function deleteRoom() {
-  const r = room();
-  if (!r) return;
-  if (shape === 'solid') {
-    const p = removeSolid(model, levelId, r.id, opts());
-    if (p.report.errors.length) { setStatus(p.report.errors.join('; ')); return; }
-    const lines = [`Delete ${r.name || r.id} and its measurements? The rooms around it get walls there again (thickness to measure).`];
-    if (p.report.dependents.length) lines.push(`Placed at one of its corners (they stay where they are, but that start point will be reported missing): ${p.report.dependents.join(', ')}.`);
-    lines.push(...describeReconcile(p.report));
-    if (!(await askConfirm(lines.join('\n\n'), { ok: 'Delete' }))) return;
-    roomId = null; shape = 'room';
-    commit(p.model);
-    return;
-  }
-  const preview = removeRoom(model, levelId, r.id, { settings: resolveSettings(loc, level()) });
-  if (preview.report.errors.length) { setStatus(preview.report.errors.join('; ')); return; }
-  const d = preview.report;
-  const lines = [`Delete room "${r.name || r.id}" and its measurements?`];
-  if (d.removedWalls.length) lines.push(`Its own walls go too: ${d.removedWalls.join(', ')}.`);
-  if (d.removedOpenings.length) lines.push(`Openings in those walls go too: ${d.removedOpenings.join(', ')}.`);
-  if (d.heldWalls.length) lines.push(`Kept because something is attached to them: ${d.heldWalls.join(', ')}.`);
-  if (d.keptWalls.length) lines.push(`Shared walls stay for the neighbour: ${d.keptWalls.join(', ')}.`);
-  if (d.dependents.length) lines.push(`Placed at one of its corners (they stay where they are, but that start point will be reported missing): ${d.dependents.join(', ')}.`);
-  lines.push(...describeReconcile(preview.report));
-  if (!(await askConfirm(lines.join('\n\n'), { ok: 'Delete' }))) return;
-  model = history.push(preview.model); dirty = isModelDirty();
-  roomId = null; draft = null; editing = null; editBase = null;
-  loadFormForSelection(); refresh();
-  if (!level().rooms?.length) editDraft({ name: '', exterior: false });
-  setStatus(`deleted ${r.id} (not saved yet)`);
-}
-
-// one save at a time: a double-click (or a click while the last save is still on its way) saves once, then at most once
-// more, and a save with nothing changed says so instead of writing the same file again (decision 118)
-const save = serialRunner(saveNow);
-async function saveNow() {
-  if (fresh && editing) { $('saveOut').textContent = `Apply or cancel the new ${fresh.what} first: it is not created yet.`; return; }
-  if (!dirty) { if (!/^Saved at/.test($('saveOut').textContent)) $('saveOut').textContent = 'All saved: nothing to save.'; return; }
-  const errs = issuesNow.filter(i => i.severity === 'error');
-  if (errs.length) { $('saveOut').innerHTML = `<span style="color:var(--bad)">Not saved: ${errs.length} error(s), listed just below. Fix them, or use Download.</span>`; return; }
-  $('saveOut').textContent = 'Saving…';
-  try {
-    let r;
-    try { r = await house.save(model); }
-    catch (e) {
-      if (!e.conflict) throw e;
-      // changed elsewhere in the same places: pick per thing, then save over what is stored now
-      const a = await askConflict(e.details, { what: loc.name });
-      if (a.action === 'theirs') { await reloadHouse('Loaded the version saved elsewhere; your changes are dropped.'); return; }
-      if (a.action !== 'save') { $('saveOut').textContent = 'Not saved yet: it was changed elsewhere. Save again to choose.'; return; }
-      r = await house.saveOver(a.value, e.details.theirs);
-      r.merged = true;
-    }
-    if (loc !== savedLoc) { const rl = await house.save(loc, 'location'); loc = rl.value; }   // the links, with the model (fixes list 34)
-    if (r.merged) model = history.push(r.value);                       // what was changed elsewhere is in it now
-    savedModel = model; savedLoc = loc; dirty = false;
-    $('elsewhere').hidden = true;
-    $('saveOut').textContent = `Saved at ${new Date().toLocaleTimeString()}${r.merged ? ', together with changes made elsewhere' : ''}.`;
-    collapseTree();                                                  // a fresh start after saving
-    if (!editing) { roomId = null; wallId = null; openingId = null; fixtureId = null; stairsId = null; objectId = null; }
-  } catch (e) {
-    $('saveOut').innerHTML = `<span style="color:var(--bad)">${esc(e.message)}</span>`;
-  }
-  refresh();
-}
-
-/** Read the house again (what is stored now); the undo history starts over. */
-async function reloadHouse(note) {
-  assets = null;   // the house's asset models are read again with it
-  await house.load();
-  loc = house.location; model = savedModel = house.model; savedLoc = loc; dirty = false;
-  assetCache();
-  history = createHistory(model); locOf.set(model, loc);
-  if (!model.levels.some(l => l.id === levelId)) levelId = model.levels[0]?.id ?? null;
-  $('elsewhere').hidden = true;
-  fillLevels(); refresh();
-  $('saveOut').textContent = note;
-}
-
-/**
- * The house was saved by someone else (another page or device, a text editor, a git pull). With nothing
- * unsaved here it is simply read again; otherwise the save bar offers to merge it into the changes here
- * (by entity id: the same thing changed on both sides asks mine or theirs) or to take theirs.
- */
-function changedElsewhere(ev) {
-  const when = new Date().toLocaleTimeString();
-  if (!dirty && !editing) { reloadHouse(`Updated at ${when}: the house was ${ev.source === 'remote' ? 'changed in the repository' : 'saved elsewhere'}.`).catch(e => setStatus(e.message)); return; }
-  const box = $('elsewhere');
-  box.hidden = false;
-  box.innerHTML = `<b>Changed elsewhere</b> at ${when}${ev.source === 'remote' ? ' (in the repository)' : ''}. <button id="elMerge">Merge into my changes</button> <button id="elTheirs">Take theirs</button>`;
-  $('elMerge').onclick = async () => {
-    if (!(await mayLeave())) return;
-    const r = await house.mergeIncoming(model);
-    let value = r.merged;
-    if (r.conflicts.length) {
-      const a = await askConflict({ theirs: r.theirsText, merged: r.merged, conflicts: r.conflicts }, { what: loc.name });
-      if (a.action === 'theirs') { await reloadHouse('Loaded the version saved elsewhere; your changes are dropped.'); return; }
-      if (a.action !== 'save') return;
-      value = a.value;
-    }
-    box.hidden = true;
-    commit(value);
-    setStatus('merged with the changes made elsewhere (not saved yet)');
-  };
-  $('elTheirs').onclick = async () => { if (!(await askConfirm('Drop your unsaved changes and load the version saved elsewhere?', { ok: 'Load it' }))) return; if (editing) leaveEdit({ ask: false, noBack: true }); await reloadHouse('Loaded the version saved elsewhere.'); };
-}
-
-/**
- * Validation in the save bar, only when there is something to say: a count line, errors listed,
- * warnings folded away. Clicking an issue selects what it is about.
- */
-/**
- * Warnings about the asset models (missing, or a size that is not the model's), listed with the validator's. They wait
- * until every model of the house has settled, so a model still loading is never reported missing. A model that is
- * broken is not reported here: its red marker says so.
- */
-function assetIssues() {
-  return [...modelIssues(), ...blueprintIssues()];
-}
-
-/**
- * Warnings about objects made from a blueprint: a size that is not the one its build has (the object panel's *Use the built
- * size* fixes it), and a blueprint the server refuses to build (the reason it gives). A server that cannot be reached says
- * nothing here (the red marker does); nothing is said while a model is still loading.
- */
-function blueprintIssues() {
-  const objs = (model?.levels || []).flatMap(l => (l.objects || []).filter(o => o.kind === 'asset' && o.blueprint).map(o => ({ o, level: l.id })));
-  if (!objs.length || objs.some(x => ['loading', 'unknown'].includes(assetCache().status(assetKey(x.o))))) return [];
-  const out = [];
-  for (const { o, level: lvId } of objs) {
-    const key = assetKey(o), st = assetCache().status(key);
-    // a size that differs from the build is shown in the object's panel, with the rebuild, not here (every edit of a size would list it)
-    if (st === 'broken') out.push({ id: o.id, severity: 'warning', level: lvId, msg: `blueprint "${o.blueprint}" cannot be built: ${assetCache().error(key) ?? 'it cannot be shown'}` });
-  }
-  return out;
-}
-
-function modelIssues() {
-  const objs = (model?.levels || []).flatMap(l => (l.objects || []).filter(o => o.kind === 'asset' && !o.blueprint).map(o => ({ o, level: l.id })));
-  const names = [...new Set(objs.map(x => x.o.asset))];
-  if (!names.length || names.some(n => ['loading', 'unknown'].includes(assetCache().status(n)))) return [];
-  // a missing model is left out of the map (assetWarnings reads that as missing); one that is there but has no
-  // meta.json, or is broken, has nothing to compare, so it gets an empty meta
-  const metas = new Map();
-  for (const n of names) {
-    const st = assetCache().status(n), meta = assetCache().meta(n);
-    if (meta && st === 'ok') metas.set(n, meta);
-    else if (st === 'broken' || st === 'ok') metas.set(n, {});
-  }
-  // the list prints the object's name and id already, so the message keeps only what is wrong
-  return assetWarnings(model, metas).map(w => ({ id: w.id, severity: 'warning', msg: w.msg.replace(`${w.id}: `, ''), level: objs.find(x => x.o.id === w.id)?.level }));
-}
-
-function showIssues() {
-  modelGeos = buildModelGeometry(model);
-  const issues = issuesNow = [...validateModel(model, modelGeos, blueprints ? { blueprints } : {}), ...assetIssues()];
-  const errs = issues.filter(i => i.severity === 'error'), warns = issues.filter(i => i.severity !== 'error');
-  $('valBox').hidden = !issues.length;
-  if (!issues.length) return;
-  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-  $('valSum').innerHTML = [errs.length ? `<span style="color:var(--bad)">${plural(errs.length, 'error')} (blocks Save)</span>` : '', warns.length ? `<span style="color:var(--warn)">${plural(warns.length, 'warning')}</span>` : ''].filter(Boolean).join(' · ');
-  // two walls that both follow room edges cannot be cut (the rooms place them): the message says what to check instead
-  const bothBound = pair => { const ws = model.levels.find(l => l.id === pair.level)?.walls || []; return pair.ids.every(id => ws.find(w => w.id === id)?.from?.length); };
-  const item = i => `<div class="iss ${i.severity}" data-iid="${esc(i.id)}" data-ilevel="${esc(i.level || '')}"><b>${esc(nameOf(i.id))}</b>${nameOf(i.id) !== i.id ? ` <small>${esc(i.id)}</small>` : ''}${i.level && i.level !== levelId ? ` <small>${esc(i.level)}</small>` : ''} ${esc(i.msg)}${i.pair && !bothBound({ ids: i.pair, level: i.level || levelId }) ? ` <button type="button" class="cutPair" data-pair="${esc(i.pair.join('|'))}">Cut one of them…</button>` : ''}</div>`;
-  $('issues').innerHTML = errs.map(item).join('') + (warns.length ? `<details${errs.length ? '' : ' open'}><summary>${plural(warns.length, 'warning')}</summary>${warns.map(item).join('')}</details>` : '');
-  $('issues').querySelectorAll('.iss').forEach(el => (el.onclick = async () => {
-    const id = el.dataset.iid;
-    if (el.dataset.ilevel && el.dataset.ilevel !== levelId && !(await goToLevel(el.dataset.ilevel))) return;
-    const lv = level();
-    const kind = lv.rooms?.some(r => r.id === id) ? 'room' : lv.solids?.some(s => s.id === id) ? 'solid' : lv.walls?.some(w => w.id === id) ? 'wall'
-      : lv.openings?.some(o => o.id === id) ? 'opening' : lv.fixtures?.some(x => x.id === id) ? 'fixture' : lv.objects?.some(o => o.id === id) ? 'object' : null;
-    if (kind) afterLeave(() => enterEdit(kind, id))();
-  }));
-  $('issues').querySelectorAll('.cutPair').forEach(b => (b.onclick = e => { e.stopPropagation(); cutOverlap(b.dataset.pair.split('|'), b.closest('.iss').dataset.ilevel || levelId); }));
-}
-
-/**
- * Cut one of two overlapping walls (overlapping-walls plan, O3): asks which one, then trims it to the other's face with
- * cutWall(). A refusal is shown in the status line with its reason; nothing changes.
- */
-async function cutOverlap([a, b], lvId) {
-  if (isDirty()) { setStatus('Apply or revert your changes first, then cut the wall'); return; }
-  if (lvId !== levelId && !(await goToLevel(lvId))) return;
-  const r = await openDialog({
-    title: 'Cut one of the two walls',
-    message: `${refName(a)} and ${refName(b)} overlap. The wall you cut is trimmed to the face of the other, and the part beyond that face is removed.`,
-    buttons: [{ id: 'a', label: `Cut ${refName(a)}`, primary: true }, { id: 'b', label: `Cut ${refName(b)}` }, { id: 'cancel', label: 'Cancel' }],
-  });
-  if (r.button !== 'a' && r.button !== 'b') return;
-  const [cutId, keepId] = r.button === 'a' ? [a, b] : [b, a];
-  const res = cutWall(model, levelId, cutId, keepId, opts());
-  if (res.report.errors.length) { setStatus(res.report.errors.join('; ')); return; }
-  commit(res.model);
-  const { kept, removed } = res.report.cut;
-  setStatus(`${cutId} is cut at ${keepId}: ${removed} mm removed on the ${kept === 'a' ? 'b' : 'a'} side (not saved yet)`);
-}
 
 init().catch(e => {
   setStatus(e.message); console.error(e);

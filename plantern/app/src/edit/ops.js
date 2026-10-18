@@ -10,7 +10,7 @@ import { reconcile } from './reconcile.js';
 import { nameFirst } from '../model/names.js';
 import { bindWalls } from './bind.js';
 import { upsertRoom, removeRoom as dropRoom, newRoomId } from '../capture/edit.js';
-import { validateModel } from '../model/validate.js';
+import { validateModelCached as validateModel } from '../model/validate.js';
 import { checkSite, GEOREF_CRS } from '../model/site.js';
 import { buildLevelGeometry, buildModelGeometry } from '../geometry/level.js';
 import { collectSnapPoints } from '../tools/snap.js';
@@ -31,16 +31,18 @@ import { pointInPolygon } from '../geometry/polygon.js';
 export { SOLID_KINDS } from '../model/solids.js';
 export { FIXTURE_KINDS, FIXTURE_DEFAULTS, checkFixture } from '../model/fixtures.js';
 
-const validate = model => validateModel(model, buildModelGeometry(model));
+const validate = (model, options = {}) => validateModel(model, buildModelGeometry(model), options.blueprints ? { blueprints: options.blueprints } : {});
 const levelOf = (model, levelId) => model.levels.find(l => l.id === levelId);
 const refuse = (model, ...errors) => ({ model, report: { errors, issues: [] } });
 
 function finish(model, levelId, change, options, extra = {}) {
   const r = reconcile(model, levelId, change, options);
+  // options.checkOnly (the overlap check, PF11): the level as reconcile makes it is all that is wanted: not the other levels that follow, not the validation
+  if (options?.checkOnly) return { model: r.model, report: { ...extra, ...r.report, errors: [], issues: [] } };
   // rooms on other levels that hang on this level's points follow it (levels.js)
   const f = followLevels(r.model, levelId, options);
   const warnings = [...(r.report.warnings || []), ...f.report.warnings];
-  return { model: f.model, report: { ...extra, ...r.report, warnings, ...(f.report.followed.length ? { followed: f.report.followed } : {}), errors: [], issues: validate(f.model) } };
+  return { model: f.model, report: { ...extra, ...r.report, warnings, ...(f.report.followed.length ? { followed: f.report.followed } : {}), errors: [], issues: validate(f.model, options) } };
 }
 
 /** Add a room, or replace a room's outline, measurements and other fields (same id). */

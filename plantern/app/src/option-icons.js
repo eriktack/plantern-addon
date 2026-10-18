@@ -9,6 +9,10 @@ const svg = body => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none"
 
 // one drawing per family of options (the family names are the options that share it)
 const DRAWN = {
+  catPole: '<path d="M12 2v20"/><ellipse cx="7" cy="8" rx="4" ry="1.3"/><ellipse cx="17" cy="14" rx="4" ry="1.3"/><path d="M8 2h8M8 22h8"/>',
+  chestFlat: '<rect x="3" y="10" width="18" height="9" rx="1"/><path d="M3 13h18M12 13v3M5 19v1.5M19 19v1.5"/>',
+  chestArch: '<rect x="3" y="12" width="18" height="8" rx="1"/><path d="M3 12c0-4 4-6 9-6s9 2 9 6M8 7v13M16 7v13"/>',
+  toyBox: '<rect x="3" y="9" width="18" height="10" rx="1"/><path d="M3 12h18M9 15h6"/>',
   armchair: '<path d="M6 11V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5"/><path d="M4 11h16v5H4z"/><path d="M6 16v3M18 16v3M4 11v5M20 11v5"/>',
   office: '<path d="M8 4h8v7H8z"/><path d="M12 11v5M7 20h10M9 16h6"/>',
   lounge: '<path d="M3 13V9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4"/><path d="M3 13h18v4H3z"/><path d="M5 17v3M19 17v3"/>',
@@ -94,13 +98,68 @@ const BY_NAME = {
 };
 
 /** The icon's name in ICONS for a parameter's option (`opt:<name>`), or '' when the option has no drawing. key is the parameter. */
-export function optionIcon(key, option) {
+export function optionIcon(key, option, own = null) {
   const name = String(option ?? '');
+  // a model may name the icon of an option itself (its parameter's `icons`, AGENT_INSTRUCTIONS §3.1, ND5)
+  if (own && typeof own[name] === 'string' && ICONS[own[name]]) return own[name];
   // a parameter's own drawing first (shade/drum and variant/drum may differ); none is registered yet
   if (ICONS[`opt:${key}/${name}`]) return `opt:${key}/${name}`;
   return ICONS[`opt:${name}`] ? `opt:${name}` : '';
 }
 
+// the options added with later models (ND5, the rest): directions, sizes of hobs and seats, and the rest by what they are
+Object.assign(DRAWN, {
+  alcoveBath: '<path d="M3 3v16M21 3v16M3 19h18"/><path d="M6 11h12v5H6z"/>',
+  arrowLeft: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
+  arrowRight: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  arrowUp: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  arrowDown: '<path d="M12 5v14M6 13l6 6 6-6"/>',
+  arrowBack: '<path d="M4 12h16"/><path d="M4 7v10"/>',
+  none: '<circle cx="12" cy="12" r="8"/><path d="M6 6l12 12"/>',
+  centre: '<rect x="4" y="4" width="16" height="16"/><circle cx="12" cy="12" r="2"/>',
+  wallSide: '<path d="M4 3v18"/><rect x="6" y="9" width="10" height="6"/>',
+  pivot: '<path d="M4 4v16"/><path d="M4 4a16 16 0 0 1 14 14"/>',
+  lowBar: '<path d="M4 16h16M4 20h16"/>',
+  tallBar: '<path d="M8 3v18M16 3v18"/>',
+  bench: '<rect x="3" y="10" width="18" height="3"/><path d="M5 13v7M19 13v7"/>',
+  saunaBench: '<rect x="3" y="12" width="18" height="3"/><path d="M5 15v6M19 15v6"/><path d="M7 8h10"/>',
+  lowTableShelf: '<rect x="3" y="12" width="18" height="2"/><path d="M5 14v6M19 14v6M7 9h10"/>',
+  cabinetUpper: '<rect x="3" y="5" width="18" height="10" rx="1"/><path d="M12 5v10"/>',
+  cube: '<path d="M12 3 4 7v10l8 4 8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/>',
+  islandDrawn: '<rect x="3" y="9" width="18" height="10" rx="1"/><path d="M3 9h18"/>',
+  pot: '<path d="M6 13h12l-2 8H8z"/><path d="M12 13V8c-2-2-3-1-3 0"/>',
+  tableLamp: '<path d="M8 6h8l2 6H6z"/><path d="M12 12v5M8 21h8"/>',
+  hanging: '<path d="M12 3v5M7 8h10l-2 5H9z"/><path d="M9 13c0 3 1 5 3 5s3-2 3-5"/>',
+  panelRad: '<rect x="3" y="6" width="18" height="12"/>',
+  radiatorDrawn: '<path d="M5 3v18M9 3v18M13 3v18M17 3v18"/><path d="M3 6h18M3 18h18"/>',
+  runner: '<rect x="3" y="9" width="18" height="6"/><rect x="5" y="11" width="14" height="2"/>',
+  stoveDrawn: '<rect x="6" y="9" width="12" height="11"/><path d="M10 9V4h4v5"/>',
+  stoolDrawn: '<ellipse cx="12" cy="8" rx="6" ry="2"/><path d="M12 10v9M8 19h8"/>',
+  barStool: '<ellipse cx="12" cy="6" rx="6" ry="2"/><path d="M12 8v13M9 21h6"/>',
+  stepStool: '<path d="M4 20h16M4 14h10M4 8h4"/>',
+  lampSill: '<path d="M3 17h18"/><path d="M8 17l2-7h4l2 7"/>',
+  vase: '<path d="M9 3h6M10 3c0 4-4 6-4 11a6 6 0 0 0 12 0c0-5-4-7-4-11"/>',
+  pole: '<path d="M12 3v17M8 21h8"/>',
+  sphereStem: '<circle cx="12" cy="8" r="4"/><path d="M12 12v9M8 21h8"/>',
+  rolledArm: '<path d="M4 6h16a2 2 0 0 1 0 4H4z"/><path d="M4 10v10M20 10v10"/>',
+  ladder: '<path d="M7 3v18M17 3v18M7 7h10M7 12h10M7 17h10"/>',
+  wallBar: '<rect x="3" y="9" width="18" height="2"/><path d="M6 11v3M18 11v3"/>',
+  sconceDrawn: '<path d="M3 12h4"/><path d="M6 8h8l2 8H6z"/>',
+  hatShelf: '<path d="M3 8h18"/><path d="M6 8c0-3 12-3 12 0"/>',
+});
+const MORE = {
+  tension_pole: 'catPole', blanket_chest: 'chestFlat', trunk: 'chestArch', toy_box: 'toyBox', induction: 'hob', electric: 'hob', gas: 'hob', alcove: 'alcoveBath', freestanding: 'tub',
+  left: 'arrowLeft', right: 'arrowRight', back: 'arrowBack', none: 'none', low: 'lowBar', tall: 'tallBar',
+  entry: 'bench', upholstered: 'armchair', sauna_lave: 'saunaBench', utility: 'shelves', with_shelf: 'lowTableShelf',
+  straight: 'desk', base: 'hinged', base_drawer: 'drawers', upper: 'cabinetUpper', plain: 'cube',
+  seating_overhang: 'islandDrawn', with_sink: 'basin', with_hob: 'hob', pot: 'pot', hanging: 'hanging',
+  panel: 'panelRad', column: 'radiatorDrawn', runner: 'runner', wood_fired: 'stoveDrawn',
+  pivot: 'pivot', center: 'centre', wall: 'wallSide', top: 'arrowUp', up: 'arrowUp', down: 'arrowDown', rear: 'arrowBack',
+  rolled: 'rolledArm', bar: 'barStool', counter: 'stoolDrawn', step: 'stepStool', classic: 'tableLamp', sill: 'lampSill',
+  ceramic: 'vase', baluster: 'vase', pole: 'pole', sphere: 'sphereStem', ladder: 'ladder', wall_bar: 'wallBar',
+  single: 'sconceDrawn', hat_shelf: 'hatShelf', narrow: 'hinged',
+};
+Object.assign(BY_NAME, MORE);
 for (const [name, family] of Object.entries(BY_NAME)) ICONS[`opt:${name}`] = svg(DRAWN[family]);
 
 /** Every option name that has a drawing (for the coverage test). */

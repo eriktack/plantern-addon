@@ -167,3 +167,165 @@ export function rotateObject(o, toward, { free = false } = {}) {
   const h1 = rot(deg);
   return { pos: [Math.round(mid[0] - h1[0]), Math.round(mid[1] - h1[1])], rotationDeg: deg };
 }
+
+// ---- things dragged on the plan (ui-consistency plan, UX2): the new place worked out per pointer frame ----
+// These are pure, so a drag can preview every frame and store once, when the pointer is let go.
+
+/**
+ * The attach of a thing `width` mm wide whose middle is dragged to `p`: on the nearest wall face with a body
+ * within `reach` mm (its side by which face p is on), centred on p and kept on the wall. walls = the level's
+ * walls, frames = Map(id → wallFrame) of its geometry. No wall near: `cur` unchanged.
+ */
+export function attachNear(p, cur, width, walls, frames, { reach = 900, hasBody = w => w.kind !== 'virtual' && (w.thickness || 0) > 0 } = {}) {
+  let best = null;
+  for (const w of walls || []) {
+    if (!hasBody(w)) continue;
+    const f = frames.get(w.id);
+    if (!f) continue;
+    const s = (p[0] - w.a[0]) * f.u[0] + (p[1] - w.a[1]) * f.u[1], t = (p[0] - w.a[0]) * f.n[0] + (p[1] - w.a[1]) * f.n[1];
+    const along = Math.min(Math.max(s, 0), f.L), dist = Math.hypot(s - along, t);
+    if (dist < reach && (!best || dist < best.dist)) best = { w, f, s, t, dist };
+  }
+  if (!best) return cur;
+  const { w, f, s, t } = best;
+  return { ...cur, wall: w.id, side: t >= 0 ? 'left' : 'right', offset: r1(Math.min(Math.max(s - width / 2, 0), Math.max(f.L - width, 0))) };
+}
+
+/** A free box (measured from corner `pos`, turned `rotationDeg`) with its middle at `mid`: its new pos. */
+export function boxPosForMiddle(o, mid) {
+  const a = (o.rotationDeg || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a), hw = o.size[0] / 2, hd = o.size[1] / 2;
+  return [Math.round(mid[0] - (hw * c - hd * s)), Math.round(mid[1] - (hw * s + hd * c))];
+}
+
+/**
+ * One end of an LED strip on a wall dragged to `s` mm along the wall (wall length L): the new { offset, length }.
+ * Whole centimetres unless `exact` (Alt); the strip keeps at least `min` mm and stays on the wall.
+ */
+export function stripEndDrag(attach, end, s0, L, { exact = false, min = 50 } = {}) {
+  const s = exact ? s0 : Math.round(s0 / 10) * 10;
+  const start = attach.offset, stop = attach.offset + attach.length;
+  const offset = end === 'a' ? Math.min(Math.max(s, 0), stop - min) : start;
+  const length = end === 'a' ? stop - offset : Math.min(Math.max(s - start, min), L - start);
+  return { offset: r1(offset), length: r1(length) };
+}
+
+/**
+ * An opening dragged along its wall (ui-consistency plan, UX11). `what`: 'body' (it slides; `s` is where the grabbed point
+ * is now and `grab` how far that point was from the near edge), 'a' (the near edge goes to s) or 'b' (the far edge goes to s).
+ * It stays on the wall (length L) and between the openings beside it (`others`: [{ offset, width }] on the same wall), at
+ * least `min` mm wide, in whole centimetres unless `exact`. Returns { offset, width }.
+ */
+export function openingDrag(o, what, s, L, others = [], { grab = 0, exact = false, min = 100 } = {}) {
+  const snap = v => (exact ? r1(v) : Math.round(v / 10) * 10);
+  const end = o.offset + o.width;
+  // the free stretch the opening is in: up to the nearest neighbour on each side (as it stood when the drag began)
+  const lo = Math.max(0, ...others.filter(x => x.offset + x.width <= o.offset + 0.5).map(x => x.offset + x.width));
+  const hi = Math.min(L, ...others.filter(x => x.offset >= end - 0.5).map(x => x.offset));
+  if (what === 'body') {
+    const offset = Math.min(Math.max(snap(s - grab), lo), Math.max(lo, hi - o.width));
+    return { offset: r1(offset), width: o.width };
+  }
+  if (what === 'a') {
+    const offset = Math.min(Math.max(snap(s), lo), end - min);
+    return { offset: r1(offset), width: r1(end - offset) };
+  }
+  const width = Math.min(Math.max(snap(s) - o.offset, min), hi - o.offset);
+  return { offset: o.offset, width: r1(width) };
+}
+
+/**
+ * The handles of a box-like object for resizing (ui-consistency plan, UX13): where each side's handle is, by side name
+ * ('x0', 'x1' its width's two ends, 'y0', 'y1' its depth's back and front). A free object has all four; one on a wall has
+ * its two ends and its front (the back stays on the wall). `wall` = { a, frame } for one on a wall (frame from wallFrame()).
+ */
+export function resizeHandles(o, wall = null) {
+  const [w, d] = o.size, at = (p, u, s) => [p[0] + u[0] * s, p[1] + u[1] * s];
+  let base, u, v;
+  if (o.attach?.wall && wall) {
+    const f = wall.frame, sign = o.attach.side === 'left' ? 1 : -1, face = o.attach.side === 'left' ? f.offL : f.offR;
+    u = f.u; v = [f.n[0] * sign, f.n[1] * sign];
+    base = at(at(wall.a, u, o.attach.offset), v, face + (o.attach.gap || 0));
+  } else if (o.pos) {
+    const r = (o.rotationDeg || 0) * Math.PI / 180;
+    u = [Math.cos(r), Math.sin(r)]; v = [-Math.sin(r), Math.cos(r)]; base = o.pos;
+  } else return {};
+  const out = { x0: at(base, v, d / 2), x1: at(at(base, u, w), v, d / 2), y1: at(at(base, u, w / 2), v, d) };
+  if (!o.attach) out.y0 = at(base, u, w / 2);
+  return out;
+}
+
+/**
+ * An object's side `side` dragged to plan point p (UX13): its new { size, pos } (free) or { size, attach } (on a wall). The
+ * opposite side stays where it is; whole centimetres unless `exact`; at least `min` mm. `wall` as for resizeHandles().
+ */
+export function resizeObject(o, side, p, wall = null, { exact = false, min = 50 } = {}) {
+  const snap = v => (exact ? r1(v) : Math.round(v / 10) * 10);
+  const [w, d, h] = o.size;
+  if (o.attach?.wall && wall) {
+    const f = wall.frame, sign = o.attach.side === 'left' ? 1 : -1, face = o.attach.side === 'left' ? f.offL : f.offR;
+    const s = (p[0] - wall.a[0]) * f.u[0] + (p[1] - wall.a[1]) * f.u[1], t = ((p[0] - wall.a[0]) * f.n[0] + (p[1] - wall.a[1]) * f.n[1]) * sign;
+    const end = o.attach.offset + w;
+    if (side === 'x0') { const off = Math.min(Math.max(snap(s), 0), end - min); return { size: [r1(end - off), d, h], attach: { ...o.attach, offset: r1(off) } }; }
+    if (side === 'x1') return { size: [r1(Math.min(Math.max(snap(s) - o.attach.offset, min), f.L - o.attach.offset)), d, h], attach: { ...o.attach } };
+    return { size: [w, r1(Math.max(snap(t - face - (o.attach.gap || 0)), min)), h], attach: { ...o.attach } };
+  }
+  const r = (o.rotationDeg || 0) * Math.PI / 180, u = [Math.cos(r), Math.sin(r)], v = [-Math.sin(r), Math.cos(r)];
+  const q = [p[0] - o.pos[0], p[1] - o.pos[1]], x = q[0] * u[0] + q[1] * u[1], y = q[0] * v[0] + q[1] * v[1];
+  let x0 = 0, x1 = w, y0 = 0, y1 = d;
+  if (side === 'x0') x0 = Math.min(snap(x), w - min);
+  if (side === 'x1') x1 = Math.max(snap(x), min);
+  if (side === 'y0') y0 = Math.min(snap(y), d - min);
+  if (side === 'y1') y1 = Math.max(snap(y), min);
+  return { size: [r1(x1 - x0), r1(y1 - y0), h], pos: [r1(o.pos[0] + u[0] * x0 + v[0] * y0), r1(o.pos[1] + u[1] * x0 + v[1] * y0)] };
+}
+
+/**
+ * A free object dragged near a wall (ui-consistency plan, UX15): when its back would come within `reach` mm of a wall face
+ * (or into it), the attach that hangs it flush on that face, centred on its middle `mid`; else null. depth = the object's
+ * depth (its back is depth/2 from its middle), width = its width along the wall.
+ */
+export function wallSnap(mid, width, depth, walls, frames, { reach = 150, hasBody = w => w.kind !== 'virtual' && (w.thickness || 0) > 0 } = {}) {
+  let best = null;
+  for (const w of walls || []) {
+    if (!hasBody(w)) continue;
+    const f = frames.get(w.id);
+    if (!f) continue;
+    const s = (mid[0] - w.a[0]) * f.u[0] + (mid[1] - w.a[1]) * f.u[1], t = (mid[0] - w.a[0]) * f.n[0] + (mid[1] - w.a[1]) * f.n[1];
+    if (s < 0 || s > f.L) continue;
+    const side = t >= 0 ? 'left' : 'right', face = side === 'left' ? f.offL : f.offR, gap = Math.abs(t) - face - depth / 2;
+    if (gap > reach || gap < -depth / 2) continue;
+    if (!best || gap < best.gap) best = { gap, attach: { wall: w.id, side, offset: r1(Math.min(Math.max(s - width / 2, 0), Math.max(f.L - width, 0))) } };
+  }
+  return best?.attach ?? null;
+}
+
+/**
+ * An object on a wall pulled away from it (UX15): when its middle `mid` is more than `away` mm beyond where it hangs, the free
+ * placement that keeps it facing the same way ({ pos, rotationDeg }); else null. faceNormal = the wall face's outward
+ * direction at the object (resolveAttach().dir), facePoint = a point on that face.
+ */
+export function pullOff(o, mid, facePoint, faceNormal, { away = 300 } = {}) {
+  const dist = (mid[0] - facePoint[0]) * faceNormal[0] + (mid[1] - facePoint[1]) * faceNormal[1];
+  if (dist - o.size[1] / 2 - (o.attach?.gap || 0) <= away) return null;
+  // its front (local +y) keeps pointing away from the wall: -sin r = n.x, cos r = n.y
+  const rotationDeg = ((Math.round(Math.atan2(-faceNormal[0], faceNormal[1]) * 180 / Math.PI) % 360) + 360) % 360;
+  return { pos: boxPosForMiddle({ size: o.size, rotationDeg }, mid), rotationDeg };
+}
+
+/**
+ * Stairs dragged on the plan (ui-consistency plan, UX17): their start moved by d = [dx, dy]. A start that hangs on a point keeps
+ * hanging on it with its offset changed; a start at a plan position moves. `snap` = { ref } of a point the start was dropped
+ * on: it hangs on that point from now on, with no offset. Returns the new `start`.
+ */
+export function moveStairsStart(start, d, snap = null) {
+  if (snap) return { ref: snap.ref, offset: [0, 0] };
+  if (start?.ref) return { ...start, offset: [r1((start.offset?.[0] ?? 0) + d[0]), r1((start.offset?.[1] ?? 0) + d[1])] };
+  const p = start?.pos ?? [0, 0];
+  return { ...start, pos: [r1(p[0] + d[0]), r1(p[1] + d[1])] };
+}
+
+/** The walking direction for stairs turned on the plan: the way from their start point to the pointer, in 90° steps. */
+export function turnStairs(startPoint, pointer) {
+  const a = Math.atan2(pointer[1] - startPoint[1], pointer[0] - startPoint[0]) * 180 / Math.PI;
+  return ((Math.round(a / 90) * 90) % 360 + 360) % 360;
+}

@@ -69,7 +69,7 @@
         <label>Shadows on this computer <select id="hs_shadowsDesktop"><option value="">default</option><option value="none">None</option><option value="few">Few</option><option value="average">Average</option><option value="lots">Lots</option><option value="all">All</option></select></label>
         <label>Shadows on a phone or tablet <select id="hs_shadowsMobile"><option value="">default</option><option value="none">None</option><option value="few">Few</option><option value="average">Average</option><option value="lots">Lots</option><option value="all">All</option></select></label>
       </div>
-      <div style="margin-top:6px"><button type="button" class="primary" id="hsApply">Apply</button> <button type="button" id="hsRevert">Revert</button> <span id="hsMsg" class="help"></span></div>
+      <div class="mt6"><button type="button" class="primary" id="hsApply">Apply</button> <button type="button" id="hsRevert">Revert</button> <span id="hsMsg" class="help"></span></div>
     </details>
   </section>
   <section id="savebar" class="savebar">
@@ -91,7 +91,7 @@
   </section>
   </div>
   <div id="browse">
-  <p class="help">Click something in the plan or the list to select it; double-click it, press Enter or use ✎ to edit it. Esc lets go.</p>
+  <p class="help">Click something in the plan or the list to select it; double-click it, press Enter or use ✎ to edit it. Esc lets go. <a href="#" id="keysHelp" title="Every key and mouse gesture (?)">Keys and mouse…</a></p>
 
   <h2>House <span id="addHouse" class="inline"></span></h2>
   <div id="tree" class="tree"></div>
@@ -123,12 +123,12 @@
       <label>The same point on another level <select id="anB"></select></label>
     </div>
     <div class="row btns"><button id="anAdd">+ Anchor</button></div>
-    <div id="anErr" class="help" style="color:var(--bad)"></div>
+    <div id="anErr" class="help err"></div>
   </details>
   <details class="sect"><summary>Checks <span id="checkCount"></span></summary>
     <p class="help">Control measurements: two points and what the tape or laser says, the furthest off first. Measure two points (📏, point – point) and <b>Keep as check</b>. A check between two corners of a room measured by lengths and diagonals can join its solve (<i>in the solve</i>).</p>
     <div id="checkList"></div>
-    <div id="ckErr" class="help" style="color:var(--bad)"></div>
+    <div id="ckErr" class="help err"></div>
   </details>
   <details class="sect" id="placeSect"><summary>Place the house <span id="placeBadge" class="help"></span></summary>
     <p class="help" id="placeSum"></p>
@@ -136,17 +136,17 @@
       <small>Type or paste a position in any form: <code>59.33, 18.07</code> · <code>59°19.8′N 18°4.1′E</code> · <code>N 6580743, E 674572</code> (SWEREF 99 TM) · a link from a maps app. Empty = not placed.</small>
       <input id="placePos" autocomplete="off" placeholder="59.33, 18.07"></label>
     <div id="placeSays" class="help"></div>
-    <label>Plan north is rotated <input id="north" inputmode="decimal" placeholder="0" style="width:90px;display:inline-block" autocomplete="off"> ° clockwise from true north
+    <label>Plan north is rotated <input id="north" inputmode="decimal" placeholder="0" class="inline-num" autocomplete="off"> ° clockwise from true north
       <small>Pick any direction as "plan north" (e.g. along the front wall) and enter how far it is from real north; the plan stays in the house's own axes.</small></label>
     <details class="sect"><summary>…or from a wall and a compass bearing</summary>
       <label>Wall (runs from its start to its end, in plan millimetres)<select id="placeWall"></select></label>
-      <label>Compass bearing of the direction from its start to its end <input id="placeBearing" inputmode="decimal" placeholder="e.g. 28" style="width:90px;display:inline-block" autocomplete="off"> ° <small>0 = north, 90 = east, 180 = south, 270 = west</small></label>
+      <label>Compass bearing of the direction from its start to its end <input id="placeBearing" inputmode="decimal" placeholder="e.g. 28" class="inline-num" autocomplete="off"> ° <small>0 = north, 90 = east, 180 = south, 270 = west</small></label>
       <button type="button" id="placeUseWall">Work out the north angle</button>
     </details>
     <div id="placeDial" title="The plan's axes and true north"></div>
-    <label>Ground-floor finished floor <input id="placeHeight" inputmode="decimal" placeholder="e.g. 42.5" style="width:110px;display:inline-block" autocomplete="off"> m above sea level (RH 2000)
+    <label>Ground-floor finished floor <input id="placeHeight" inputmode="decimal" placeholder="e.g. 42.5" class="inline-num wide" autocomplete="off"> m above sea level (RH 2000)
       <small>The height of the finished floor of the ground floor, which is the plan's zero. Measured or read from a drawing, never guessed.</small></label>
-    <div style="margin-top:6px"><button type="button" class="primary" id="placeApply">Apply</button> <button type="button" id="placeRevert">Revert</button> <span id="placeMsg" class="help"></span></div>
+    <div class="mt6"><button type="button" class="primary" id="placeApply">Apply</button> <button type="button" id="placeRevert">Revert</button> <span id="placeMsg" class="help"></span></div>
   </details>
   </div>
   <div id="edit" hidden>
@@ -155,25 +155,25 @@
     <h2 id="edTitle">Room</h2>
     <div class="grid2">
       <label>Name<input id="name" autocomplete="off"></label>
-      <label>Id<input id="rid" readonly></label>
+      <label hidden>Id<input id="rid" readonly></label>
     </div>
     <label id="copyRow">Copy from <small>the shape and options of one already measured; on the level just below or above it lands exactly on it and follows it</small><select id="copyFrom"></select></label>
     <label class="inl" id="exteriorRow"><input type="checkbox" id="exterior"> Exterior (balcony, terrace)</label>
     <div class="grid2" id="roomOptions">
-      <label>Floor <select id="rFloor"><option value="slab">a floor (slab)</option><option value="none">none: open to the level below</option></select></label>
+      <label>Floor <select id="rFloor" data-seg><option value="slab">a floor (slab)</option><option value="none">none: open to the level below</option></select></label>
       <label>Floor level <small>mm above (− below) the level's floor: a step</small><input id="rFloorOff" inputmode="numeric" placeholder="0" autocomplete="off"></label>
       <label>Ceiling height <small>mm; empty = the level's <span id="rCeilNote"></span></small><input id="rCeil" inputmode="numeric" autocomplete="off"></label>
     </div>
     <div class="grid2" id="solidFields" hidden>
-      <label>Kind<select id="sKind"><option value="chimney" data-icon="chimney">chimney</option><option value="pillar" data-icon="pillar">pillar</option><option value="box" data-icon="box">boxed-in pipe or duct</option></select></label>
-      <label>Shape<select id="sShape"><option value="outline">measured walking round it</option><option value="round">round: a diameter</option></select></label>
+      <label>Kind<select id="sKind" data-seg><option value="chimney" data-icon="chimney">chimney</option><option value="pillar" data-icon="pillar">pillar</option><option value="box" data-icon="box">boxed-in pipe or duct</option></select></label>
+      <label>Shape<select id="sShape" data-seg><option value="outline">measured walking round it</option><option value="round">round: a diameter</option></select></label>
       <label>Colour<input type="color" id="sColor"></label>
       <label>Base <small>mm above the floor (boxing under the ceiling: its underside; negative: down through the slab) <a href="#" id="sBaseDown" title="Start at the ceiling of the level below, so the chimney has no gap through the floor">↧ to the ceiling below</a></small><input id="sBase" inputmode="numeric" placeholder="0" autocomplete="off"></label>
       <label>Height <small>mm, empty = up to the ceiling</small><input id="sHeight" inputmode="numeric" autocomplete="off"></label>
     </div>
     <label class="inl" id="sCutsRow" title="A chimney or post standing in a wall: the wall is cut where it stands, so the rooms can be measured as plain rectangles"><input type="checkbox" id="sCuts"> Walls give way to it (cut where it stands)</label>
     <div id="sSidesBox" hidden>
-      <label style="margin-bottom:2px">Sides <small>painted per room: each room sees its own colour or material on the faces along it (applied with the button below)</small></label>
+      <label class="tight">Sides <small>painted per room: each room sees its own colour or material on the faces along it (applied with the button below)</small></label>
       <div id="sSides"></div>
     </div>
 
@@ -194,23 +194,25 @@
     <div id="polyBox">
     <p class="help" id="walkHelp">Walk <b>clockwise</b>, room on your <b>right</b>. Corner 0 is where you start; wall A runs from corner 0 to 1, B from 1 to 2, and so on (the letters are on the plan). Lengths are listed in that order. All lengths in mm.</p>
     <label>Method
-      <select id="mode">
+      <select id="mode" data-seg>
         <option value="rectilinear">C · Rectilinear (all corners square)</option>
         <option value="lengths">B · Lengths + diagonals (most accurate)</option>
         <option value="traverse">A · Traverse (lengths + angles)</option>
       </select>
     </label>
-    <label>Edge lengths <small>(one per edge, e.g. 4000 5000 4000 5000)</small>
-      <textarea id="lengths" rows="2" spellcheck="false"></textarea></label>
+    <div id="wallTable" class="walltable"></div>
     <label id="closureRow">When the walls do not quite close
-      <select id="closure">
+      <select id="closure" data-seg>
         <option value="spread">Spread the gap over all walls</option>
         <option value="line">Keep walls as measured; last wall runs straight to corner 0</option>
         <option value="square">Keep every corner square; each gap goes into the walls running its way (rectilinear)</option>
       </select></label>
+    <div id="lockOffers" class="help"></div>
+    <details id="asText" class="sect"><summary>As text <small>(paste a whole room, or the parts the table does not show)</small></summary>
+    <label>Edge lengths <small>(one per edge, e.g. 4000 5000 4000 5000)</small>
+      <textarea id="lengths" rows="2" spellcheck="false"></textarea></label>
     <label id="locksRow">Locked walls <small>walls that lie exactly along x or y, e.g. <code>A x, D y</code> (wall letter, axis)</small>
       <input id="locks" spellcheck="false" autocomplete="off"></label>
-    <div id="lockOffers" class="help"></div>
     <label>Walls not measured <small>wall letters whose length was worked out (e.g. the way back, or a wall run to a coordinate); empty = all measured</small>
       <input id="derived" spellcheck="false" autocomplete="off"></label>
     <label>Exact lengths <small>walls whose length you are sure of, e.g. <code>A</code>: they take none of the closing gap, the other walls adjust</small>
@@ -223,9 +225,10 @@
       <input id="corners" spellcheck="false" autocomplete="off"></label>
     <label id="diagRow">Diagonals <small>one per line: <code>0-2: 6403</code> (corner a - corner b: length)</small>
       <textarea id="diagonals" rows="2" spellcheck="false"></textarea></label>
+    </details>
     <div class="grid2">
-      <label>First edge heading <small>° counter-clockwise from plan east (90 = plan north)</small><input id="heading" placeholder="0" autocomplete="off"></label>
-      <div class="help" id="headingTrue" style="align-self:center"></div>
+      <label>First edge heading <small>° counter-clockwise from plan east (90 = plan north)</small><input id="heading" inputmode="decimal" placeholder="0" autocomplete="off"></label>
+      <div class="help self-center" id="headingTrue"></div>
     </div>
     <label>Corner 0 is placed at <small>a point of the house, plus an offset</small>
       <select id="originRef"></select></label>
@@ -265,18 +268,19 @@
     <h2>Wall <span id="wTitle"></span></h2>
     <div id="wInfo" class="help"></div>
     <label>Name <small>optional, e.g. “Hall north wall”; shown instead of the id</small><input id="wName" autocomplete="off"></label>
+    <h3 class="psec">What it is</h3>
     <div class="grid2">
       <label>Kind
-        <select id="wKind"><option value="wall">wall</option><option value="railing">railing</option><option value="virtual">virtual (boundary only)</option></select></label>
+        <select id="wKind" data-seg><option value="wall">wall</option><option value="railing">railing</option><option value="virtual">virtual (boundary only)</option></select></label>
       <label>Light
-        <select id="wLight"><option value="">default for the kind</option><option value="opaque">blocks light</option><option value="transparent">lets light through</option></select></label>
+        <select id="wLight" data-seg><option value="">default for the kind</option><option value="opaque">blocks light</option><option value="transparent">lets light through</option></select></label>
       <label>Thickness <small id="wThickNote">mm</small><input id="wThick" inputmode="numeric" autocomplete="off"></label>
       <label class="inl" id="wMeasuredRow"><input type="checkbox" id="wMeasured"> measured</label>
       <label class="flat">Height <small>mm from its base; empty = up to the ceiling</small><input id="wHeight" inputmode="numeric" autocomplete="off"></label>
       <label class="flat">Base <small>mm above floor</small><input id="wBase" inputmode="numeric" placeholder="0" autocomplete="off"></label>
     </div>
     <div id="wPosBox" hidden>
-      <label style="margin-bottom:2px">Where it stands <small>a hand-drawn wall, in mm as you measure it: its start from a corner, then how far it runs</small></label>
+      <label class="tight">Where it stands <small>a hand-drawn wall, in mm as you measure it: its start from a corner, then how far it runs</small></label>
       <div class="grid2">
         <label>Start follows <select id="wAnchA" title="A room corner the start hangs on: it moves (and turns) with that room"></select></label>
         <label>End follows <select id="wAnchB" title="A room corner the end hangs on: it moves (and turns) with that room"></select></label>
@@ -286,7 +290,7 @@
         <label>Length y <small>north (− south)</small><input id="wLy" inputmode="decimal" autocomplete="off"></label>
       </div>
       <div class="help" id="wPosOut"></div>
-      <label>Thickness goes <select id="wJustify"><option value="left">to the left of start → end (the line is a face)</option><option value="right">to the right of start → end</option><option value="center">both ways from the line (centred)</option></select></label>
+      <label>Thickness goes <select id="wJustify" data-seg><option value="left">to the left of start → end (the line is a face)</option><option value="right">to the right of start → end</option><option value="center">both ways from the line (centred)</option></select></label>
       <label class="inl" title="Dragging an end on the plan never tilts it; the start and lengths keep one of the lengths 0"><input type="checkbox" id="wLock"> Keep it along x or y</label>
       <div class="help">On the plan: drag the wall to move it, or one of its ends (snaps to corners; Shift keeps it straight, Alt: no snapping).</div>
     </div>
@@ -301,32 +305,34 @@
       <label>Bottom level for <small>mm from the start</small><input id="wBotFlatA" inputmode="numeric" placeholder="0" autocomplete="off"></label>
       <label>Bottom level for <small>mm before the end</small><input id="wBotFlatB" inputmode="numeric" placeholder="0" autocomplete="off"></label>
     </div>
+    <h3 class="psec">Look</h3>
     <div class="sideLook">
       <label>Left side <small id="wLeftRoom"></small>
-        <select id="wLeftMode"><option value="">default</option><option value="color">colour</option><option value="material">material</option></select></label>
+        <select id="wLeftMode" data-seg><option value="">default</option><option value="color">colour</option><option value="material">material</option></select></label>
       <input type="color" id="wLeftColor" title="Colour of the left side">
       <select id="wLeftMat" title="Material of the left side"></select>
     </div>
     <div class="swatches" id="wLeftSwatches"></div>
     <div class="sideLook">
       <label>Right side <small id="wRightRoom"></small>
-        <select id="wRightMode"><option value="">default</option><option value="color">colour</option><option value="material">material</option></select></label>
+        <select id="wRightMode" data-seg><option value="">default</option><option value="color">colour</option><option value="material">material</option></select></label>
       <input type="color" id="wRightColor" title="Colour of the right side">
       <select id="wRightMat" title="Material of the right side"></select>
     </div>
     <div class="swatches" id="wRightSwatches"></div>
     <div id="wRoomLooksBox" hidden>
-      <label style="margin-bottom:2px">Per room <small>a side running along several rooms can look different in each; default = that side's look above</small></label>
+      <label class="tight">Per room <small>a side running along several rooms can look different in each; default = that side's look above</small></label>
       <div id="wRoomLooks"></div>
     </div>
+    <h3 class="psec">On it</h3>
     <div id="wOpenings" class="help"></div>
     <div class="row btns"><span id="wAdd" class="inline"></span></div>
     <div class="grid2">
       <label>Split at <small id="wSplitNote">mm from the start</small><input id="wSplitAt" inputmode="numeric" autocomplete="off"></label>
-      <div><button id="wSplit" title="Two walls, each with its own thickness, kind and colours (e.g. a closet front next to a chimney)">Split wall here</button></div>
+      <div><button id="wSplit" title="Two walls, each with its own thickness, kind and colours (e.g. a closet front next to a chimney)">Split wall here</button> <button id="wSplitPick" type="button" title="Point at the wall on the plan and click where it splits (whole centimetres, Alt: exact); a right-click on a wall offers it too">Split on the plan…</button></div>
     </div>
     <div class="row btns" id="wJoinRow" hidden></div>
-    <div id="wErr" class="help" style="color:var(--bad)"></div>
+    <div id="wErr" class="help err"></div>
     <div class="row btns">
       <button class="moved" id="wApply">Apply wall changes</button>
       <button id="wUnbind" hidden title="Stop following the rooms; the wall stays exactly where it is">Keep as hand-drawn</button>
@@ -339,10 +345,11 @@
     <div id="oInfo" class="help"></div>
     <label>Name <small>optional, e.g. “Bathroom window”; shown instead of the id</small><input id="oName" autocomplete="off"></label>
     <label>Copy from <small>type and sizes of another opening (stays where it is)</small><select id="oCopy" class="copyFrom"></select></label>
+    <h3 class="psec">Where and how big</h3>
     <label>Measured from <small>the corner the position counts from (marked “from here” on the plan)</small><select id="oFrom"></select> <button type="button" id="oFromPick" title="Click the corner on the plan instead (every corner along the wall is marked)">On the plan</button></label>
     <div class="grid2">
       <label>Type
-        <select id="oType"><option value="door" data-icon="door">door</option><option value="window" data-icon="window">window</option><option value="passage" data-icon="passage">passage (no door)</option></select></label>
+        <select id="oType" data-seg><option value="door" data-icon="door">door</option><option value="window" data-icon="window">window</option><option value="passage" data-icon="passage">passage (no door)</option></select></label>
       <label class="inl" id="oMeasuredRow"><input type="checkbox" id="oMeasured"> all values measured</label>
       <label>Position <small id="oOffsetNote">mm to the near edge</small><input id="oOffset" inputmode="numeric" autocomplete="off"></label>
       <label>Width <small>mm</small><input id="oWidth" inputmode="numeric" autocomplete="off"></label>
@@ -351,34 +358,37 @@
       <label>Height <small>mm, bottom to top</small><input id="oHeight" inputmode="numeric" autocomplete="off"></label>
       <label>Below ceiling <small id="oBelowNote">mm, top to ceiling</small><input id="oBelow" inputmode="numeric" autocomplete="off"></label>
     </div>
+    <h3 class="psec">How it opens</h3>
     <label id="oDoorOpensRow">Door opens
-      <select id="oDoorOpens"><option value="swing" data-icon="swingOut">on hinges (swings)</option><option value="sliding" data-icon="sliding">sliding along the wall</option><option value="pocket" data-icon="pocket">sliding into the wall (pocket)</option></select></label>
+      <select id="oDoorOpens" data-seg><option value="swing" data-icon="swingOut">on hinges (swings)</option><option value="sliding" data-icon="sliding">sliding along the wall</option><option value="pocket" data-icon="pocket">sliding into the wall (pocket)</option></select></label>
     <label id="oOpensRow">Window opens
       <select id="oOpens"><option value="fixed">fixed (does not open)</option><option value="side-hung">side-hung (like a door)</option><option value="top-hung">top-hung</option><option value="bottom-hung">bottom-hung</option><option value="tilt-turn">tilt-turn</option><option value="sliding">sliding</option></select></label>
     <div class="grid2" id="oLeafRow">
-      <label><span id="oHingeLbl">Hinge</span> <select id="oHinge"><option value="near" data-icon="hingeNear">near edge</option><option value="far" data-icon="hingeFar">far edge</option><option value="both" data-icon="hingesBoth">both sides (double)</option></select></label>
-      <label id="oSwingRow"><span id="oSwingLbl">Opens into</span> <select id="oSwing"><option value="right">right</option><option value="left">left</option></select></label>
+      <label><span id="oHingeLbl">Hinge</span> <select id="oHinge" data-seg><option value="near" data-icon="hingeNear">near edge</option><option value="far" data-icon="hingeFar">far edge</option><option value="both" data-icon="hingesBoth">both sides (double)</option></select></label>
+      <label id="oSwingRow"><span id="oSwingLbl">Opens into</span> <select id="oSwing" data-seg><option value="right">right</option><option value="left">left</option></select></label>
     </div>
+    <h3 class="psec">How it looks</h3>
     <label id="oThickRow">Thickness of the <span id="oThickWhat">window</span> itself <small>mm, its frame or leaf (not the hole in the wall); empty = not measured</small><input id="oThick" inputmode="numeric" autocomplete="off"></label>
     <div id="oLookBox">
-      <label id="oPlaceRow">Sits <small>where the <span id="oPlaceWhat">window</span> is across the wall (the plan and 3D)</small><select id="oPlace"><option value="">in the middle of the wall</option><option value="left">flush with the left side</option><option value="right">flush with the right side</option></select></label>
+      <label id="oPlaceRow">Sits <small>where the <span id="oPlaceWhat">window</span> is across the wall (the plan and 3D)</small><select id="oPlace" data-seg><option value="">in the middle of the wall</option><option value="left">flush with the left side</option><option value="right">flush with the right side</option></select></label>
       <label id="oShiftRow">± Shift across the wall <small>mm from that place: + toward the left side, − toward the right; empty = 0</small><input id="oShift" inputmode="numeric" placeholder="0" autocomplete="off"></label>
       <div class="grid2">
         <div id="oColorRow"><label class="inl"><input type="checkbox" id="oColorUse"> Colour of its frame</label> <input type="color" id="oColor" value="#f2f0ea"></div>
-        <div id="oSillRow" class="grid2" style="grid-column:1/-1">
+        <div id="oSillRow" class="grid2 span2">
           <label>Sill board <small>mm out from the wall, empty = none</small><input id="oSillDepth" inputmode="numeric" autocomplete="off"></label>
           <div><label class="inl"><input type="checkbox" id="oSillColorUse"> Its colour</label> <input type="color" id="oSillColor" value="#d8d4cc"></div>
         </div>
       </div>
     </div>
     <div id="oBindBox">
+      <h3 class="psec">Home Assistant</h3>
       <label>Door sensor in Home Assistant <small id="oEntityNote">a binary_sensor that says open (on) or closed (off); picking one links it when you Apply</small><input id="oEntity" autocomplete="off" spellcheck="false" placeholder="type to search: name or entity id"></label>
       <div id="oEntityPick" class="entpick" hidden></div>
       <div id="oEntityNow" class="help"></div>
       <div class="help" id="oBindHint">Without a sensor the door is drawn open, and light passes it. A closed sensor shuts it. Sliding and pocket doors do not change with the sensor.</div>
     </div>
     <div id="oHosted" class="pform"></div>
-    <div id="oErr" class="help" style="color:var(--bad)"></div>
+    <div id="oErr" class="help err"></div>
     <div class="row btns">
       <button class="moved" id="oApply">Apply opening changes</button>
       <button class="moved" id="oDelete">Delete opening</button>
@@ -392,6 +402,7 @@
     <div id="xInfo" class="help"></div>
     <label>Name <small>optional, e.g. “Kitchen ceiling lamp”; shown instead of the id</small><input id="xName" autocomplete="off"></label>
     <label>Copy from <small>height and reach of another one (stays where it is)</small><select id="xCopy" class="copyFrom"></select></label>
+    <h3 class="psec">Where</h3>
     <label id="xFromRow">Measured from <small>the corner the position counts from (marked “from here” on the plan)</small><select id="xFrom"></select> <button type="button" id="xFromPick" title="Click the corner on the plan instead (every corner along the wall is marked)">On the plan</button></label>
     <div class="grid2">
       <label>Height <small id="xZNote">mm above the floor</small><input id="xZ" inputmode="numeric" autocomplete="off"></label>
@@ -404,17 +415,18 @@
       <label id="xStartRow">Starts <small>mm along that side from its first corner (empty = at the corner)</small><input id="xStart" inputmode="numeric" autocomplete="off"></label>
       <label id="xInsetRow">Set back <small>mm in from the edge, e.g. behind the front of a cabinet (empty = on the edge)</small><input id="xInset" inputmode="numeric" autocomplete="off"></label>
       <label id="xAtRow">Where <small id="xAtNote">at which edge</small><select id="xAt"></select></label>
-      <label id="xSideRow">On the side of <select id="xSide"><option value="right">right</option><option value="left">left</option></select></label>
+      <label id="xSideRow">On the side of <select id="xSide" data-seg><option value="right">right</option><option value="left">left</option></select></label>
       <label id="xInRow">Stands in <small>a window or door of this wall (a lamp in the glass); “nothing” = on the wall face</small><select id="xIn"></select></label>
       <label id="xXRow">x <small>mm, east</small><input id="xX" inputmode="numeric" autocomplete="off"></label>
       <label id="xYRow">y <small>mm, north</small><input id="xY" inputmode="numeric" autocomplete="off"></label>
     </div>
     <div id="xBindBox">
+      <h3 class="psec">Home Assistant</h3>
       <label>Home Assistant entity <small id="xEntityNote">the light or switch it is in Home Assistant; picking one links it when you Apply</small><input id="xEntity" autocomplete="off" spellcheck="false" placeholder="type to search: name or entity id"></label>
       <div id="xEntityPick" class="entpick" hidden></div>
       <div id="xEntityNow" class="help"></div>
       <div id="xLookRow">
-        <label style="margin-bottom:2px">When on, it looks like <small>for what Home Assistant does not tell: a smart outlet or relay driving an ordinary lamp, a light without dimming or colour; empty = full and warm white</small></label>
+        <label class="tight">When on, it looks like <small>for what Home Assistant does not tell: a smart outlet or relay driving an ordinary lamp, a light without dimming or colour; empty = full and warm white</small></label>
         <div class="grid2">
           <label>Brightness <small>%</small><input id="xLookBri" inputmode="numeric" placeholder="100" autocomplete="off"></label>
           <label>Colour temperature <small>K, e.g. 2700 warm</small><input id="xLookK" inputmode="numeric" placeholder="2700" autocomplete="off"></label>
@@ -422,14 +434,14 @@
           <label><input type="color" id="xLookColor" value="#ffd6aa"></label>
         </div>
       </div>
-      <div id="xControlsRow"><label style="margin-bottom:2px">Controls <small>lamps this switch turns on and off (a click on it toggles them)</small></label><div id="xControls" class="help"></div></div>
+      <div id="xControlsRow"><label class="tight">Controls <small>lamps this switch turns on and off (a click on it toggles them)</small></label><div id="xControls" class="help"></div></div>
       <div class="row btns"><span id="xBindOut" class="help"></span></div>
     </div>
     <div id="xUseRow" hidden>
       <label>Use a lit object's light here <small>this lamp is removed and its link goes to the object</small><select id="xUseObject"></select></label>
       <div class="row btns"><button id="xUseLight">Use the object's light</button></div>
     </div>
-    <div id="xErr" class="help" style="color:var(--bad)"></div>
+    <div id="xErr" class="help err"></div>
     <div class="row btns">
       <button class="moved" id="xApply">Apply fixture changes</button>
       <button class="moved" id="xDelete">Delete fixture</button>
@@ -439,9 +451,9 @@
     <h2>Object <span id="obTitle"></span></h2>
     <div id="obInfo" class="help"></div>
     <div id="obPlacedRow">
-      <label>Placed <select id="obPlaced"><option value="room" data-icon="free">in the room</option><option value="wall" data-icon="onWall">on a wall</option><option value="opening" data-icon="inOpening">in an opening</option></select></label>
+      <label>Placed <select id="obPlaced" data-seg><option value="room" data-icon="free">in the room</option><option value="wall" data-icon="onWall">on a wall</option><option value="opening" data-icon="inOpening">in an opening</option></select></label>
       <label id="obOpeningRow" hidden>Opening <select id="obOpening"></select></label>
-      <label id="obAtRow" hidden>Stands <select id="obAt"><option value="sill" data-icon="sill">on the sill</option><option value="head" data-icon="head">at the head</option></select></label>
+      <label id="obAtRow" hidden>Stands <select id="obAt" data-seg><option value="sill" data-icon="sill">on the sill</option><option value="head" data-icon="head">at the head</option></select></label>
       <div id="obPlacedNote" class="help"></div>
     </div>
     <div id="obBlueprint" class="help" hidden></div>
@@ -452,6 +464,7 @@
       <div id="obOptionsNote" class="help"></div>
     </details>
     <label>Copy from <small>size, height and colour of another object (stays where it is)</small><select id="obCopy" class="copyFrom"></select></label>
+    <h3 class="psec">Size, look and place</h3>
     <div class="grid2">
       <label>Name<input id="obName" autocomplete="off"></label>
       <label id="obColorRow">Colour<input type="color" id="obColor"></label>
@@ -463,7 +476,7 @@
       <label>Height <small>mm</small><input id="obH" inputmode="numeric" autocomplete="off"></label>
       <label>Bottom <small>mm above the floor</small><input id="obZ" inputmode="numeric" autocomplete="off"></label>
       <label id="obOffsetRow">Position <small id="obOffsetNote">mm along the wall</small><input id="obOffset" inputmode="numeric" autocomplete="off"></label>
-      <label id="obSideRow">On the side of <select id="obSide"><option value="right">right</option><option value="left">left</option></select></label>
+      <label id="obSideRow">On the side of <select id="obSide" data-seg><option value="right">right</option><option value="left">left</option></select></label>
       <label id="obGapRow">Gap from the wall <small>mm</small><input id="obGap" inputmode="numeric" placeholder="0" autocomplete="off"></label>
       <label id="obShiftRow">± Shift across the wall <small>mm from the opening’s room face: + into the room, − deeper into the opening; empty = 0</small><input id="obShift" inputmode="numeric" placeholder="0" autocomplete="off"></label>
       <label id="obXRow">x <small>mm, east (a corner)</small><input id="obX" inputmode="numeric" autocomplete="off"></label>
@@ -471,11 +484,12 @@
       <label id="obRotRow">Turned <small>degrees, 0 = width along east</small><input id="obRot" inputmode="numeric" placeholder="0" autocomplete="off"></label>
     </div>
     <div id="obBindBox" hidden>
+      <h3 class="psec">Home Assistant</h3>
       <label>Light in Home Assistant <small>the light this object is when it is on; picking one links it when you Apply</small><input id="obEntity" autocomplete="off" placeholder="light.kitchen"></label>
       <div id="obEntityPick" class="entpick" hidden></div>
       <div id="obEntityNow" class="help"></div>
       <div id="obLookRow">
-        <label style="margin-bottom:2px">When on, it looks like <small>for what Home Assistant does not tell: a smart outlet or relay driving an ordinary lamp, a light without dimming or colour; empty = full and warm white</small></label>
+        <label class="tight">When on, it looks like <small>for what Home Assistant does not tell: a smart outlet or relay driving an ordinary lamp, a light without dimming or colour; empty = full and warm white</small></label>
         <div class="grid2">
           <label>Brightness <small>%</small><input id="obLookBri" inputmode="numeric" placeholder="100" autocomplete="off"></label>
           <label>Colour temperature <small>K, e.g. 2700 warm</small><input id="obLookK" inputmode="numeric" placeholder="2700" autocomplete="off"></label>
@@ -485,7 +499,7 @@
       </div>
       <label>Light radius <small>mm, how far its glow reaches on the plan; empty = the default for its kind (shown in grey)</small><input id="obLightRadius" inputmode="numeric" autocomplete="off"></label>
     </div>
-    <div id="obErr" class="help" style="color:var(--bad)"></div>
+    <div id="obErr" class="help err"></div>
     <div class="row btns">
       <button class="moved" id="obApply">Apply object changes</button>
       <button class="moved" id="obDelete">Delete object</button>
@@ -509,7 +523,7 @@
       <label>Width <small>mm, flight 1; empty = the stair's width</small><input id="stW1" inputmode="numeric" placeholder="stair" autocomplete="off"></label>
     </div>
     <label>Treads one by one <small>flight 1, optional: each tread's depth in mm, in walking order (<code>250, 262, 248</code>); then the run is their sum and a measured run is a check</small><input id="stT1" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
-    <label>Shape <select id="stShape"><option value="1">straight</option><option value="2">L: two flights, one turn</option><option value="3">U: three flights, two turns the same way</option></select></label>
+    <label>Shape <select id="stShape" data-seg><option value="1">straight</option><option value="2">L: two flights, one turn</option><option value="3">U: three flights, two turns the same way</option></select></label>
     <div class="grid2" id="stTwoRows">
       <label>Risers <small>flight 2 · steps + 1: <span id="stSteps2">–</span></small><input id="stR2" inputmode="numeric" autocomplete="off"></label>
       <label>Outer length <small>mm</small><input id="stL2" inputmode="numeric" autocomplete="off"></label>
@@ -523,16 +537,16 @@
     </div>
     <label id="stT3Row">Treads one by one <small>flight 3, optional</small><input id="stT3" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
     <div class="grid2" id="stTurnRows">
-      <label>Turns <select id="stTurn"><option value="L">left</option><option value="R">right</option></select></label>
-      <label>At each turn <select id="stLanding"><option value="square">a square landing</option><option value="winders">winders</option></select></label>
+      <label>Turns <select id="stTurn" data-seg><option value="L">left</option><option value="R">right</option></select></label>
+      <label>At each turn <select id="stLanding" data-seg><option value="square">a square landing</option><option value="winders">winders</option></select></label>
       <label id="stWindersRow">Winders <small>wedge steps</small><input id="stWinders" inputmode="numeric" autocomplete="off"></label>
     </div>
     <div class="grid2">
-      <label>Underneath <select id="stUnder"><option value="closed">closed (solid blocks)</option><option value="sloped">solid, sloped underside</option><option value="open">open (treads only)</option></select></label>
-      <label>Sides <select id="stSides"><option value="stepped">stepped</option><option value="sloped">sloped panels</option></select></label>
-      <label>Handrail <small>walking up</small><select id="stRail"><option value="none">none</option><option value="left">on the left</option><option value="right">on the right</option><option value="both">on both sides</option></select></label>
+      <label>Underneath <select id="stUnder" data-seg><option value="closed">closed (solid blocks)</option><option value="sloped">solid, sloped underside</option><option value="open">open (treads only)</option></select></label>
+      <label>Sides <select id="stSides" data-seg><option value="stepped">stepped</option><option value="sloped">sloped panels</option></select></label>
+      <label>Handrail <small>walking up</small><select id="stRail" data-seg><option value="none">none</option><option value="left">on the left</option><option value="right">on the right</option><option value="both">on both sides</option></select></label>
       <label id="stRailHRow">Rail height <small>mm above the steps' noses, empty = 900</small><input id="stRailH" inputmode="numeric" placeholder="900" autocomplete="off"></label>
-      <label id="stRailMountRow">Rail <small>how it is made and held</small><select id="stRailMount"><option value="">square bar with posts</option><option value="poles">round, on poles</option><option value="wall">round, on the wall (brackets)</option></select></label>
+      <label id="stRailMountRow">Rail <small>how it is made and held</small><select id="stRailMount" data-seg><option value="">square bar with posts</option><option value="poles">round, on poles</option><option value="wall">round, on the wall (brackets)</option></select></label>
       <label id="stRailDRow">Rail diameter <small>mm, empty = 60</small><input id="stRailD" inputmode="numeric" placeholder="60" autocomplete="off"></label>
       <label id="stRailSRow">Rail starts <small>mm up the first flight, empty = at its front edge; negative = before it</small><input id="stRailS" inputmode="numeric" placeholder="0" autocomplete="off"></label>
       <label id="stRailERow">Rail ends <small>mm short of the last flight's end, empty = at it; negative = past it</small><input id="stRailE" inputmode="numeric" placeholder="0" autocomplete="off"></label>
@@ -547,7 +561,7 @@
       <label>To x <input id="stRx2" inputmode="numeric" autocomplete="off"></label>
       <label>To y <input id="stRy2" inputmode="numeric" autocomplete="off"></label>
     </div>
-    <div id="stErr" class="help" style="color:var(--bad)"></div>
+    <div id="stErr" class="help err"></div>
     <div id="stSketch" class="stsketch" hidden></div>
     <div class="row btns">
       <button class="moved" id="stApply">Apply stairs changes</button>
@@ -557,24 +571,28 @@
   <section id="matForm" hidden>
     <div class="grid2">
       <label>Name<input id="mName" autocomplete="off"></label>
-      <label>Id<input id="mId" readonly></label>
+      <label hidden>Id<input id="mId" readonly></label>
       <label>Colour<input type="color" id="mColor"></label>
       <label>One repeat <small>mm (texture)</small><input id="mUv" inputmode="numeric" placeholder="1000" autocomplete="off"></label>
     </div>
     <div class="swatches" id="mSwatches"></div>
     <label>Texture <small>an image in the house's folder, e.g. <code>assets/panel.jpg</code> (optional; copy the file there yourself)</small><input id="mTex" autocomplete="off" spellcheck="false"></label>
     <div id="mUse" class="help"></div>
-    <div id="mErr" class="help" style="color:var(--bad)"></div>
+    <div id="mErr" class="help err"></div>
     <div class="row btns"><button class="moved" id="mApply">Apply</button><button class="moved" id="mDelete">Delete</button><button class="moved" id="mClose">Close</button></div>
   </section>
   </div>
   <div id="wallsOut" class="help report"></div>
   <div id="edBar" class="edbar" hidden>
+    <div id="edMsg" class="edmsg" role="alert" hidden></div>
+    <div class="edbtns">
     <button id="edDelete" class="danger" title="Delete it (confirmed first)">Delete</button>
-    <button id="edDup" hidden title="A copy beside it, with the same sizes (then opened)">Duplicate</button>
+    <button id="edDup" title="A copy beside it, with the same sizes (then opened)">Duplicate</button>
+    <span class="sp"></span>
     <button id="edRevert" title="Back to what is stored">Revert</button>
     <button id="edClose" title="Leave the editor (Esc)">Close</button>
     <button id="edApply" class="primary" title="Write the changes into the model (Save stores the file)">Apply</button>
+    </div>
   </div>
 </aside>
 </body>

@@ -5,7 +5,7 @@
 import { ICONS } from '../icons.js';
 
 /** The groups in the order a list shows them. */
-export const KIND_GROUPS = Object.freeze(['Seating', 'Tables', 'Beds', 'Storage', 'Kitchen', 'Bathroom', 'Lighting', 'Heating & other', 'Electronics', 'Other']);
+export const KIND_GROUPS = Object.freeze(['Seating', 'Tables', 'Beds', 'Storage', 'Kitchen', 'Bathroom', 'Lighting', 'Heating & other', 'Electronics', 'Miscellaneous', 'Other']);
 
 // abstract drawings, 24 × 24 strokes, one per family of model (a chair is a seat, back and legs; a sofa a wide seat with arms…)
 const svg = body => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
@@ -48,6 +48,8 @@ const DRAWN = {
   waterHeater: '<rect x="7" y="3" width="10" height="18" rx="5"/><path d="M12 7v4"/>',
   sauna: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M8 19h8M7 11h10"/>',
   tv: '<rect x="2" y="4" width="20" height="13" rx="1"/><path d="M8 21h8M12 17v4"/>',
+  catTree: '<path d="M12 2v20"/><ellipse cx="7" cy="7" rx="4" ry="1.3"/><ellipse cx="17" cy="12" rx="4" ry="1.3"/><ellipse cx="7" cy="17" rx="4" ry="1.3"/><path d="M7 22h10"/>',
+  chest: '<rect x="3" y="12" width="18" height="8" rx="1"/><path d="M3 12c0-4 4-6 9-6s9 2 9 6"/><path d="M12 12v3"/>',
   cube: '<path d="M12 3 4 7v10l8 4 8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/>',
 };
 for (const [name, body] of Object.entries(DRAWN)) ICONS[`kind:${name}`] = svg(body);
@@ -67,6 +69,7 @@ const TABLE = {
   'heat-pump-indoor': ['Heating & other', 'heatPump'], rug: ['Heating & other', 'rug'], planter: ['Heating & other', 'planter'],
   'water-heater': ['Heating & other', 'waterHeater'], 'sauna-heater': ['Heating & other', 'sauna'],
   tv: ['Electronics', 'tv'],
+  'cat-tree': ['Miscellaneous', 'catTree'], chest: ['Miscellaneous', 'chest'],
 };
 
 /** { group, icon } of a model: from the table, else a guess from its id, else Other with a cube. icon is a name in ICONS (`kind:…`). */

@@ -15,6 +15,10 @@ export const ICONS = {
   swingIn: svg('<path d="M4 4v16"/><path d="M4 20A14 14 0 0 0 18 6"/>'),
   sliding: svg('<path d="M3 5h18"/><rect x="4" y="8" width="9" height="11" rx="1"/><path d="M16 13h4m-2-2 2 2-2 2"/>'),
   pocket: svg('<path d="M3 4v16M21 4v16"/><rect x="8" y="9" width="8" height="6"/>'),
+  stackOne: svg('<rect x="6" y="6" width="12" height="12"/>'),
+  stackBelow: svg('<rect x="6" y="3" width="12" height="7"/><rect x="6" y="14" width="12" height="7"/>'),
+  stackAll: svg('<rect x="6" y="2" width="12" height="5"/><rect x="6" y="9.5" width="12" height="5"/><rect x="6" y="17" width="12" height="5"/>'),
+  branch: svg('<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-12 3-12 8"/>'),
   level: svg('<path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="m3 13 9 5 9-5"/>'),
   chimney: svg('<rect x="7" y="4" width="10" height="17"/><path d="M9 4V2h6v2"/>'),
   pillar: svg('<circle cx="12" cy="12" r="6"/>'),
@@ -46,4 +50,8 @@ export const ICONS = {
   door: svg('<path d="M6 21V4h8l4 2v15"/><path d="M3 21h18"/><circle cx="12" cy="13" r=".8" fill="currentColor"/>'),
   window: svg('<rect x="5" y="4" width="14" height="16"/><path d="M12 4v16M5 12h14"/>'),
   passage: svg('<path d="M5 21V10a7 7 0 0 1 14 0v11"/><path d="M3 21h18"/>'),
+  // the right-click menu (ui-consistency plan, UX9)
+  edit: svg('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'),
+  duplicate: svg('<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>'),
+  trash: svg('<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/><path d="M10 11v6M14 11v6"/>'),
 };

@@ -39,17 +39,27 @@ export function blueprintMap(list) {
 }
 
 /** Where an object can go on `level`: its rooms (with their middle) and its walls (with their length and rooms). */
+/** The area of a polygon in square metres (mm in, shoelace formula), for a hint such as "12.4 m²". */
+export function polygonAreaM2(polygon) {
+  let twice = 0;
+  for (let i = 0; i < polygon.length; i++) {
+    const [x0, y0] = polygon[i], [x1, y1] = polygon[(i + 1) % polygon.length];
+    twice += x0 * y1 - x1 * y0;
+  }
+  return Math.round(Math.abs(twice) / 2 / 1e4) / 100;
+}
+
 export function placeOptions(level) {
-  const rooms = (level.rooms || []).filter(r => r.polygon?.length >= 3).map(r => ({ id: r.id, name: displayName(r), centre: labelPoint(r.polygon).pos }));
+  const rooms = (level.rooms || []).filter(r => r.polygon?.length >= 3).map(r => ({ id: r.id, name: displayName(r), centre: labelPoint(r.polygon).pos, hint: `${polygonAreaM2(r.polygon)} m²` }));
   const roomName = new Map((level.rooms || []).map(r => [r.id, displayName(r)]));
   const walls = (level.walls || []).filter(w => w.kind !== 'virtual').map(w => {
     const length = Math.round(Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]));
     const where = (w.rooms || []).map(id => roomName.get(id) ?? id).join(' / ');
-    return { id: w.id, length, label: `${displayName(w)}${where ? ` · ${where}` : ''} · ${length} mm` };
+    return { id: w.id, length, label: `${displayName(w)}${where ? ` · ${where}` : ''} · ${length} mm`, hint: where || 'no room' };
   });
   const openings = (level.openings || []).map(o => {
     const w = (level.walls || []).find(x => x.id === o.wall), where = (w?.rooms || []).map(id => roomName.get(id) ?? id).join(' / ');
-    return { id: o.id, label: `${displayName(o)} · ${o.type}${where ? ` · ${where}` : ''} · ${Math.round(o.width ?? 0)} mm wide` };
+    return { id: o.id, label: `${displayName(o)} · ${o.type}${where ? ` · ${where}` : ''} · ${Math.round(o.width ?? 0)} mm wide`, hint: `${o.type} ${Math.round(o.width ?? 0)} mm` };
   });
   return { rooms, walls, openings };
 }

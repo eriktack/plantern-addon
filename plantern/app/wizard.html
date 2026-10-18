@@ -3,20 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Plantern · Measure</title>
+<title>Plantern · Room wizard</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="stylesheet" href="src/styles.css">
 <style>
-  body{display:block;min-height:100%;padding:0 0 env(safe-area-inset-bottom,0)}
-  #app{max-width:560px;margin:0 auto;padding:10px 14px 24px}
-  #mapBox{position:sticky;top:0;z-index:5;background:var(--bg);margin:0 -14px;padding:6px 14px 4px}
-  #map{display:block;width:100%;height:34vh;min-height:220px;background:var(--bg);border:1px solid var(--line);border-radius:10px}
-  #mapBox .mapzoom{right:22px;bottom:12px}
   #zoomBtn{position:absolute;top:12px;right:20px;font-size:13px;padding:5px 9px;border-radius:8px;background:#14161acc}
-  /* the map stays at the top while the form scrolls; focused fields are kept clear of it */
-  html{scroll-padding-top:calc(max(34vh, 220px) + 18px)}
   h1{margin:8px 0 4px} .step{font-size:20px;margin:12px 0 4px}
   .big{width:100%;font-size:22px;padding:14px;border-radius:10px}
   input.big{background:#14161a;color:var(--fg);border:1px solid #3a404b;font:22px ui-monospace,Consolas,monospace;margin:6px 0}
@@ -39,42 +32,42 @@
 <script type="module" src="src/nav.js"></script>
 <script type="module" src="src/capture/wizard.js"></script>
 </head>
-<body>
+<body class="phone">
 <div id="app">
   <nav class="nav" aria-label="Pages" data-page="wizard" data-base=""></nav>
   <div id="mapBox"><svg id="map"></svg><button id="zoomBtn" hidden></button></div>
-  <div id="hint" class="help" style="margin:4px 2px"></div>
+  <div id="hint" class="help hintline"></div>
 
   <section id="s-level" hidden></section>
 
   <section id="s-setup">
-    <h1>Measure a room</h1>
+    <h1>Room wizard <small class="help">measure a room, wall by wall</small></h1>
     <div class="sel"><select data-native id="loc" aria-label="Location"></select><select data-native id="level" aria-label="Level"></select></div>
     <div id="levelMsg" class="help"></div>
     <label class="f">Room name<input id="name" class="big" autocomplete="off" placeholder="e.g. Kitchen"></label>
-    <label class="f" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="exterior"> Outdoors (balcony, terrace)</label>
+    <label class="f hrow"><input type="checkbox" id="exterior"> Outdoors (balcony, terrace)</label>
     <label class="f" id="sameAsRow">Same shape as <small>a room already measured: no walls to measure, just where it starts (on the level below or above it goes exactly on top)</small>
-      <select data-native id="sameAs" class="big" style="font-size:16px;padding:10px"></select></label>
+      <select data-native id="sameAs" class="big big16"></select></label>
     <label class="f">Where is corner 0, the corner you start in?</label>
-    <div class="dirs" id="placeMode" style="grid-template-columns:1fr 1fr">
+    <div class="dirs cols2" id="placeMode">
       <button data-m="point" class="on">At a point</button><button data-m="wall">Next to another room</button>
     </div>
     <div id="placePoint">
       <div class="f">Start from <small>(tap a corner on the map)</small></div>
       <details class="pickList"><summary>or pick it from a list</summary>
-        <label class="f">Point <select data-native id="originRef" class="big" style="font-size:16px;padding:10px"></select></label></details>
-      <div class="two" style="margin:2px 0">
-        <label class="f" style="margin:0">Offset x <small>mm, east</small><input id="ox" class="big" inputmode="numeric" placeholder="0" autocomplete="off" style="font-size:18px;padding:10px"></label>
-        <label class="f" style="margin:0">Offset y <small>mm, north</small><input id="oy" class="big" inputmode="numeric" placeholder="0" autocomplete="off" style="font-size:18px;padding:10px"></label>
+        <label class="f">Point <select data-native id="originRef" class="big big16"></select></label></details>
+      <div class="two my2">
+        <label class="f m0">Offset x <small>mm, east</small><input id="ox" class="big big18" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+        <label class="f m0">Offset y <small>mm, north</small><input id="oy" class="big big18" inputmode="numeric" placeholder="0" autocomplete="off"></label>
       </div>
       <div class="help" id="startTxt"></div>
     </div>
     <div id="placeWall" hidden>
       <div class="help"><b>Tap the wall on the map</b> that you share with the room next door (or pick it here). Corner 0 goes on the <b>far side</b> of that wall, and your first wall runs back along it, so the two rooms end up sharing one wall.</div>
-      <select data-native id="edgeSel" class="big" style="font-size:16px;padding:10px;margin-top:6px"></select>
-      <div class="two" style="margin:6px 0 2px">
-        <label class="f" style="margin:0">Wall thickness <small>mm, face to face</small><input id="edgeT" class="big" inputmode="numeric" autocomplete="off" style="font-size:18px;padding:10px"></label>
-        <label class="f" style="margin:0">Start <small>mm from the green end</small><input id="edgeSlide" class="big" inputmode="numeric" placeholder="0" autocomplete="off" style="font-size:18px;padding:10px"></label>
+      <select data-native id="edgeSel" class="big big16 mt6"></select>
+      <div class="two mtb62">
+        <label class="f m0">Wall thickness <small>mm, face to face</small><input id="edgeT" class="big big18" inputmode="numeric" autocomplete="off"></label>
+        <label class="f m0">Start <small>mm from the green end</small><input id="edgeSlide" class="big big18" inputmode="numeric" placeholder="0" autocomplete="off"></label>
       </div>
       <div class="help" id="wallTxt"></div>
     </div>
@@ -82,7 +75,7 @@
       <label class="f">Which way will you walk along the first wall? <small>(plan directions; the room stays on your right)</small></label>
       <div class="dirs" id="dirs"><button data-d="N">N ↑</button><button data-d="E">E →</button><button data-d="S">S ↓</button><button data-d="W">W ←</button></div>
       <label class="f">…or the compass bearing of that wall <small>° from true north</small>
-        <input id="bearing" class="big" inputmode="decimal" placeholder="e.g. 112" autocomplete="off" style="font-size:18px;padding:10px"></label>
+        <input id="bearing" class="big big18" inputmode="decimal" placeholder="e.g. 112" autocomplete="off"></label>
       <div class="help" id="headTxt"></div>
     </div>
     <button id="begin" class="big go">Start measuring</button>
@@ -99,7 +92,7 @@
       <div class="two"><button data-axis="x" id="axX">until x =</button><button data-axis="y" id="axY">until y =</button></div>
       <div class="two"><input id="reachVal" class="big" inputmode="numeric" placeholder="mm, e.g. 3000" autocomplete="off"></div>
       <div class="help">or tap the point on the map (every point is marked while this is open)</div>
-      <details class="pickList"><summary>or pick it from a list</summary><select data-native id="reachPt" class="big" style="font-size:15px;padding:8px"></select></details>
+      <details class="pickList"><summary>or pick it from a list</summary><select data-native id="reachPt" class="big big15"></select></details>
       <div class="help" id="reachOut"></div>
     </div>
     <div class="err" id="err"></div>
@@ -107,27 +100,27 @@
     <div id="shareCard" hidden></div>
     <div class="help" id="turnQ">At the next corner, does the wall continue…</div>
     <div class="two"><button id="tR" class="go">↱ right 90°</button><button id="tL">↰ left <small>(inside corner, 270°)</small></button></div>
-    <button id="custom" class="big quiet" style="font-size:16px;padding:10px">∠ Other angle…</button>
+    <button id="custom" class="big quiet big16">∠ Other angle…</button>
     <div id="customRow" hidden>
       <div class="help">Angle <b>inside the room</b> at the corner: 90 = square, 135 = bevel, 60 = sharp, over 180 = inside corner.</div>
       <div class="two"><input id="angle" class="big" inputmode="decimal" placeholder="e.g. 135" autocomplete="off"><button id="customAdd" class="go" disabled>Add corner</button></div>
-      <svg id="angleMini" viewBox="0 0 220 120" style="width:100%;height:110px;background:var(--bg);border:1px solid var(--line);border-radius:10px" hidden></svg>
+      <svg class="sketchbox" id="angleMini" viewBox="0 0 220 120" hidden></svg>
       <div class="help" id="angleInfo"></div>
     </div>
-    <button id="close" class="big" style="font-size:18px">⟲ Close the room: last wall runs back to corner 0</button>
+    <button id="close" class="big fs18">⟲ Close the room: last wall runs back to corner 0</button>
     <div class="help" id="closeHint">The length of that last wall is worked out for you. If you measured it anyway, type it above and it is used as a check.</div>
     <div class="two"><button id="undo" class="quiet">Undo last wall</button><button id="restart" class="quiet">Start over</button></div>
   </section>
 
   <section id="s-review" hidden>
     <h1>Result</h1>
-    <button id="back" class="quiet big" style="font-size:16px;margin-bottom:8px">← Back to measuring (fix a wall)</button>
+    <button id="back" class="quiet big fs16 mb8">← Back to measuring (fix a wall)</button>
     <div id="result"></div>
     <div id="resid"></div>
     <div id="exactWalls"></div>
     <div id="lockOffers"></div>
     <button id="done" class="big go">Done</button>
-    <button id="doneAnyway" class="quiet big" style="font-size:15px" hidden>Add anyway (it overlaps)</button>
+    <button id="doneAnyway" class="quiet big fs15" hidden>Add anyway (it overlaps)</button>
     <div class="help" id="doneHelp"></div>
     <div id="doneOut"></div>
     <div id="saveRow" class="two" hidden><button id="saveHouse" class="primary">Save the house</button><button id="again" class="quiet" hidden>Measure another room</button><button id="toEditor" class="quiet" hidden>Close wizard</button></div>

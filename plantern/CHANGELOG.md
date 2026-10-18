@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.5
+
+- **Faster Editor.** Applying a change, undoing, storing a drag, typing in a room and the overlap check are several times faster on a big house; the room names are kept instead of worked out on every draw; a pan only moves the view; a room or corner drag draws only that room; opening an editor draws the plan once; the Editor makes one request for all library objects instead of one each and no longer loads the 3D library or the model files.
+- **Nicer dropdowns.** Every list is drawn like the page menu with icons, colour swatches for materials, grouped lists (also by room for corners) and a state dot for Home Assistant entities; the object type picker is grouped by kind.
+- **Library:** a Miscellaneous group with a cat tree and a chest; all models can have their size typed in the Editor.
+- **Lamps:** an unbound lamp can be clicked on and off as a preview in the colour and brightness set on it; a lamp deep in a window keeps its light on the room side of the window; lamp objects are clicked in 3D by their model.
+- Internal: the Editor's code is split into modules, tests no longer wait for clocks.
+
 ## 0.5.4
 
 - **Nicer dropdowns.** Every list is drawn like the page menu, with icons, colour swatches for materials, grouped lists and a state dot for Home Assistant entities. The phone pages use it for short choices (how a window or door opens) and keep the phone's own wheel for long lists.

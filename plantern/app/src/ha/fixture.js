@@ -21,6 +21,30 @@ export function fixtureAppearance(bindings, getState, fx) {
   return STATIC_LOOK;
 }
 
+/** A lamp or LED strip with nothing to switch: no entity and no controlled fixtures. The viewer lets a click turn it on and off as a preview. */
+export function isUnboundLight(bindings, fx) {
+  const b = bindings?.[fx.id];
+  return (fx.kind === 'lamp' || fx.kind === 'strip') && !b?.entity && !b?.controls?.length;
+}
+
+/**
+ * Whether a click previews the light instead of switching it: a lamp or strip with nothing to switch (isUnboundLight), or one whose entity Home Assistant
+ * does not have or reports unavailable (not connected, or the device is off the network). Whatever HA reports wins again as soon as it can.
+ */
+export function canPreview(bindings, getState, fx) {
+  if (isUnboundLight(bindings, fx)) return 'unbound';
+  const e = (fx.kind === 'lamp' || fx.kind === 'strip') && bindings?.[fx.id]?.entity;
+  if (!e) return null;
+  const s = getState(e);
+  return !s || s.state === 'unavailable' || s.state === 'unknown' ? 'unavailable' : null;
+}
+
+/**
+ * What a previewed light looks like, on or off: the look set on the light (`look` of its binding: colour, temperature, brightness), else the default
+ * warm white. Never sent anywhere, gone when the page is reloaded.
+ */
+export const previewLook = (on, look) => appearance({ state: on ? 'on' : 'off', attributes: {} }, look);
+
 /**
  * The service calls a click on a fixture makes: { calls: [{ domain, service, target: { entity_id } }] } or
  * { error } with a message for the person. A bound entity is toggled; a switch with `controls` turns all the

@@ -9,6 +9,9 @@
 //     an entry with `href` is a link; any other calls onPick(entry) and closes the menu
 //     align: 'full' (as wide as the button, the page menu) or 'right' (opens to the left of the button's right edge)
 //   returns { button, setLabel(text), setPicture({ icon?, swatch? }), close() }
+//
+//   openMenuAt(x, y, { entries, onPick, title? }): the same list as a floating menu at a point (the Editor's right-click
+//   menu, ui-consistency plan UX9); closes on a pick, a click elsewhere, Esc, scrolling or resizing. Returns { close() }.
 
 import { ICONS } from './icons.js';
 
@@ -99,4 +102,63 @@ export function createMenu(host, { label, icon, entries, onPick = () => {}, alig
     setPicture(entry) { button.querySelector('.pic').innerHTML = pictureHtml(entry); },
     close() { set(false); },
   };
+}
+
+/**
+ * Where a floating menu w × h opened at the pointer (x, y) goes in a window vw × vh: right of and below the pointer when it
+ * fits, else flipped to the left or above, and never closer than m to an edge. Pure (tested).
+ */
+export function menuPosition(x, y, w, h, vw, vh, m = 8) {
+  const left = x + w + m <= vw ? x : Math.max(m, x - w);
+  const top = y + h + m <= vh ? y : Math.max(m, Math.min(y - h, vh - h - m));
+  return { left: Math.min(left, Math.max(m, vw - w - m)), top, maxHeight: vh - top - m };
+}
+
+let floating = null;
+export function openMenuAt(x, y, { entries, onPick = () => {}, title = '' }) {
+  floating?.close();
+  const list = document.createElement('div');
+  list.className = 'menulist ctxmenu';
+  list.setAttribute('role', 'menu');
+  const shown = typeof entries === 'function' ? entries() : entries;
+  list.innerHTML = (title ? `<div class="menugroup ctxtitle" role="presentation">${esc(title)}</div>` : '')
+    + groupEntries(shown).map(g => (g.group ? `<div class="menugroup" role="presentation">${esc(g.group)}</div>` : '') + g.items.map(e => itemHtml(e, shown.indexOf(e))).join('')).join('');
+  document.body.append(list);
+  const w = Math.min(330, document.documentElement.clientWidth * 0.86);
+  Object.assign(list.style, { position: 'fixed', width: `${w}px`, visibility: 'hidden' });
+  const p = menuPosition(x, y, w, list.offsetHeight, document.documentElement.clientWidth, window.innerHeight);
+  Object.assign(list.style, { left: `${p.left}px`, top: `${p.top}px`, maxHeight: `${p.maxHeight}px`, visibility: '' });
+  const items = () => [...list.querySelectorAll('[role=menuitem]:not(.off)')];
+  const close = () => {
+    if (floating !== api) return;
+    floating = null; list.remove();
+    document.removeEventListener('pointerdown', outside, true);
+    window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close);
+    document.removeEventListener('keydown', keys, true);
+  };
+  const outside = e => { if (!list.contains(e.target)) close(); };
+  const keys = e => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const all = items(), i = all.indexOf(document.activeElement);
+    all[(i + (e.key === 'ArrowDown' ? 1 : -1) + all.length) % all.length]?.focus();
+  };
+  list.addEventListener('click', e => {
+    const el = e.target.closest('[role=menuitem]');
+    if (!el || el.classList.contains('off')) return;
+    const entry = shown[Number(el.dataset.i)];
+    close();
+    if (entry && !entry.href) onPick(entry);
+  });
+  list.addEventListener('contextmenu', e => e.preventDefault());
+  setTimeout(() => {                                                // not the pointerdown that opened it
+    document.addEventListener('pointerdown', outside, true);
+    window.addEventListener('scroll', close, true); window.addEventListener('resize', close);
+  }, 0);
+  document.addEventListener('keydown', keys, true);
+  items()[0]?.focus();
+  const api = { close };
+  floating = api;
+  return api;
 }
