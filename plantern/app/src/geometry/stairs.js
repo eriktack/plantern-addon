@@ -88,6 +88,7 @@ export function stairLayout(st, pos, rise) {
   };
 
   let o = pos, fu = u, fr = r, h = 0, arrival;
+  let fan = null;   // the winder fan of the first turn with winders (W2)
   for (let k = 0; k < fl.length; k++) {
     const f = flight(o, fu, fr, fl[k], h, k);
     if (k === fl.length - 1) {
@@ -105,19 +106,42 @@ export function stairLayout(st, pos, rise) {
     const o2 = left ? A : add(o, add(mul(fr, Wp), mul(fu, L + Wn)));  // left corner of the next flight's front edge
     const turn = { poly: quad(o, fu, fr, L, L + Wn, 0, Wp), top: r1(H1), entry: pt(add(o, add(mul(fu, L), mul(fr, Wp / 2)))), exit: pt(add(o2, mul(r2, Wn / 2))) };
     if (winders) {
-      // wedges around the inside corner of the turn, from the arrival edge of this flight to the front edge of the next
-      const piv = left ? A : add(A, mul(fr, Wp)), e1 = left ? fr : mul(fr, -1);
-      // the fan covers the landing's rectangle exactly: Wp across (e1) by Wn along the walk (fu), so no wedge reaches past the
-      // landing's outer edge when the flights differ in width (BBV28: 863 and 850 gave 13 mm over the outer length)
-      const thc = Math.atan2(Wn, Wp);                                    // the landing's corner, as an angle from e1
-      const bnd = th => { const c = Math.cos(th), s = Math.sin(th), t = Math.min(c > 1e-12 ? Wp / c : Infinity, s > 1e-12 ? Wn / s : Infinity); return [c * t, s * t]; };
-      const at = ([a, b]) => add(piv, add(mul(e1, a), mul(fu, b)));
+      // the fan: wedges round the pivot, which is the inside corner of the turn unless winderPivot moves it. winderPivot [x, y] is in mm:
+      // x along the walk after the turn (that is −e1), y along the walk before it (fu). Each wedge is the landing’s rectangle cut by two
+      // rays from the pivot, so the wedges tile the rectangle wherever the pivot is; a pivot inside the rectangle has no fan.
+      const piv0 = left ? A : add(A, mul(fr, Wp)), e1 = left ? fr : mul(fr, -1);
+      const [px = 0, py = 0] = st.winderPivot ?? [];
+      const pa = -px, pb = py;                                          // the pivot in the fan’s own axes (a along e1, b along fu)
+      const fanPt = ([a, b]) => add(piv0, add(mul(e1, a), mul(fu, b)));
+      const wrap = x => Math.atan2(Math.sin(x), Math.cos(x));
+      const rect = [[0, 0], [Wp, 0], [Wp, Wn], [0, Wn]];
+      const mid = Math.atan2(Wn / 2 - pb, Wp / 2 - pa);                  // the corners’ angles seen from the pivot, about their middle
+      // a corner that is the pivot itself has no direction from it: the others decide the sweep
+      const angs = rect.filter(([a, b]) => Math.hypot(a - pa, b - pb) > 1e-9).map(([a, b]) => mid + wrap(Math.atan2(b - pb, a - pa) - mid));
+      const t0 = Math.min(...angs), span = Math.max(...angs) - t0;
+      if (!(span < Math.PI - 1e-9)) return { error: 'the winder pivot is inside the landing: move it outside the landing' };
+      const cross = (d, v) => d[0] * v[1] - d[1] * v[0];
+      // the clipping repeats a corner where a ray leaves it: one point per corner, and no closing repeat of the first
+      const near = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 1e-9;
+      const dedupe = poly => { const out = poly.filter((q, k) => k === 0 || !near(q, poly[k - 1])); if (out.length > 1 && near(out[0], out[out.length - 1])) out.pop(); return out; };   // the first point stays first (the pivot)
+      // the part of a polygon where cross(d, q − P) ≥ 0, from the pivot P (Sutherland–Hodgman, one half-plane)
+      const keep = (poly, d) => {
+        const out = [], f = q => cross(d, [q[0] - pa, q[1] - pb]);
+        poly.forEach((cur, k) => {
+          const nxt = poly[(k + 1) % poly.length], fc = f(cur), fn = f(nxt);
+          if (fc >= 0) out.push(cur);
+          if ((fc >= 0) !== (fn >= 0)) { const t = fc / (fc - fn); out.push([cur[0] + (nxt[0] - cur[0]) * t, cur[1] + (nxt[1] - cur[1]) * t]); }
+        });
+        return out;
+      };
       for (let j = 0; j < winders; j++) {
-        const t0 = (j * Math.PI / 2) / winders, t1 = ((j + 1) * Math.PI / 2) / winders, poly = [piv, at(j === 0 ? [Wp, 0] : bnd(t0))];
-        if (t0 < thc - 1e-9 && t1 > thc + 1e-9) poly.push(at([Wp, Wn]));
-        poly.push(at(j === winders - 1 ? [0, Wn] : bnd(t1)));
-        steps.push({ poly: poly.map(pt), top: r1(H1 + j * riser), kind: 'winder', flight: k, n: steps.length + 1 });
+        const a0 = t0 + span * j / winders, a1 = t0 + span * (j + 1) / winders;
+        const d0 = [Math.cos(a0), Math.sin(a0)], d1 = [Math.cos(a1), Math.sin(a1)];
+        const wedge = dedupe(keep(keep(rect, d0), [-d1[0], -d1[1]]));   // after the first ray, before the second
+        if (wedge.length < 3) return { error: `winder ${j + 1} has no area with this pivot: move the winder pivot` };
+        steps.push({ poly: wedge.map(q => pt(fanPt(q))), top: r1(H1 + j * riser), kind: 'winder', flight: k, n: steps.length + 1 });
       }
+      if (!fan) fan = { pivot: fanPt([pa, pb]), e1, fu, t0, span };   // the first turn with winders: the side panels read it
       turn.top = r1(H1 + (winders - 1) * riser);
     } else steps.push({ poly: quad(o, fu, fr, L, L + Wn, 0, Wp), top: r1(H1), kind: 'landing', flight: k, n: steps.length + 1 });
     turns.push(turn);
@@ -125,7 +149,7 @@ export function stairLayout(st, pos, rise) {
     h = H1 + (winders ? (winders - 1) * riser : 0);
     o = o2; fu = u2; fr = r2;
   }
-  return { steps, flights, turn: turns[0] || null, turns, width: W, outline: outlineOf(steps.map(s => s.poly)), arrow, arrival, riser: r1(riser), depths: depths.map(r1), treadDepths: treadDepths.map(r1), winders };
+  return { steps, flights, turn: turns[0] || null, turns, width: W, outline: outlineOf(steps.map(s => s.poly)), arrow, arrival, riser: r1(riser), depths: depths.map(r1), treadDepths: treadDepths.map(r1), winders, fan };
 }
 
 /**
@@ -373,11 +397,10 @@ export function stairSolids(layout, st, { steps = layout.steps, dz = 0, withSide
         // winders: each winder is a sector of the turn (an equal angle round the inside corner). Its side rises by one riser
         // from the step below to its own step, so the side reaches the first step of the next flight at the exit (the turn's
         // top plus one riser), not the last winder's top. The panel is cut at each sector and every piece slopes on its own
-        const W = layout.winders, H1 = tn.top + dz - (W - 1) * riser, delta = Math.PI / (2 * W);
-        const piv = layout.steps.find(st => st.kind === 'winder').poly[0];
-        const e1 = layout.steps.find(st => st.kind === 'winder').poly[1], lastW = layout.steps.filter(st => st.kind === 'winder').pop().poly;
-        const ue = [e1[0] - piv[0], e1[1] - piv[1]], uf = [lastW[lastW.length - 1][0] - piv[0], lastW[lastW.length - 1][1] - piv[1]];
-        const angleOf = x => { const d = [x[0] - piv[0], x[1] - piv[1]]; return Math.atan2(d[0] * uf[0] + d[1] * uf[1], d[0] * ue[0] + d[1] * ue[1]); };
+        const W = layout.winders, H1 = tn.top + dz - (W - 1) * riser, delta = layout.fan.span / W;
+        const piv = layout.fan.pivot, fe = layout.fan.e1, ff = layout.fan.fu;
+        // the angle round the pivot from the fan’s start, in the fan’s own axes: 0 at its first ray, span at its last
+        const angleOf = x => { const d = [x[0] - piv[0], x[1] - piv[1]]; const a = Math.atan2(d[0] * ff[0] + d[1] * ff[1], d[0] * fe[0] + d[1] * fe[1]) - layout.fan.t0; return Math.atan2(Math.sin(a), Math.cos(a)); };
         const zOf = x => H1 + Math.min(Math.max(angleOf(x) / delta, 0), W) * riser;   // linear in the angle: one riser per sector
         const th0 = angleOf(p), th1 = angleOf(q), ts = [0, 1];
         for (let j = 1; j < W; j++) { const edgeAt = j * delta; if ((th0 - edgeAt) * (th1 - edgeAt) < 0) ts.push((edgeAt - th0) / (th1 - th0)); }

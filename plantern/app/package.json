@@ -8,5 +8,5 @@
     "test": "node --test",
     "release": "node tools/release.js"
   },
-  "version": "0.5.5"
+  "version": "0.5.6"
 }

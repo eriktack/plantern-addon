@@ -540,6 +540,12 @@
       <label>Turns <select id="stTurn" data-seg><option value="L">left</option><option value="R">right</option></select></label>
       <label>At each turn <select id="stLanding" data-seg><option value="square">a square landing</option><option value="winders">winders</option></select></label>
       <label id="stWindersRow">Winders <small>wedge steps</small><input id="stWinders" inputmode="numeric" autocomplete="off"></label>
+      <div id="stPivotRow" class="pair">
+        <span>Pivot, from the inside corner <small>mm: x along the walk after the turn, y along the walk before it; empty = the inside corner</small></span>
+        <label>x <input id="stPivX" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+        <label>y <input id="stPivY" inputmode="numeric" placeholder="0" autocomplete="off"></label>
+        <button type="button" id="stPivReset" class="quiet">Reset to the inside corner</button>
+      </div>
     </div>
     <div class="grid2">
       <label>Underneath <select id="stUnder" data-seg><option value="closed">closed (solid blocks)</option><option value="sloped">solid, sloped underside</option><option value="open">open (treads only)</option></select></label>

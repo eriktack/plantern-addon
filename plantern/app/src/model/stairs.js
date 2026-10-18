@@ -1,7 +1,7 @@
 // Stairs (PLANTERN.md §6.4), the rules for what may be stored. What a stair looks like and where its
 // opening is comes from geometry/stairs.js; whether it fits the house is reported by validate.js.
 //   { id: "st_main", to: "upper", start: { ref, offset: [dx, dy] } | { pos: [x, y] }, heading, width,
-//     flights: [{ risers, length?, treads?: [mm, …], width?: mm }, …] (1 straight, 2 an L, 3 a U), turn?: "L" | "R", landing?: "square" | "winders",
+//     flights: [{ risers, length?, treads?: [mm, …], width?: mm }, …] (1 straight, 2 an L, 3 a U), turn?: "L" | "R", landing?: "square" | "winders", winderPivot?: [x, y] mm from the inside corner of the turn (W1),
 //     winders?: n, underside?: "closed" | "open" | "sloped", waist?: mm, sides?: "stepped" | "sloped", handrail?: "none" | "left" | "right" | "both" (walking up), handrailHeight?: mm, handrailMount?: "wall" | "poles" (a round rail), handrailDiameter?: mm, handrailStart?: mm, handrailEnd?: mm, opening?: [[x, y], …], ignoreDepthWarning?: true, assumed?: [...] }
 // Pure.
 
@@ -53,6 +53,8 @@ export function checkStairs(st, model, level) {
   if (st?.waist !== undefined && !(st.waist > 0)) errors.push('waist (thickness under a sloped underside) must be more than 0');
   if (st?.opening !== undefined && !(Array.isArray(st.opening) && st.opening.length >= 3 && st.opening.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)))) errors.push('opening must be a polygon of 3 or more points');
   const pt2 = p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite);
+  // W1: the winders fan around a pivot offset from the inside corner of the turn, in mm (not limited to the footprint: W2 uses it)
+  if (st?.winderPivot !== undefined && !(pt2(st.winderPivot) && st.winderPivot.every(v => Math.abs(v) <= 20000))) errors.push('winderPivot must be [x, y] in mm from the inside corner of the turn (up to 20 m either way)');
   if (st?.openingRect !== undefined && !(pt2(st.openingRect?.from) && pt2(st.openingRect?.to))) errors.push('openingRect must be { from: [x, y], to: [x, y] } in mm from the start point (two opposite corners)');
   return { errors };
 }

@@ -54,6 +54,7 @@ export function showStairs() {
     $('stShape').value = String(Math.min(Math.max(fl.length, 1), 3));
     [1, 2, 3].forEach(k => { const f = fl[k - 1]; $(`stR${k}`).value = f?.risers ?? ''; $(`stL${k}`).value = Number.isFinite(f?.length) ? Math.round(outerOf(f.length, landingAfter(fl, k - 1, st.width))) : ''; $(`stT${k}`).value = (f?.treads || []).join(', '); $(`stW${k}`).value = f?.width ?? ''; });
     $('stTurn').value = st.turn ?? 'L'; $('stLanding').value = st.landing ?? 'square'; $('stWinders').value = st.winders ?? 3;
+    $('stPivX').value = st.winderPivot?.[0] ?? ''; $('stPivY').value = st.winderPivot?.[1] ?? '';
     $('stUnder').value = st.underside ?? 'closed'; $('stSides').value = st.sides ?? 'stepped'; $('stWaist').value = st.waist ?? '';
     $('stRail').value = st.handrail ?? 'none'; $('stRailH').value = st.handrailHeight ?? '';
     $('stRailMount').value = st.handrailMount ?? ''; $('stRailD').value = st.handrailDiameter ?? ''; $('stRailS').value = st.handrailStart ?? ''; $('stRailE').value = st.handrailEnd ?? '';
@@ -102,12 +103,18 @@ export function syncStairsRows() {
   $('stTwoRows').hidden = $('stT2Row').hidden = $('stTurnRows').hidden = n < 2;
   $('stThreeRows').hidden = $('stT3Row').hidden = n < 3;
   $('stWindersRow').hidden = n < 2 || $('stLanding').value !== 'winders';
+  $('stPivotRow').hidden = $('stWindersRow').hidden;
   $('stWaistRow').hidden = $('stUnder').value !== 'sloped';
   const railOn = $('stRail').value !== 'none', roundRail = railOn && $('stRailMount').value !== '';
   $('stRailHRow').hidden = $('stRailMountRow').hidden = !railOn;
   $('stRailDRow').hidden = $('stRailSRow').hidden = $('stRailERow').hidden = !roundRail;
   $('stOpenRow').hidden = !$('stOpenOn').checked;
   $('stOxLbl').textContent = ref ? 'x offset' : 'x'; $('stOyLbl').textContent = ref ? 'y offset' : 'y';
+  updateStairsHints();
+}
+/** The reset button of the pivot: both boxes empty, so the pivot is the inside corner again (Apply stores it). */
+export function resetWinderPivot() {
+  $('stPivX').value = ''; $('stPivY').value = '';
   updateStairsHints();
 }
 export function applyStairsForm() {
@@ -131,6 +138,13 @@ export function applyStairsForm() {
   });
   delete next.turn; delete next.landing; delete next.winders; delete next.underside; delete next.sides; delete next.waist; delete next.handrail; delete next.handrailHeight; delete next.handrailMount; delete next.handrailDiameter; delete next.handrailStart; delete next.handrailEnd; delete next.ignoreDepthWarning; delete next.ignoreEdgeWarning; delete next.openingRect;
   if (two) { next.turn = $('stTurn').value; next.landing = $('stLanding').value; if (next.landing === 'winders') next.winders = num('stWinders'); }
+  // the winder pivot (W3): both boxes filled, else the inside corner (none stored)
+  delete next.winderPivot;
+  if (two && next.landing === 'winders' && ($('stPivX').value.trim() !== '' || $('stPivY').value.trim() !== '')) {
+    const px = $('stPivX').value.trim() === '' ? 0 : num('stPivX'), py = $('stPivY').value.trim() === '' ? 0 : num('stPivY');
+    if (!Number.isFinite(px) || !Number.isFinite(py)) { $('stErr').textContent = 'The pivot: x and y must be numbers in mm'; return; }
+    next.winderPivot = [px, py];
+  }
   if ($('stUnder').value !== 'closed') next.underside = $('stUnder').value;
   if ($('stSides').value === 'sloped') next.sides = 'sloped';
   if ($('stRail').value !== 'none') {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.6
+
+- Stair winders: a moved pivot, an error for an empty wedge and a warning for very uneven treads
+
 ## 0.5.5
 
 - **Faster Editor.** Applying a change, undoing, storing a drag, typing in a room and the overlap check are several times faster on a big house; the room names are kept instead of worked out on every draw; a pan only moves the view; a room or corner drag draws only that room; opening an editor draws the plan once; the Editor makes one request for all library objects instead of one each and no longer loads the 3D library or the model files.

@@ -292,6 +292,11 @@ function validateStairs(model, geos) {
       });
       // ignoreDepthWarning: the person checked the steps and they are right (fixes list 28); only this warning is silenced
       if (bad.length && s.stairs.ignoreDepthWarning !== true) warn(`step depth ${bad.map(d => Math.round(d)).join(', ')} mm (usual ${STAIR_LIMITS.tread.join('–')})`);
+      // a moved winder pivot fans equal angles; the further it is from the landing the more uneven the treads get
+      if (s.stairs.winderPivot) {
+        const areas = L.steps.filter(st => st.kind === 'winder').map(st => Math.abs(st.poly.reduce((t, q, i) => { const r = st.poly[(i + 1) % st.poly.length]; return t + q[0] * r[1] - r[0] * q[1]; }, 0) / 2));
+        if (areas.length > 1 && Math.max(...areas) > 3 * Math.min(...areas)) warn(`the winders are very uneven with this pivot (the largest is ${(Math.max(...areas) / Math.min(...areas)).toFixed(1)} times the smallest): move the winder pivot closer to the landing`);
+      }
       const here = geos.get(lv.id);
       // the first step stands on the floor; further ones may run over an opening or past the floor's edge when the steps are carried by a sloped underside, otherwise they would hang in the air
       const off = L.steps.filter((st, i) => (i === 0 || s.stairs.underside !== 'sloped') && !floorAt(lv, here.holes, centroid(st.poly)));

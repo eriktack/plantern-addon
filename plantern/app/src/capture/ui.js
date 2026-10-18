@@ -40,7 +40,7 @@ import { copyInto, duplicateEdited, useShapeOf } from './editor/copy.js';
 import { linesAround, loadForm, loadFormForSelection, refName, selectNone, selectWall, zoomAt } from './editor/selection.js';
 import { doFillWalls, doLinkWalls, removeWall, splitAtPointer, startSplitPick, stopSplitPick } from './editor/wall-ops.js';
 import { applyMaterial, applyWall, makeMaterialFromSide, materialSwatches, showSideRows, showSlopeRows } from './editor/panel-wall.js';
-import { applyStairsForm, newStairs, syncStairsRows, updateStairsHints } from './editor/panel-stairs.js';
+import { applyStairsForm, newStairs, resetWinderPivot, syncStairsRows, updateStairsHints } from './editor/panel-stairs.js';
 import { applyFixture, doSplit, showEntityPick, useObjectLight } from './editor/panel-fixture.js';
 import { cancelDrag, dragMove, dragStart, endDrag, freePoint } from './editor/drag.js';
 import { hoverStatus, openContextMenu, planKey, showShortcuts } from './editor/keys.js';
@@ -275,6 +275,7 @@ async function init() {
   };
   for (const id of ['stShape', 'stLanding', 'stRef', 'stUnder', 'stRail', 'stRailMount', 'stOpenOn']) $(id).onchange = syncStairsRows;
   $('stairsPanel').addEventListener('input', updateStairsHints);
+  $('stPivReset').onclick = resetWinderPivot;
   $('obAddStrip').onclick = () => {                               // under the front of the object (the side farthest from its wall)
     const o = object(), fp = o && Ed.curGeo.objectFootprint(o);
     if (!fp) return;
