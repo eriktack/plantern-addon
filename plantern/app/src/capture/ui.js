@@ -31,7 +31,7 @@ import { formatJson } from '../model/format.js';
 import { $, FIELDS, NEW_LEVEL, addSlidersAndDials, commit, esc, level, loadDesignLibrary, locOf, object, opening, opts, params, perfAs, room, touches, wall } from './editor/core.js';
 import { applyObjectForm, assetCache, placeObject, showPlacedChoice } from './editor/panel-object.js';
 import { apply, changedElsewhere, deleteRoom, save } from './editor/room-apply.js';
-import { BAR, FRESH_ERR, PANEL_MSG, SELECT, afterLeave, closeEdit, decideLeave, dropFresh, editDraft, enterEdit, isDirty, isDoubleClick, isFresh, leaveEdit, mayLeave, mayRefill, renameEditing, revertEdit, selected, setStatus, settleFresh, showEditBar, startFresh, syncEdMsg, undoRedo } from './editor/session.js';
+import { BAR, FRESH_ERR, PANEL_MSG, SELECT, afterLeave, closeEdit, confirmItem, decideLeave, dropFresh, editDraft, enterEdit, isDirty, isDoubleClick, isFresh, leaveEdit, mayLeave, mayRefill, renameEditing, revertEdit, selected, setStatus, settleFresh, showEditBar, startFresh, syncEdMsg, undoRedo } from './editor/session.js';
 import { endPeek, fillLevels, goToLevel, showPeekCard, showUnderlayMode } from './editor/levels.js';
 import { HS_FIELDS, applyHouse, applyPlace, editLevel, fillHouse, fillPlace, fillPlaceWalls, hideHouseView, newLevel, previewPlace, showHouseView, useWallBearing } from './editor/house.js';
 import { draw, moveViewBox } from './editor/plan-draw.js';

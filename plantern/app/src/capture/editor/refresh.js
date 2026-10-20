@@ -21,7 +21,7 @@ import { showFixture } from './panel-fixture.js';
 import { showStairs } from './panel-stairs.js';
 import { showObject } from './panel-object.js';
 import { renderAnchors, renderAreas, renderChecks } from './checks.js';
-import { SELECT, afterLeave, enterEdit, isDoubleClick, mayLeave, showEditBar } from './session.js';
+import { SELECT, afterLeave, confirmItem, enterEdit, isDoubleClick, mayLeave, showEditBar } from './session.js';
 import { Ed } from './state.js';
 
 
@@ -155,9 +155,10 @@ export function refresh() {
     renderChecks();
     renderAreas();
     const todo = stillToMeasure(level());
-    $('todo').innerHTML = todo.map(t => `<div class="chk${t.id === Ed.wallId ? ' sel' : ''}" data-id="${esc(t.id)}" data-kind="${esc(t.kind)}"><span class="dot warn"></span><span>${esc(nameOf(t.id))} <small>${esc(nameOf(t.id) === t.id ? t.kind : `${t.kind} · ${t.id}`)}</small></span><small>${esc(t.fields.join(', '))}</small></div>`).join('') || '<small>Nothing assumed on this level.</small>';
+    $('todo').innerHTML = todo.map(t => `<div class="chk${t.id === Ed.wallId ? ' sel' : ''}" data-id="${esc(t.id)}" data-kind="${esc(t.kind)}"><span class="dot warn"></span><span>${esc(nameOf(t.id))} <small>${esc(nameOf(t.id) === t.id ? t.kind : `${t.kind} · ${t.id}`)}</small></span><small>${esc(t.fields.join(', '))}</small><button class="confirm" data-confirm="${esc(t.id)}" title="Confirm: these values are measured (one item at a time)">✓</button></div>`).join('') || '<small>Nothing assumed on this level.</small>';
     $('todoCount').textContent = todo.length ? `(${todo.length})` : '';
     $('todo').querySelectorAll('.chk').forEach(el => (el.onclick = afterLeave(() => { if (SELECT[el.dataset.kind]) enterEdit(el.dataset.kind, el.dataset.id); })));
+    $('todo').querySelectorAll('.confirm').forEach(b => (b.onclick = e => { e.stopPropagation(); confirmItem(b.dataset.confirm); }));
   });
   P('recompute', recompute);
   // the save bar: unsaved or saved, and errors block Save (Download still works)
@@ -199,3 +200,4 @@ function renderTree(rooms) {
     ({ room: selectRoom, solid: selectSolid, wall: selectWall, opening: selectOpening, fixture: selectFixture, stairs: selectStairs, object: selectObject })[el.dataset.tkind]?.(el.dataset.tid);
   }));
 }
+

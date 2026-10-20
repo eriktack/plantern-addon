@@ -72,7 +72,7 @@ button:disabled{opacity:.4;cursor:default}
 .sw input:disabled+.knob{opacity:.4}
 .sw input:focus-visible+.knob{outline:2px solid var(--acc);outline-offset:2px}
 .sel{display:flex;gap:6px}.sel select{flex:1;min-width:0}
-.chk{display:grid;grid-template-columns:12px 1fr auto;gap:6px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line);font-size:12px;cursor:pointer}
+.chk{display:grid;grid-template-columns:12px 1fr auto auto;gap:6px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line);font-size:12px;cursor:pointer}
 .dot{width:10px;height:10px;border-radius:50%}
 .dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}
 b.ok{color:var(--ok)}b.warn{color:var(--warn)}b.bad{color:var(--bad)}
@@ -98,6 +98,9 @@ svg[hidden],#view3d[hidden],section[hidden]{display:none}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end}
 .back{font-size:12px;font-weight:400;margin-left:8px;color:var(--mut)}
 .chk.sel{background:#2a2f38}
+/* confirming one item as measured: a small tick on its row, only on a row that has assumed values */
+.chk .confirm{width:22px;height:22px;min-height:0;padding:0;line-height:1;font-size:13px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--ok);cursor:pointer}
+.chk .confirm:hover{background:#1f3a2a;border-color:var(--ok)}
 /* rows of the Floor areas and Anchors sections: text on the left, a number or a button on the right */
 .arow{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid var(--line);font-size:12px}
 .arow>span:first-child{min-width:0}.arow small{color:var(--dim,#8b93a1)}.arow b{white-space:nowrap}.arow.ahead{font-weight:600;margin-top:6px}.arow[data-aroom]{cursor:pointer}.arow.sel{background:#2a2f38}
@@ -366,6 +369,7 @@ body.phone .key-blue{background:#6cb6ff}body.phone .key-green{background:#4cc38a
 /* phone: the house and level menus each take a full row, so a long house name is not cut (H4). The viewer and the phone pages only; the Editor keeps its row. */
 @media(max-width:760px){.row.sel,.sel:has(>#loc){flex-direction:column;align-items:stretch}.row.sel>*,.sel:has(>#loc)>*{flex:none;width:100%}}
 /* phone: the three secondary buttons of the edit bar show their icon only, so the bar stays one row and Close/Cancel and Apply keep their words (S1) */
+@media(max-width:760px){.chk .confirm{width:44px;min-height:44px;border-radius:12px}}
 @media(max-width:600px){.edbar #edDelete .lb,.edbar #edDup .lb,.edbar #edRevert .lb{display:none}.edbar #edDelete .ic,.edbar #edDup .ic,.edbar #edRevert .ic{display:inline-flex}.edbar #edDelete,.edbar #edDup,.edbar #edRevert{min-width:44px;min-height:44px;padding:0;justify-content:center;align-items:center}.edbar .ic svg{width:20px;height:20px}}
 /* the nudge pad of the edit bar: only on a touch screen, for what the arrow keys move (S4) */
 .nudgepad{display:flex;gap:6px;align-items:center;width:100%}

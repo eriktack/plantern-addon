@@ -10,6 +10,7 @@ import { serialRunner } from '../save-queue.js';
 import { askConflict } from '../conflict-ui.js';
 import { createHistory } from '../../edit/history.js';
 import { assetKey, assetWarnings } from '../../model/assets.js';
+import { clearInactiveValues } from '../../model/objects.js';
 import { validateModelCached as validateModel } from '../../model/validate.js';
 import { $, commit, esc, geosFor, isModelDirty, level, locOf, opts, room } from './core.js';
 import { afterLeave, editDraft, enterEdit, isDirty, leaveEdit, mayLeave, setStatus } from './session.js';
@@ -161,7 +162,7 @@ async function saveNow() {
   $('saveOut').textContent = 'Saving…';
   try {
     let r;
-    try { r = await Ed.house.save(Ed.model); }
+    try { r = await Ed.house.save(clearInactiveValues(Ed.model, Ed.blueprints)); }   // values that do not apply to a variant are dropped on save
     catch (e) {
       if (!e.conflict) throw e;
       // changed elsewhere in the same places: pick per thing, then save over what is stored now

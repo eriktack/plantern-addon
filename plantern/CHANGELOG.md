@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.11
+
+- Still to measure: each item can be confirmed as measured, one at a time, from its row in the list. Padlock and door-lock fixes; blueprint values that do not apply to a variant are cleared on save, not reported as warnings.
+
 ## 0.5.10
 
 - The open padlock on a door's lock is drawn as an open shackle, turned out of the housing as on a real padlock, in 3D and in the plan. The plan's padlock is drawn in the middle of the door.

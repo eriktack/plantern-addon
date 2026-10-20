@@ -73,21 +73,6 @@ function blueprintValueProblems(meta, o) {
   return out;
 }
 
-// Values stored for an option or a part that does not apply to the object's variant (appliesTo): the library ignores them,
-// so they are only reported, as the forms keep the value of a hidden option and a person may want to clear it.
-function ignoredValueWarnings(meta, o) {
-  const variantParam = meta.params.find(d => d.key === 'variant');
-  const active = o.params?.variant ?? variantParam?.default;
-  if (active === undefined) return [];
-  const out = [];
-  for (const d of meta.params) {
-    if (o.params && d.key in o.params && !appliesTo(d, active)) out.push(`${d.label} is set but does not apply to the ${active} variant (ignored)`);
-  }
-  for (const part of meta.parts) {
-    if (o.partMaterials && part.key in o.partMaterials && !appliesTo(part, active)) out.push(`${part.label} material is set but the ${active} variant has no such part (ignored)`);
-  }
-  return out;
-}
 
 /**
  * Problems with an object: { errors, warnings }. `level` is the level it stands on. `blueprints` is optional: a Map of
@@ -104,7 +89,6 @@ export function checkObject(o, level, blueprints) {
     if (!meta) warnings.push(`blueprint "${o.blueprint}" is not in this house or the built-in library (shown as a marker)`);
     else if (isPlainObject(o.params ?? {}) && (o.partMaterials === undefined || isPlainObject(o.partMaterials))) {
       errors.push(...blueprintValueProblems(meta, o));
-      warnings.push(...ignoredValueWarnings(meta, o));
     }
   }
   if (!Array.isArray(o.size) || o.size.length !== 3 || !o.size.every(v => Number.isFinite(v) && v > 0)) errors.push('size must be [width, depth, height] in mm, all more than 0');
@@ -149,4 +133,39 @@ export function checkObject(o, level, blueprints) {
   }
   if (Number.isFinite(o.z) && Array.isArray(o.size) && Number.isFinite(o.size[2]) && o.z + o.size[2] > (level.ceilingHeight ?? 2400) + 1) warnings.push(`reaches ${Math.round(o.z + o.size[2])} mm, above the ceiling (${level.ceilingHeight ?? 2400} mm)`);
   return { errors, warnings };
+}
+
+/** Values an object keeps for an option or a part that does not apply to its variant (appliesTo) taken out, so the next save
+ *  stores only what the object uses. Pure: the same model comes back when nothing is kept. blueprints: Map of id to meta. */
+export function clearInactiveValues(model, blueprints) {
+  if (!blueprints?.size) return model;
+  let changed = false;
+  const levels = (model.levels || []).map(lv => {
+    if (!(lv.objects || []).some(o => o.blueprint)) return lv;
+    let lvChanged = false;
+    const objects = lv.objects.map(o => {
+      const meta = o.blueprint && blueprints.get(o.blueprint);
+      const active = meta && (o.params?.variant ?? meta.params.find(d => d.key === 'variant')?.default);
+      if (active === undefined) return o;
+      const params = pruned(o.params, meta.params.filter(d => !appliesTo(d, active)).map(d => d.key));
+      const partMaterials = pruned(o.partMaterials, meta.parts.filter(p => !appliesTo(p, active)).map(p => p.key));
+      if (params === o.params && partMaterials === o.partMaterials) return o;
+      lvChanged = changed = true;
+      const out = { ...o };
+      if (params !== o.params) { if (params) out.params = params; else delete out.params; }
+      if (partMaterials !== o.partMaterials) { if (partMaterials) out.partMaterials = partMaterials; else delete out.partMaterials; }
+      return out;
+    });
+    return lvChanged ? { ...lv, objects } : lv;
+  });
+  return changed ? { ...model, levels } : model;
+}
+
+/** obj without the keys in keys: the same object when none is there, null when nothing is left. */
+function pruned(obj, keys) {
+  const drop = keys.filter(k => obj && k in obj);
+  if (!drop.length) return obj;
+  const out = { ...obj };
+  for (const k of drop) delete out[k];
+  return Object.keys(out).length ? out : null;
 }

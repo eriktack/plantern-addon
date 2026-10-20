@@ -1,6 +1,7 @@
 // Editor page: session. Split from ui.js (ui-consistency plan, UX34): no behaviour change, only where the code lives.
 
-import { renameFromName } from '../../edit/ops.js';
+import { renameFromName, confirmMeasured } from '../../edit/ops.js';
+import { stillToMeasure } from '../../edit/inspect.js';
 import { entityName, idFromName, renameId, renameBinding } from '../../edit/rename.js';
 import { openDialog, askConfirm } from '../dialog.js';
 import { loadFormForSelection, refName, selectFixture, selectNone, selectObject, selectOpening, selectRoom, selectSolid, selectStairs, selectWall, zoomToIfSmall } from './selection.js';
@@ -124,6 +125,14 @@ export function showEditBar() {
   $('edClose').textContent = changed || isNew ? 'Cancel' : 'Close';
   $('edState').textContent = isNew ? `● new ${Ed.fresh.what}: created when you Apply` : changed ? '● changes not applied yet' : '';
 }
+
+/** Confirm one item as measured: its values stay, its assumed list goes (one undo step). */
+export function confirmItem(id) {
+  const r = confirmMeasured(Ed.model, Ed.levelId, id, opts());
+  if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
+  commit(r.model);
+}
+
 /** Open the editor for one thing (leaving the current one first, asking if it has unapplied changes). */
 export function enterEdit(kind, id, o = {}) {
   perfAs('open');

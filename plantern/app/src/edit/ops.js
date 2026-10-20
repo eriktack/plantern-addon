@@ -878,6 +878,26 @@ export function deleteObject(model, levelId, id, options = {}) {
   return finish({ ...model, levels }, levelId, {}, options);
 }
 
+/** Confirm one item as measured (Still to measure): its `assumed` list goes, its values stay. One item per call; a level's own list
+ *  is confirmed with the level's id. Nothing else changes, so the values are the ones that were there. */
+export function confirmMeasured(model, levelId, id, options = {}) {
+  const lv = levelOf(model, levelId);
+  if (!lv) return refuse(model, `no level "${levelId}"`);
+  const strip = x => { const { assumed, ...rest } = x; return rest; };
+  let hit = false;
+  const levels = model.levels.map(l => {
+    if (l.id !== levelId) return l;
+    const out = { ...l };
+    if (id === l.id && l.assumed?.length) { hit = true; delete out.assumed; }
+    for (const k of ["walls", "rooms", "openings", "solids", "objects", "fixtures"]) {
+      if ((l[k] || []).some(x => x.id === id && x.assumed)) { hit = true; out[k] = l[k].map(x => (x.id === id ? strip(x) : x)); }
+    }
+    return out;
+  });
+  if (!hit) return refuse(model, `${id} has nothing to confirm`);
+  return finish({ ...model, levels }, levelId, {}, options);
+}
+
 /** Change a fixture (null removes a field; `pos` and `attach` replace each other). A value set here counts as measured. */
 export function setFixture(model, levelId, id, props, options = {}) {
   props = { ...(props || {}) };
