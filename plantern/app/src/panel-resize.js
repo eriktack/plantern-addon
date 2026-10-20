@@ -20,7 +20,7 @@ export function wirePanelResize(bar, panel, key, onResize = () => {}) {
 }
 
 // On a phone the plan is on top and the sidebar below it; a bar between them gives the sidebar 30 % to 80 % of the height
-// (docs/plans/mobile-ux.md, S2). The height is a CSS variable the phone layout reads (src/styles.css), so a wide screen ignores it.
+// (docs/archive/2026-10-20-mobile-ux.md, S2). The height is a CSS variable the phone layout reads (src/styles.css), so a wide screen ignores it.
 export const PANEL_HEIGHT = { min: 30, max: 80 };
 
 /** The panel's height in percent of the page when its top edge is dragged to `clientY`, within PANEL_HEIGHT. Pure. */

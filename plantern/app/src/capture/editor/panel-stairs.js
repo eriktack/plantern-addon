@@ -83,8 +83,12 @@ function stairsPreview() {
   const runs = flights.map((f, k) => runOf(outer[k], landingAfter(flights, k, W)));
   if (runs.some(r => !(r > 0))) return null;
   flights.forEach((f, k) => { f.length = runs[k]; });
-  const layout = stairLayout({ heading: 0, width: W, flights, turn: $('stTurn').value, landing: $('stLanding').value, winders: num('stWinders') }, [0, 0], 2750);
-  return layout && !layout.error ? { layout, outer } : null;
+  // the winder pivot as typed (an empty box is 0; a box that is not a number leaves the pivot at the inside corner)
+  const px = $('stPivX').value.trim() === '' ? 0 : num('stPivX'), py = $('stPivY').value.trim() === '' ? 0 : num('stPivY');
+  const winderPivot = ($('stPivX').value.trim() !== '' || $('stPivY').value.trim() !== '') && Number.isFinite(px) && Number.isFinite(py) ? [px, py] : undefined;
+  const layout = stairLayout({ heading: 0, width: W, flights, turn: $('stTurn').value, landing: $('stLanding').value, winders: num('stWinders'), ...(winderPivot ? { winderPivot } : {}) }, [0, 0], 2750);
+  if (layout?.error) return { error: layout.error };            // the panel says why the stair would not be drawn
+  return layout ? { layout, outer } : null;
 }
 /** The panel's hints: the steps of each flight (risers − 1) and the sketch, both from the fields as they are now. */
 export function updateStairsHints() {
@@ -95,8 +99,10 @@ export function updateStairsHints() {
   if (key === Ed.sketchKey) return;
   Ed.sketchKey = key;
   const prev = stairsPreview();
-  $('stSketch').hidden = !prev;
-  $('stSketch').innerHTML = prev ? stairSketch(prev.layout, prev.outer, { width: 300 }) : '';
+  $('stSketch').hidden = !prev?.layout;
+  $('stSketch').innerHTML = prev?.layout ? stairSketch(prev.layout, prev.outer, { width: 300 }) : '';
+  // a pivot that makes the stair impossible is explained here, as it is typed (the stair is not drawn on the plan until it is fixed)
+  $('stPivHint').textContent = prev?.error ? `This pivot cannot be used: ${prev.error}.` : '';
 }
 export function syncStairsRows() {
   const n = Number($('stShape').value), ref = $('stRef').value;

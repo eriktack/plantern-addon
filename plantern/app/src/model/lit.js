@@ -30,7 +30,10 @@ function roomSideOfUnit(o, level, geo, pos) {
   if (!f?.n) return pos;
   const { t0, t1 } = unitSpan(w, f, op), t = (pos[0] - w.a[0]) * f.n[0] + (pos[1] - w.a[1]) * f.n[1];
   const left = o.attach?.side === 'left';                    // the room is on the wall's left (+ along its normal) or on its right
-  const want = left ? Math.max(t, t1 + 10) : Math.min(t, t0 - 10);
+  // the plan's light stops at the opening's line, in the middle of the wall: a unit on the far face (placement) lies beyond it, so the light also stays
+  // on the room's side of that line, else the whole room would count as behind the window
+  const mid = (f.offL - f.offR) / 2;
+  const want = left ? Math.max(t, t1 + 10, mid + 10) : Math.min(t, t0 - 10, mid - 10);
   return want === t ? pos : [pos[0] + f.n[0] * (want - t), pos[1] + f.n[1] * (want - t)];
 }
 

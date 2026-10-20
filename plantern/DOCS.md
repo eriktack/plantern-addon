@@ -9,6 +9,16 @@ A data-driven floor plan of your house with your Home Assistant lights shown liv
    or a folder). The demo house is there from the start.
 3. No Home Assistant setup is needed: the add-on uses its own connection to Home Assistant.
 
+## Home Assistant connection
+
+The add-on has its own connection to Home Assistant, with no token to set up. A house names the connection its lamps use
+(in its `location.json`, so every Plantern that opens the house sees the same name). Set **Name of this Home Assistant's
+connection** (*Configuration*) to the name your houses already have, for example the one you set up on your PC (`ha_bbv28`), and they work here
+unchanged. The default is `home_assistant`. Changing it restarts the add-on.
+
+A house whose connection is not set up in the add-on uses the add-on's own connection anyway, with a note in the Editor and the viewer;
+nothing is written to the house. The Settings page says whether it belongs to the add-on or to a computer, and marks the built-in connection.
+
 ## Phone
 
 The add-on has an optional port 3000 (*Configuration → Network*). Set it to reach Plantern directly from a

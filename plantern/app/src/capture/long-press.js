@@ -1,4 +1,4 @@
-// A press that stays put opens the menu (docs/plans/mobile-ux.md, S3): Android Chrome sends `contextmenu` on a long press, iOS
+// A press that stays put opens the menu (docs/archive/2026-10-20-mobile-ux.md, S3): Android Chrome sends `contextmenu` on a long press, iOS
 // Safari does not, so the Editor times the press itself. The rule is pure, with the timer injected, and is tested:
 //   down(x, y)   a finger lands: the timer starts
 //   move(x, y)   the finger moved: further than `slop` px from where it landed, before the time is up, makes it a drag (no menu)

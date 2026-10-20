@@ -120,7 +120,7 @@ async function main() {
 
   // ---- HA ----
   // connections kept by Plantern's server (the token stays there), else config.local.json
-  const serverConns = house.server ? await fetch('api/ha/connections').then(r => (r.ok ? r.json() : { connections: [] })).then(b => b.connections.map(c => c.name)).catch(() => []) : [];
+  const serverConns = house.server ? await fetch('api/ha/connections').then(r => (r.ok ? r.json() : { connections: [] })).then(b => b.connections).catch(() => []) : [];
   const { name: connName, conn, note } = resolveConnection(loc, localConfig, serverConns);
   let ha;
   try { ha = createHaClient(conn, { entities: boundEntities(loc) }); }

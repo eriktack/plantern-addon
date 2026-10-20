@@ -166,7 +166,7 @@ export function buildModelGeometry(model, { headroom = DEFAULT_SETTINGS.stairHea
       entry.pos = start.pos;
       entry.rise = to.elevation - lv.elevation;
       const layout = stairLayout(st, start.pos, entry.rise);
-      if (layout.error) { entry.error = layout.error; continue; }
+      if (layout.error) { entry.error = layout.error; entry.pivot = layout.pivot; continue; }   // the pivot, so the plan can show where it is
       entry.layout = layout;
       // the opening in the floor above: the steps whose surface plus headroom reaches the slab's underside
       const under = to.elevation - (to.floorThickness ?? 0) - lv.elevation;

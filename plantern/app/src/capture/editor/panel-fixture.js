@@ -9,6 +9,7 @@ import { suggestEntities, setBinding, sameBinding } from '../../ha/suggest.js';
 import { stateClass, domainIcon } from '../../ha/pick.js';
 import { ICONS } from '../../icons.js';
 import { checkLook } from '../../ha/appearance.js';
+import { resolveConnection } from '../../ha/client.js';
 import { litRadius } from '../../model/lit.js';
 import { askConfirm } from '../dialog.js';
 import { deleteFixture, setFixture, splitWall } from '../../edit/ops.js';
@@ -83,16 +84,25 @@ const HA_RETRY_MS = 60000;
 /** The states of the house's connection, asked for only when Plantern's server keeps that connection: a computer
  *  without Home Assistant gets no 404 for every lamp shown. The names come first (api/ha/connections). */
 async function loadHaStates() {
-  const name = Ed.loc.integrations?.ha?.connection;
-  if (Ed.haStates || !name || !Ed.house?.server) return Ed.haStates;
+  if (Ed.haStates || !Ed.house?.server) return Ed.haStates;
   if (Date.now() - Ed.haAsked < HA_RETRY_MS) return Ed.haStates;
   Ed.haAsked = Date.now();
   try {
-    const names = (await (await fetch('api/ha/connections')).json()).connections.map(c => c.name);
-    if (names.includes(name)) { const r = await fetch(`api/ha/${encodeURIComponent(name)}/states`); if (r.ok) Ed.haStates = (await r.json()).states; }
+    // the same rule as the viewer (resolveConnection): the house's connection, else the add-on's own (a house without one, or one this Plantern lacks)
+    const conns = (await (await fetch('api/ha/connections')).json()).connections;
+    Ed.haConn = resolveConnection(Ed.loc, {}, conns);
+    if (Ed.haConn.conn.type === 'server') { const r = await fetch(`api/ha/${encodeURIComponent(Ed.haConn.name)}/states`); if (r.ok) Ed.haStates = (await r.json()).states; }
   } catch { /* not reachable: type the id */ }
   return Ed.haStates;
 }
+/** The connection the Editor talks to: its name, or the house's own name before the server has answered; null for none. */
+const connName = () => Ed.haConn?.conn.type === 'server' ? Ed.haConn.name : Ed.loc.integrations?.ha?.connection;
+/** A hint line for the entity fields: where the list comes from, and why it may be empty (a fallback to the add-on's connection, or no connection). */
+const connHint = what => {
+  const name = connName();
+  const base = name ? `in ${name}: ${what}` : 'pick the house\'s Home Assistant on the Settings page to get a list; or type the entity id';
+  return Ed.haConn?.note ? `${Ed.haConn.note}. ${base}` : base;
+};
 async function showBinding(x) {
   const b = Ed.loc.bindings?.[x.id] || {}, lv = level();
   $('xEntity').value = b.entity || ''; $('xBindOut').textContent = '';
@@ -102,15 +112,16 @@ async function showBinding(x) {
   $('xLookBri').value = lk.brightness ?? ''; $('xLookK').value = lk.kelvin ?? ''; $('xLookUseColor').checked = !!lk.color; $('xLookColor').value = lk.color || '#ffd6aa';
   const lamps = Ed.model.levels.flatMap(l => (l.fixtures || []).filter(f => f.kind !== 'switch').map(f => ({ f, l })));
   $('xControls').innerHTML = lamps.map(({ f, l }) => `<label class="inl"><input type="checkbox" value="${esc(f.id)}"${(b.controls || []).includes(f.id) ? ' checked' : ''}> ${esc(displayName(f))}${l.id !== lv.id ? ` <small>${esc(l.name || l.id)}</small>` : ''}</label>`).join('') || 'No lamps yet.';
-  const name = Ed.loc.integrations?.ha?.connection;
-  $('xEntityNote').textContent = name ? `in ${name}: type a name or id, the best matches come first; picking one links it when you Apply` : 'pick the house\'s Home Assistant on the Settings page to get a list; or type the entity id';
+  const xHint = 'type a name or id, the best matches come first; picking one links it when you Apply';
+  $('xEntityNote').textContent = connHint(xHint);
   const states = await loadHaStates();
   if (fixture() !== x) return;
+  $('xEntityNote').textContent = connHint(xHint);                   // now that the server has said which connection it is
   const room = (lv.rooms || []).find(r => (x.pos && pointInPolygon(x.pos, r.polygon)) || (x.attach && lv.walls.find(w => w.id === x.attach.wall)?.rooms?.includes(r.id)));
   entityChoices.x = suggestEntities(states || [], { kind: x.kind, names: [x.name, room?.name, room && Ed.loc.areas?.[room.id]] });
   showEntityPick();
 }
-export const entityChoices = { x: [], o: [], ob: [] };
+export const entityChoices = { x: [], o: [], ol: [], ob: [] };
 /** The entity field of a lamp or switch (prefix x) or of a door (prefix o): what is chosen (friendly name, id, state), and while typing a list to pick from (name + id). */
 export function showEntityPick(open = false, p = 'x') {
   const input = $(`${p}Entity`), now = $(`${p}EntityNow`), pick = $(`${p}EntityPick`), choices = entityChoices[p];
@@ -129,7 +140,7 @@ export function showEntityPick(open = false, p = 'x') {
 }
 /** Toggle an entity through Plantern's server and show its new state (UX31); nothing in the house changes. */
 async function tryEntity(id, p) {
-  const name = Ed.loc.integrations?.ha?.connection;
+  const name = connName();
   try {
     const r = await fetch(`api/ha/${encodeURIComponent(name)}/call`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain: id.split('.')[0], service: 'toggle', target: { entity_id: id } }) });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
@@ -143,24 +154,29 @@ async function tryEntity(id, p) {
 /** The sensor of a door opening (location.json → bindings[<opening id>].entity): the field and its note, then the sensors that fit. */
 export function showDoorBinding(o) {
   $('oEntity').value = Ed.loc.bindings?.[o.id]?.entity || '';
-  entityChoices.o = [];
+  $('olEntity').value = Ed.loc.bindings?.[o.id]?.lock || '';
+  entityChoices.o = []; entityChoices.ol = [];
   loadDoorChoices(o);
 }
 export async function loadDoorChoices(o) {
-  const info = openingInfo(level(), o.id), name = Ed.loc.integrations?.ha?.connection;
-  $('oEntityNote').textContent = name ? `in ${name}: a binary_sensor that says open (on) or closed (off); type a name or id, picking one links it when you Apply` : "pick the house's Home Assistant on the Settings page to get a list; or type the entity id (a binary_sensor: on = open)";
+  const info = openingInfo(level(), o.id);
+  const noteDoor = () => { $('oEntityNote').textContent = connHint('a binary_sensor that says open (on) or closed (off); type a name or id, picking one links it when you Apply'); $('olEntityNote').textContent = connHint('a lock that says locked or unlocked, shown as a padlock on the door (green and closed when locked, red and open when not)'); };
+  noteDoor();
   const states = await loadHaStates();
   if (opening() !== o) return;
+  noteDoor();
   const rooms = [...new Set([...(info?.sides?.left || []), ...(info?.sides?.right || [])])].map(id => (level().rooms || []).find(r => r.id === id)).filter(Boolean);
   entityChoices.o = suggestEntities(states || [], { kind: 'door', names: [o.name, 'door', ...rooms.flatMap(r => [r.name, Ed.loc.areas?.[r.id]])] });
-  showEntityPick(false, 'o');
+  entityChoices.ol = suggestEntities(states || [], { kind: 'lock', names: [o.name, 'door', ...rooms.flatMap(r => [r.name, Ed.loc.areas?.[r.id]])] });
+  showEntityPick(false, 'o'); showEntityPick(false, 'ol');
 }
 /** The sensor of a door as its field says it now: { next } is the location with it, or { error } when it is not valid. Written when the opening is applied, with the house's save. */
 export function doorBindingDraft(o, type) {
-  if (type !== 'door') return { next: Ed.loc.bindings?.[o.id] ? setBinding(Ed.loc, o.id, { entity: '' }) : Ed.loc };      // not a door any more: no sensor
-  const entity = $('oEntity').value.trim();
+  if (type !== 'door') return { next: Ed.loc.bindings?.[o.id] ? setBinding(Ed.loc, o.id, { entity: '', lock: '' }) : Ed.loc };      // not a door any more: no sensor or lock
+  const entity = $('oEntity').value.trim(), lock = $('olEntity').value.trim();
   if (entity && !/^[a-z_]+\.[a-z0-9_]+$/.test(entity)) return { error: 'The Home Assistant sensor looks like binary_sensor.front_door' };
-  return { next: setBinding(Ed.loc, o.id, { entity }) };
+  if (lock && !/^lock\.[a-z0-9_]+$/.test(lock)) return { error: 'The Home Assistant lock looks like lock.front_door' };
+  return { next: setBinding(Ed.loc, o.id, { entity, lock }) };
 }
 
 /**

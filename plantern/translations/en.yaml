@@ -1,0 +1,6 @@
+configuration:
+  connection_name:
+    name: Name of this Home Assistant's connection
+    description: >-
+      The name Plantern's houses use for this Home Assistant (location.json, integrations.ha.connection). Use the name your houses
+      already have, for example the one set up on your PC, so they work here without changes. Default home_assistant.

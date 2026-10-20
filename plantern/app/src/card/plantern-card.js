@@ -38,8 +38,11 @@ const getJson = async url => {
 const STYLE = `
   :host { display: block; height: 100%; }
   ha-card { display: flex; flex-direction: column; height: 100%; overflow: hidden; box-sizing: border-box; }
-  .hd { display: flex; align-items: center; gap: 8px; padding: 12px 16px 0; }
-  .hd .t { flex: 1; font-size: 1.1em; font-weight: 500; color: var(--primary-text-color); }
+  /* the header wraps instead of squeezing: the title keeps a readable width, the 2D / 3D switch is never cut, and the floors choice of the 3D view is one compact menu (issue #32) */
+  .hd { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 12px 16px 0; }
+  .hd .t { flex: 1 1 7em; min-width: 0; font-size: 1.1em; font-weight: 500; color: var(--primary-text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hd .view { flex: none; }
+  .hd select.stack { flex: 0 1 auto; min-width: 0; max-width: 100%; font: inherit; padding: 5px 28px 5px 14px; border: 1px solid var(--divider-color, #888); border-radius: 999px; color: var(--primary-text-color); background: var(--card-background-color, transparent); cursor: pointer; }
   .seg { display: inline-flex; border: 1px solid var(--divider-color, #888); border-radius: 999px; overflow: hidden; }
   .seg button { font: inherit; border: 0; padding: 4px 14px; cursor: pointer; color: var(--primary-text-color); background: transparent; }
   .seg button.on { background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
@@ -158,7 +161,7 @@ class PlanternCard extends HTMLElement {
     const levelName = l => l.name || l.id;
 
     const hd = root.querySelector('.hd'), lv = root.querySelector('.lv'), plansEl = root.querySelector('.plans');
-    hd.innerHTML = `<div class="t">${esc(cfg.title ?? loc.name ?? '')}</div><span class="seg view"><button data-v="2d" class="on">2D</button><button data-v="3d">3D</button></span><span class="seg stack" hidden><button data-s="this">This floor</button><button data-s="below">Below too</button><button data-s="all">All floors</button></span>`;
+    hd.innerHTML = `<div class="t">${esc(cfg.title ?? loc.name ?? '')}</div><span class="seg view"><button data-v="2d" class="on">2D</button><button data-v="3d">3D</button></span><select class="stack" hidden aria-label="Floors in the 3D view"><option value="this">This floor</option><option value="below">This and below</option><option value="all">All floors</option></select>`;
     if (cfg.height) this.shadowRoot.host.style.setProperty('--plantern-height', `${cfg.height}px`);
 
     const fixtureLabel = fx => fx.name || fx.id;
@@ -172,7 +175,7 @@ class PlanternCard extends HTMLElement {
     };
     let view3d = null;
     // asset models of the house (its own assets/ folder; the card has no shared one), decision 146; the models of its library objects are published by
-    // the add-on next to the house's files (glb/index.json, glb/<hash>.glb), because the card cannot reach the add-on's API (docs/plans/card-blueprint-models.md)
+    // the add-on next to the house's files (glb/index.json, glb/<hash>.glb), because the card cannot reach the add-on's API (docs/archive/2026-10-20-card-blueprint-models.md)
     // models that have loaded redraw the plans once after a quiet moment, not once each; the 3D view places each model itself when it arrives
     const plansAfterAssets = coalesce(() => renderPlans({ with3d: false }));
     const assets = createAssetCache({ houseBase: baseUrl, sharedBase: null, published: `${baseUrl}glb/`, onChange: plansAfterAssets });
@@ -287,8 +290,8 @@ class PlanternCard extends HTMLElement {
     const mark = mode => { for (const b of hd.querySelectorAll('.view button')) b.classList.toggle('on', b.dataset.v === mode); };
     // the 3D stack: this floor, this and below, or all (remembered in this browser; without a choice, several floors are pulled apart)
     const stackEl = hd.querySelector('.stack');
-    const markStack = () => { const c = stackChoice() ?? (shown().length > 1 ? 'all' : 'this'); for (const b of stackEl.querySelectorAll('button')) b.classList.toggle('on', b.dataset.s === c); };
-    for (const b of stackEl.querySelectorAll('button')) b.onclick = () => { writePrefs({ stack: b.dataset.s }); markStack(); if (view3d) { build3d(); view3d.render(); } };
+    const markStack = () => { stackEl.value = stackChoice() ?? (shown().length > 1 ? 'all' : 'this'); };
+    stackEl.onchange = () => { writePrefs({ stack: stackEl.value }); markStack(); if (view3d) { build3d(); view3d.render(); } };
     const setMode = async mode => {
       if (mode === '3d') {
         try { await ensure3d(); this._say(''); } catch (e) { this._say(`Plantern: the 3D view could not load (${e.message})`, true); mode = '2d'; }

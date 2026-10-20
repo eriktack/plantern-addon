@@ -1,5 +1,5 @@
 // A long note folded to one line with More… on a phone, as the Editor folds its long help (PLANTERN.md §7, *Panels*): used for the
-// viewer's Home Assistant note (docs/plans/mobile-ux.md, S5). Browser only; foldState() is pure and tested.
+// viewer's Home Assistant note (docs/archive/2026-10-20-mobile-ux.md, S5). Browser only; foldState() is pure and tested.
 
 /** What the note and its button look like: folded (only on a phone), whether More…/Less shows, and its label. */
 export function foldState({ phone, open, overflows }) {

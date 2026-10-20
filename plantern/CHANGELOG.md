@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.8
+
+- Door lock padlocks on doors; window lamp light and lamp self-shadow fixes; card header dropdown; the add-on's Home Assistant connection can be named on its configuration page so houses made on a PC work unchanged, houses with a missing connection use the add-on's own, and the Settings page names its server and can rename connections
+
 ## 0.5.7
 
 - the card shows library objects

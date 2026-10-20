@@ -4,7 +4,7 @@
 //
 //   <target>/src/…                the modules the card imports (its import closure, nothing else)
 //   <target>/locations/index.json the houses; <target>/locations/<id>/{location.json,<model>,assets/…}
-//   <target>/locations/<id>/glb/   the models of the house's library objects (docs/plans/card-blueprint-models.md): <hash>.glb
+//   <target>/locations/<id>/glb/   the models of the house's library objects (docs/archive/2026-10-20-card-blueprint-models.md): <hash>.glb
 //                                  and index.json, which maps an object's settings (assetKey()) to its file; built by the server's
 //                                  GLB cache, so the card reads them and never has to reach the add-on's API
 //

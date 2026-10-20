@@ -8,6 +8,8 @@ import { pointInPolygon } from './polygon.js';
 import { stairSolids, stairRails } from './stairs.js';
 import { openingFittings } from './fittings.js';
 import { doorOpen } from '../model/doors.js';
+import { lockOf } from '../ha/door.js';
+import { padlockPrisms } from './padlock.js';
 import { roomCeiling } from '../model/rooms.js';
 
 /** Default colours; model colours (sides.*.color, solid/object color) win. */
@@ -31,6 +33,7 @@ const PAINT = 3;       // mm: the paint skin on a solid's face where a room has 
  *   (round handrails, round pillars): the renderer draws those, `poly` and z0 / z1 are their outline in plan and their extent.
  *   kind: floor | ceiling | wall | railing | rail | glass | frame | leaf | sill | handrail | post | solid | paint | object
  *   frame, leaf, sill, glass: what fills an opening (geometry/fittings.js)
+ *   padlock: a door's lock from Home Assistant, on each face of its wall (geometry/padlock.js; body prism and `bar` shackle)
  *   paint: a thin skin on the stretch of a solid's face along a room painted for that room (solids[].sides)
  *   sides: colours of the wall's left / right faces (and top and ends), n = its left normal, u = its
  *   direction; tex = { left?, right? } { texture, uvScale } when that side's material has an image.
@@ -145,6 +148,9 @@ export function levelPrisms(level, geo, materials = {}, options = {}) {
       if (head < highAt || (prof.sloped && head < top)) for (const lp of looks([quad])) for (const sp of slopeParts([lp.poly])) P({ id: o.id, kind: 'wall', poly: sp.poly, z0: head, z1: top, color: lp.sides.right, sides: lp.sides, ...(prof.sloped ? { slope: { top: lineOf('top', sp.s) } } : {}) });
       // what fills the opening: a window's frame, sash, glass and sill board; a door's casing and closed leaf (geometry/fittings.js)
       for (const fit of openingFittings(w, f, { ...o, sill, head }, { open: doorOpen(o, options.doorStates) })) P(fit);
+      // a door's lock from Home Assistant: a padlock on both faces (geometry/padlock.js)
+      const lock = o.type === 'door' ? lockOf(options.doorStates, o) : undefined;
+      if (lock !== undefined) padlockPrisms(w, f, { ...o, sill, head }, lock).forEach(P);
     }
   }
 

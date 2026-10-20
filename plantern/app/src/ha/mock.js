@@ -8,7 +8,7 @@ function seed(entity_id) {
     supported_color_modes: ['color_temp', 'rgb'], color_mode: 'color_temp',
     brightness: 200, color_temp_kelvin: 2700, rgb_color: null,
   });
-  return { entity_id, state: domain === 'light' ? 'on' : 'off', attributes, last_changed: now, last_updated: now };
+  return { entity_id, state: domain === 'light' ? 'on' : domain === 'lock' ? 'locked' : 'off', attributes, last_changed: now, last_updated: now };
 }
 
 /**

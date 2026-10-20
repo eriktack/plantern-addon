@@ -1,4 +1,4 @@
-// The nudge pad of the Editor on a touch screen (docs/plans/mobile-ux.md, S4): four arrows that move the selected thing 10 mm
+// The nudge pad of the Editor on a touch screen (docs/archive/2026-10-20-mobile-ux.md, S4): four arrows that move the selected thing 10 mm
 // per tap, as the arrow keys do, and keep moving while a finger stays on one. The repeat is pure with the timer injected (tested).
 
 export const NUDGE_STEP = 10;            // mm per tap, as the arrow key without a modifier

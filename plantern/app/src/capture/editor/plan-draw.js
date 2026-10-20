@@ -101,6 +101,23 @@ export function stairsHandlesSvg(lv, geo, fs) {
   const [x, y] = toSvg(end), [ox, oy] = toSvg(o);
   return `<g data-handles="${esc(Ed.stairsId)}"><circle cx="${ox}" cy="${oy}" r="${fs * 0.35}" fill="#4cc38a" stroke="#14161a" stroke-width="${fs / 10}" pointer-events="none"/><circle cx="${x}" cy="${y}" r="${fs * 0.4}" fill="#14161a" stroke="#ffb454" stroke-width="${fs / 7}" pointer-events="none"/><circle data-sturn="${esc(Ed.stairsId)}" cx="${x}" cy="${y}" r="${fs * 0.8}" fill="transparent" style="cursor:grab"><title>Drag round to turn the stairs about their start (green) in 90° steps</title></circle></g>`;
 }
+/**
+ * Where the winders fan from, on the selected stairs, when the pivot is not the inside corner (decision 259, issue #33): a ringed cross with
+ * "pivot" beside it. When the pivot makes the stairs impossible (inside the landing) there is no stair to draw, so the cross is red and says so.
+ */
+export function stairsPivotSvg(lv, geo, fs) {
+  const g = Ed.stairsId && geo?.stairs?.find(x => x.id === Ed.stairsId);
+  const wp = g?.stairs?.winderPivot;
+  if (!g || !Array.isArray(wp) || (wp[0] === 0 && wp[1] === 0)) return '';
+  const spots = g.layout ? (g.layout.turns || []).filter(t => t.fan).map(t => t.fan.pivot) : g.pivot ? [g.pivot] : [];
+  const bad = !g.layout, colour = bad ? '#ff5a5a' : '#ffb454', r = fs * 0.45;
+  return spots.map(p => {
+    const [x, y] = toSvg(p);
+    return `<g data-pivot="${esc(g.id)}" pointer-events="none"><circle cx="${x}" cy="${y}" r="${r}" fill="#14161a" fill-opacity="0.8" stroke="${colour}" stroke-width="${fs / 10}"/>` +
+      `<path d="M${x - r * 0.7} ${y}H${x + r * 0.7}M${x} ${y - r * 0.7}V${y + r * 0.7}" stroke="${colour}" stroke-width="${fs / 10}"/>` +
+      `<text x="${x + r * 1.4}" y="${y - r * 0.6}" font-size="${fs * 0.9}" fill="${colour}" stroke="#14161a" stroke-width="${fs / 8}" paint-order="stroke">${bad ? 'pivot: inside the landing' : 'pivot'}</text></g>`;
+  }).join('');
+}
 /** An object on the plan: its group (clickable, draggable) and, when selected and free, its turning handle (own group). */
 export function objectSvg(o, lv, geo, fs) {
   const poly = (p, style) => `<polygon points="${p.map(q => toSvg(q).join(',')).join(' ')}" ${style}/>`;
@@ -280,7 +297,7 @@ function drawPlan() {
   }
   // openings: door leaf and swing, window frame, passage faces; clickable, the selected one highlighted
   for (const o of lv.openings || []) out += openingSvg(o, lv, Ed.curGeo, fs);
-  let onTop = openingHandlesSvg(lv, Ed.curGeo, fs) + stairsHandlesSvg(lv, Ed.curGeo, fs);                       // handles drawn last, over lamps and start dots
+  let onTop = openingHandlesSvg(lv, Ed.curGeo, fs) + stairsHandlesSvg(lv, Ed.curGeo, fs) + stairsPivotSvg(lv, Ed.curGeo, fs);                       // handles drawn last, over lamps and start dots
   // objects: boxes (dashed above the cut plane, like a wall cabinet), clickable and draggable
   for (const o of lv.objects || []) { const g = objectSvg(o, lv, Ed.curGeo, fs); out += g.body; onTop += g.handles; }
   // lamps (circles) and switches (squares), clickable; tinted while a value is still a default

@@ -120,6 +120,7 @@ export const Ed = {
 
 // ---- the link to Home Assistant: location.json → bindings (saved at once, a file of its own) ----
   haStates: null,       // the states of the house's connection kept by Plantern's server, once loaded
+  haConn: null,         // resolveConnection() for the house: { name, conn, note?, fallback? }; its note says why the list may be empty (a fallback, or mock)
   haAsked: 0,           // when the server was last asked (ms); asked again only after HA_RETRY_MS, never on every click
 
 /** A lit object's light (openings-and-lit-objects LA4, LA5): its link, the look it has when on, and its radius. Shown once the object has a light, stored with it or built by the server. */

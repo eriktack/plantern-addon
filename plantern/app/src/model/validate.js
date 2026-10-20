@@ -294,8 +294,9 @@ function validateStairs(model, geos) {
       });
       // ignoreDepthWarning: the person checked the steps and they are right (fixes list 28); only this warning is silenced
       if (bad.length && s.stairs.ignoreDepthWarning !== true) warn(`step depth ${bad.map(d => Math.round(d)).join(', ')} mm (usual ${STAIR_LIMITS.tread.join('–')})`);
+      if (s.stairs.winderPivot && !(L.winders > 0)) warn('it has a winder pivot but no winders (two flights with landing "winders"), so the pivot is not used');
       // a moved winder pivot fans equal angles; the further it is from the landing the more uneven the treads get
-      if (s.stairs.winderPivot) {
+      if (s.stairs.winderPivot && L.winders > 0) {
         const areas = L.steps.filter(st => st.kind === 'winder').map(st => Math.abs(st.poly.reduce((t, q, i) => { const r = st.poly[(i + 1) % st.poly.length]; return t + q[0] * r[1] - r[0] * q[1]; }, 0) / 2));
         if (areas.length > 1 && Math.max(...areas) > 3 * Math.min(...areas)) warn(`the winders are very uneven with this pivot (the largest is ${(Math.max(...areas) / Math.min(...areas)).toFixed(1)} times the smallest): move the winder pivot closer to the landing`);
       }
@@ -460,6 +461,8 @@ export function validateBindings(location, model) {
     else if (!op && !fx.has(id)) out.push({ severity: 'error', id, msg: 'binding references a fixture or door that does not exist in the model' });
     else if (isObject.has(id) && !lit.has(id)) out.push({ severity: 'error', id, msg: 'only a lit object (a library lamp) can be bound to a Home Assistant light' });
     for (const c of b.controls || []) if (!fx.has(c)) out.push({ severity: 'error', id, msg: `controls missing fixture "${c}"` });
+    if (b.lock && !op) out.push({ severity: 'error', id, msg: 'only a door can be bound to a Home Assistant lock' });
+    if (b.lock && !/^lock\.[a-z0-9_]+$/.test(b.lock)) out.push({ severity: 'warn', id, msg: `"${b.lock}" does not look like a Home Assistant lock (lock.front_door)` });
     if (b.entity && !/^[a-z_]+\.[a-z0-9_]+$/.test(b.entity)) out.push({ severity: 'warn', id, msg: `"${b.entity}" does not look like an HA entity id` });
     for (const m of checkLook(b.look)) out.push({ severity: 'error', id, msg: m });
   }
@@ -469,6 +472,5 @@ export function validateBindings(location, model) {
 /** After the first state load: bound entities that HA does not know. */
 export function validateEntities(location, ha) {
   return Object.entries(location.bindings || {})
-    .filter(([, b]) => b.entity && !ha.getState(b.entity))
-    .map(([id, b]) => ({ severity: 'warn', id, msg: `entity ${b.entity} not found in Home Assistant` }));
+    .flatMap(([id, b]) => [b.entity, b.lock].filter(e => e && !ha.getState(e)).map(e => ({ severity: 'warn', id, msg: `entity ${e} not found in Home Assistant` })));
 }

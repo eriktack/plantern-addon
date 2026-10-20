@@ -387,6 +387,9 @@
       <label>Door sensor in Home Assistant <small id="oEntityNote">a binary_sensor that says open (on) or closed (off); picking one links it when you Apply</small><input id="oEntity" autocomplete="off" spellcheck="false" placeholder="type to search: name or entity id"></label>
       <div id="oEntityPick" class="entpick" hidden></div>
       <div id="oEntityNow" class="help"></div>
+      <label>Door lock in Home Assistant <small id="olEntityNote">a lock that says locked or unlocked; shown as a padlock on the door (green and closed when locked, red and open when not)</small><input id="olEntity" autocomplete="off" spellcheck="false" placeholder="type to search: name or entity id"></label>
+      <div id="olEntityPick" class="entpick" hidden></div>
+      <div id="olEntityNow" class="help"></div>
       <div class="help" id="oBindHint">Without a sensor the door is drawn open, and light passes it. A closed sensor shuts it. Sliding and pocket doors do not change with the sensor.</div>
     </div>
     <div id="oHosted" class="pform"></div>
@@ -543,10 +546,11 @@
       <label>At each turn <select id="stLanding" data-seg><option value="square">a square landing</option><option value="winders">winders</option></select></label>
       <label id="stWindersRow">Winders <small>wedge steps</small><input id="stWinders" inputmode="numeric" autocomplete="off"></label>
       <div id="stPivotRow" class="pair">
-        <span>Pivot, from the inside corner <small>mm: x along the walk after the turn, y along the walk before it; empty = the inside corner</small></span>
+        <span>Pivot, from the inside corner <small>mm. x: along the walk after the turn (positive = out beside the stair, past the inside wall). y: along the walk before the turn (positive = into the landing, negative = back along the first flight). On the landing's edge is fine; inside it is not. Empty = the inside corner. The pivot is marked on the plan.</small></span>
         <label>x <input id="stPivX" inputmode="numeric" placeholder="0" autocomplete="off"></label>
         <label>y <input id="stPivY" inputmode="numeric" placeholder="0" autocomplete="off"></label>
         <button type="button" id="stPivReset" class="quiet">Reset to the inside corner</button>
+        <div id="stPivHint" class="help err" role="alert"></div>
       </div>
     </div>
     <div class="grid2">

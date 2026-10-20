@@ -244,7 +244,8 @@ export function createView3d(container, hooks = {}) {
           m.userData = { id: o.id, kind: 'asset' };
           m.position.set(...toThree(centre, z));
           m.rotation.y = heading;
-          m.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+          // a lit object does not shadow its own light: the light sits inside its shade, so its stem, base and shade would throw dark wedges across the room
+          m.traverse(c => { if (c.isMesh) { c.castShadow = !lit; c.receiveShadow = true; } });
           g.add(m);
           if (box) box.visible = false;
           // a lit object is its lamp (lit.js): its model is what is clicked to switch the light, not a ball at the light

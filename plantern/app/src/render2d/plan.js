@@ -7,6 +7,8 @@ import { openingSymbol, arcPathSvg } from '../geometry/openings.js';
 import { sideStrips, wallCut } from '../geometry/walls.js';
 import { resolveSide } from '../model/materials.js';
 import { doorOpen } from '../model/doors.js';
+import { lockOf, padlockLook } from '../ha/door.js';
+import { drawPadlock } from './padlock.js';
 import { solidStretches, paintStrip } from '../geometry/solids.js';
 import { solidCircle } from '../geometry/circle.js';
 import { wallLookPieces } from '../geometry/paint.js';
@@ -27,6 +29,7 @@ const BULB_PATH = 'M -46 52 C -118 12 -102 -104 0 -104 C 102 -104 118 12 46 52 Z
 
 /** A strip's many overlapping glows are each dimmer than a lamp's, so they add up to about one lamp's light. */
 const STRIP_GLOW = 0.55;
+const PADLOCK_MM = 260;                 // width of a door's padlock in the plan
 /**
  * SVG plan renderer + pan/zoom. Reads only derived geometry (buildLevelGeometry), never computes its own.
  * hooks: { onFixtureClick(fx, ev), onTap(ev), onHover(ev), onView(), interactive, palette (render2d/palette.js; default dark) }
@@ -135,6 +138,12 @@ export function createPlanView(svg, hooks = {}) {
       sym.lines.forEach(l => line(l, false));
       sym.dashed.forEach(l => line(l, true));
       for (const arc of sym.arcs) el('path', { d: arcPathSvg(toSvg(arc.c), arc.r, toSvg(arc.from), toSvg(arc.to)), fill: 'none', stroke: color, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': arc.dashed ? '4 3' : '3 2' }, gWall);
+    }
+    // a door's lock from Home Assistant: a padlock on the door, on top of everything
+    for (const o of level.openings || []) {
+      const state = lockOf(doorStates, o), line = state !== undefined && geo.openingLine(o);
+      if (!line) continue;
+      drawPadlock(el, gFix, toSvg([(line[0][0] + line[1][0]) / 2, (line[0][1] + line[1][1]) / 2]), PADLOCK_MM, padlockLook(state), o.id);
     }
     for (const s of level.solids || []) {
       // above the plan's cut height (a beam, a lintel): dashed, like a wall cabinet

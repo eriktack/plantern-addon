@@ -18,21 +18,29 @@ export function createHaClient(conn, { entities = [] } = {}) {
   }
 }
 
+/** The connections of api/ha/connections as { name, builtin } (plain names are accepted too); a stored connection the built-in one shadows is left out. */
+export const serverConnectionList = list => (list || []).filter(c => !c?.shadowed).map(c => (typeof c === 'string' ? { name: c, builtin: false } : { name: c.name, builtin: !!c.builtin }));
+
 /**
- * Resolve the connection for a location: location.integrations.ha.connection names a connection kept
- * by Plantern's server (serverConnections: the names it has, from api/ha/connections; the token stays
- * there), else an entry in config.local.json → connections. Missing → mock, with a reason the UI can show.
+ * Resolve the connection for a location: location.integrations.ha.connection names a connection kept by Plantern's server
+ * (serverConnections: what it has, from api/ha/connections, as { name, builtin } or plain names; the token stays there), else an
+ * entry in config.local.json → connections. One rule:
+ *  (a) the house names a connection the server has (the built-in one included): use it;
+ *  (b) it names none: use the server's built-in connection (the Home Assistant add-on's own);
+ *  (c) it names one that is neither on the server nor in config.local.json, and the server has a built-in one: use that, with fallback: true and a note;
+ *  (d) otherwise mock, with a reason the UI can show. A PC has no built-in connection, so nothing there is a silent stand-in.
+ * Returns { name, conn, note?, fallback? }.
  */
 export function resolveConnection(location, localConfig, serverConnections = []) {
-  const name = location.integrations?.ha?.connection;
-  // in the HA add-on a house without a connection uses the add-on's own
-  if (!name && serverConnections.includes('home_assistant')) return { name: 'home_assistant', conn: { type: 'server', name: 'home_assistant' } };
+  const name = location.integrations?.ha?.connection, list = serverConnectionList(serverConnections), builtin = list.find(c => c.builtin);
+  if (!name && builtin) return { name: builtin.name, conn: { type: 'server', name: builtin.name } };
   if (!name) return { name: null, conn: { type: 'mock' }, note: 'location has no HA connection; using mock' };
-  if (serverConnections.includes(name)) return { name, conn: { type: 'server', name } };
+  if (list.some(c => c.name === name)) return { name, conn: { type: 'server', name } };
   const conn = localConfig.connections?.[name];
-  if (!conn) return { name, conn: { type: 'mock' }, note: `connection "${name}" is neither set up in Plantern (Settings page) nor in config.local.json; using mock` };
-  return { name, conn };
+  if (conn) return { name, conn };
+  if (builtin) return { name: builtin.name, conn: { type: 'server', name: builtin.name }, fallback: true, note: `connection "${name}" is not set up in this Plantern; using the Home Assistant add-on's own connection ("${builtin.name}")` };
+  return { name, conn: { type: 'mock' }, note: `connection "${name}" is neither set up in Plantern (Settings page) nor in config.local.json; using mock` };
 }
 
 /** Unique entity ids bound in a location. */
-export const boundEntities = location => [...new Set(Object.values(location.bindings || {}).map(b => b.entity).filter(Boolean))];
+export const boundEntities = location => [...new Set(Object.values(location.bindings || {}).flatMap(b => [b.entity, b.lock]).filter(Boolean))];

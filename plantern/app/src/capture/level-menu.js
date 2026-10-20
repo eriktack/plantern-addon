@@ -1,4 +1,4 @@
-// The level strip of the Editor's plan as a dropdown on a phone (docs/plans/mobile-ux.md, follow-up of H1/H3): the row of buttons
+// The level strip of the Editor's plan as a dropdown on a phone (docs/archive/2026-10-20-mobile-ux.md, follow-up of H1/H3): the row of buttons
 // (Upper floor · Ground floor ✎ · Basement) becomes two rows of 44 px buttons on a narrow screen and covers the plan, so there it is
 // one button naming the level shown, with the levels in a menu. Pure: the entries and the button's label.
 

@@ -263,6 +263,9 @@ async function init() {
   $('oEntity').addEventListener('input', () => showEntityPick(true, 'o'));
   $('oEntity').addEventListener('focus', () => showEntityPick(true, 'o'));
   $('oEntity').addEventListener('blur', () => showEntityPick(false, 'o'));
+  $('olEntity').addEventListener('input', () => showEntityPick(true, 'ol'));
+  $('olEntity').addEventListener('focus', () => showEntityPick(true, 'ol'));
+  $('olEntity').addEventListener('blur', () => showEntityPick(false, 'ol'));
   $('obEntity').addEventListener('input', () => showEntityPick(true, 'ob'));
   $('obEntity').addEventListener('focus', () => showEntityPick(true, 'ob'));
   $('obEntity').addEventListener('blur', () => showEntityPick(false, 'ob'));

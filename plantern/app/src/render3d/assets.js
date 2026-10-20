@@ -20,7 +20,7 @@ const settle = p => Promise.resolve(p).then(v => v, () => null);
  * sceneless (the Editor, PF14): a blueprint object is not loaded as a model at all. The server's answer (size, light, main colour) is all that is
  * kept, so the page fetches no model file and never loads three.js for them; mainColour() then gives the colour the server worked out. A plain
  * model file (assets/<name>/model.glb) is still loaded as before.
- * published (the Lovelace card, docs/plans/card-blueprint-models.md): a URL ending in '/' where the add-on publishes the models of the
+ * published (the Lovelace card, docs/archive/2026-10-20-card-blueprint-models.md): a URL ending in '/' where the add-on publishes the models of the
  * house's library objects (index.json, <hash>.glb). A cache with it never asks a server: a blueprint object is looked up in that index
  * by its assetKey() and its file is read from there (the card cannot reach the add-on's API); an object that is not in the index is 'missing'.
  */

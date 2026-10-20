@@ -2,7 +2,7 @@
 // entities fit a fixture (by kind and by how its name and room read against the entity's id and
 // friendly name), and the binding written into location.json → bindings.
 
-const DOMAINS = { lamp: ['light', 'switch'], strip: ['light', 'switch'], switch: ['switch', 'light', 'input_boolean'], door: ['binary_sensor', 'cover'] };
+const DOMAINS = { lamp: ['light', 'switch'], strip: ['light', 'switch'], switch: ['switch', 'light', 'input_boolean'], door: ['binary_sensor', 'cover'], lock: ['lock'] };
 const words = s => String(s ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9åäöæø]+/).filter(w => w.length > 1);
 
 /**
@@ -21,10 +21,11 @@ export function suggestEntities(states, { kind = 'lamp', names = [] } = {}) {
     .sort((a, b) => b.score - a.score || a.label.localeCompare(b.label));
 }
 
-/** location.json with fixture `id` bound to { entity?, controls?, look? } (empty values remove them; no binding left removes it). */
-export function setBinding(location, id, { entity, controls, look } = {}) {
+/** location.json with fixture `id` bound to { entity?, controls?, look?, lock? } (`lock`: a door's lock entity) (empty values remove them; no binding left removes it). */
+export function setBinding(location, id, { entity, controls, look, lock } = {}) {
   const b = { ...(location.bindings?.[id] || {}) };
   if (entity !== undefined) { if (entity) b.entity = entity; else delete b.entity; }
+  if (lock !== undefined) { if (lock) b.lock = lock; else delete b.lock; }
   if (controls !== undefined) { if (controls?.length) b.controls = [...controls]; else delete b.controls; }
   if (look !== undefined) { const l = Object.fromEntries(Object.entries(look || {}).filter(([, v]) => v !== undefined && v !== '' && v !== null)); if (Object.keys(l).length) b.look = l; else delete b.look; }
   const bindings = { ...(location.bindings || {}) };

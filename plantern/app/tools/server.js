@@ -14,12 +14,13 @@
 import http from 'node:http';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { checkWritablePath } from '../src/model/save.js';
 import { formatJson } from '../src/model/format.js';
 import { Registry } from './store/registry.js';
 import { defaultDataDir, renameRetry } from './store/settings.js';
 import { houseApi, readJsonBody, sameOrigin, writeGuard } from './store/api.js';
-import { createHaHub, haApi, supervisorFromEnv } from './ha/api.js';
+import { createHaHub, haApi, supervisorFromEnv, readAddonOptions } from './ha/api.js';
 import { createPublisher, publishDir } from './ha/publish.js';
 import { createGlbCache, readCacheLimit } from './blueprints/cache.js';
 import { glbApi } from './blueprints/api.js';
@@ -105,16 +106,18 @@ async function handleStatic(root, req, res) {
  */
 export function createPlanternServer(root, { env = process.env, dataDir = defaultDataDir(env), WebSocketImpl, publishTo = publishDir(env), publishDebounce, publishTimers, watch = true } = {}) {
   const registry = new Registry({ appRoot: root, dataDir, watch });
-  const ha = createHaHub({ dataDir, supervisor: supervisorFromEnv(env), ...(WebSocketImpl ? { WebSocketImpl } : {}) });       // Home Assistant connections (tools/ha/)
+  // as an add-on, the built-in connection is named by the add-on's configuration (connection_name in /data/options.json, default home_assistant)
+  const supervisor = supervisorFromEnv(env, { options: env.SUPERVISOR_TOKEN ? readAddonOptions(env.PLANTERN_OPTIONS || path.join(dataDir, 'options.json')) : {}, log: m => console.log(m) });
+  const ha = createHaHub({ dataDir, supervisor, ...(WebSocketImpl ? { WebSocketImpl } : {}) });       // Home Assistant connections (tools/ha/)
   const glb = createGlbCache({ dir: path.join(dataDir, 'glb-cache'), limitBytes: () => readCacheLimit(dataDir) });   // built GLBs of placed objects, in the settings folder; limit in settings.json
   registry.ready.catch(e => console.error(`Plantern settings (${dataDir}): ${e.message}`));
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://x');
-      if (url.pathname === '/api/info' && req.method === 'GET') return send(res, 200, { plantern: true, save: true, stores: true });
+      if (url.pathname === '/api/info' && req.method === 'GET') return send(res, 200, { plantern: true, save: true, stores: true, addon: !!supervisor, host: os.hostname(), builtinConnection: ha.builtin ?? null });
       // houses, storages and the folder browser: your own network only (like saving)
       if (url.pathname.startsWith('/api/') && !isLocalAddress(req.socket.remoteAddress)) return send(res, 403, { error: 'only from your own network' });
-      if (await haApi(ha, req, res, url, { json: send, readJsonBody, writeGuard })) return;
+      if (await haApi(ha, req, res, url, { json: send, readJsonBody, writeGuard, registry })) return;
       if (await glbApi(glb, registry, req, res, url)) return;
       if (await libraryApi(req, res, url)) return;
       if (await houseApi(registry, req, res, url, { ha })) return;
@@ -126,7 +129,7 @@ export function createPlanternServer(root, { env = process.env, dataDir = defaul
   // As an add-on: mirror the Lovelace card and the houses to /config/www/plantern (tools/ha/publish.js, S15)
   let publisher = null;
   if (publishTo) {
-    publisher = createPublisher({ registry, hub: ha, glb, root, target: publishTo, ...(publishDebounce ? { debounceMs: publishDebounce } : {}), ...(publishTimers ? { timers: publishTimers } : {}) });
+    publisher = createPublisher({ registry, hub: ha, glb, root, target: publishTo, ...(ha.builtin ? { connection: ha.builtin } : {}), ...(publishDebounce ? { debounceMs: publishDebounce } : {}), ...(publishTimers ? { timers: publishTimers } : {}) });
     const explicit = publishTo !== publishDir({ SUPERVISOR_TOKEN: env.SUPERVISOR_TOKEN });
     // the default folder is inside the add-on's /config mapping: without the mapping there is nothing to publish to
     const mapped = explicit ? Promise.resolve() : fs.access(path.dirname(path.dirname(publishTo)));
