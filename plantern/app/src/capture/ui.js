@@ -12,12 +12,16 @@ import { askConfirm } from './dialog.js';
 import { showLevelForm } from './level-form.js';
 import { createHistory } from '../edit/history.js';
 import { writePrefs } from '../model/prefs.js';
-import { wirePanelResize } from '../panel-resize.js';
+import { wirePanelResize, wirePanelResizeVertical } from '../panel-resize.js';
+import { ICONS } from '../icons.js';
+import { createLongPress } from './long-press.js';
+import { createRepeater, NUDGE_DIRS } from './nudge-pad.js';
 import { newSolidId, unbindWall, deleteMaterial, addOpening, addFixture, deleteObject, addAnchor, removeStairs, deleteFixture, deleteOpening, addCheck } from '../edit/ops.js';
 import { newRoomId, captureFromPolygon } from './edit.js';
 import { wallProfile } from '../geometry/walls.js';
 import { wallInfo } from '../edit/inspect.js';
 import { createMenu } from '../menu.js';
+import { editorHelpText, pointerIsCoarse } from '../touch.js';
 import { assetEntries } from '../model/assets.js';
 import { pruneBindings } from '../ha/suggest.js';
 import { createEditorMeasure } from './editor-measure.js';
@@ -43,7 +47,7 @@ import { applyMaterial, applyWall, makeMaterialFromSide, materialSwatches, showS
 import { applyStairsForm, newStairs, resetWinderPivot, syncStairsRows, updateStairsHints } from './editor/panel-stairs.js';
 import { applyFixture, doSplit, showEntityPick, useObjectLight } from './editor/panel-fixture.js';
 import { cancelDrag, dragMove, dragStart, endDrag, freePoint } from './editor/drag.js';
-import { hoverStatus, openContextMenu, planKey, showShortcuts } from './editor/keys.js';
+import { hoverStatus, nudgeBy, openContextMenu, planKey, showShortcuts } from './editor/keys.js';
 import { Ed } from './editor/state.js';
 
 enhanceSegmented();                  // choices of up to four: a row of buttons (UX20); before the menus, which leave these alone
@@ -89,6 +93,7 @@ async function init() {
   $('originPick').onclick = () => { Ed.startPick = !Ed.startPick; syncOriginPick(); draw(); };
   // the panel can be resized by dragging its left edge; the width is remembered in this browser
   wirePanelResize($('resizer'), $('cap'), 'plantern.editor.aside', draw);
+  wirePanelResizeVertical($('vresizer'), $('cap'), 'plantern.editor.aside.h', draw);   // a phone: the bar between the plan and the panel
   // Place the house: position, north angle and ground-floor height; Apply writes them with setSite() (place.js has the logic)
   fillPlace();
   for (const id of ['placePos', 'north', 'placeHeight', 'placeBearing']) {
@@ -126,6 +131,12 @@ async function init() {
     if (f && Ed.fresh === f && (Ed.model !== before || $(FRESH_ERR[f.kind]).textContent === 'Nothing changed.')) settleFresh();
   };
   $('edDelete').onclick = () => $(BAR[Ed.editing.kind][1]).click();
+  for (const b of document.querySelectorAll('#nudgePad [data-nudge]')) {         // a touch screen's arrow keys: a tap is one 10 mm step, a hold repeats
+    const rep = createRepeater({ fire: () => nudgeBy(NUDGE_DIRS[b.dataset.nudge]) });
+    b.addEventListener('pointerdown', e => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch { /* not an active pointer */ } rep.start(); });
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, rep.stop);
+  }
+  for (const el of document.querySelectorAll('#edBar [data-icon]')) el.innerHTML = ICONS[el.dataset.icon];   // the phone shows these buttons as their icon (S1)
   $('edId').onclick = renameEditing;
   $('edRevert').onclick = revertEdit;
   $('edClose').onclick = closeEdit;
@@ -350,7 +361,23 @@ async function init() {
   });
   $('preview').addEventListener('pointerover', hoverStatus);
   $('preview').addEventListener('contextmenu', openContextMenu);
+  // a press that stays put opens the same menu on a touch screen (mobile UX plan S3): Android sends contextmenu itself, iOS does not
+  const longPress = createLongPress({
+    onLong: (x, y) => {
+      Ed.dragging = null; Ed.pan = null; Ed.pinch = null; Ed.suppressClick = true;     // the press is no drag, and its lift is no click
+      Ed.lastMenuAt = performance.now();
+      openContextMenu({ type: 'longpress', preventDefault() {}, target: document.elementFromPoint(x, y) ?? $('preview'), clientX: x, clientY: y, altKey: true });
+    },
+  });
+  $('preview').addEventListener('pointerdown', e => { if (e.pointerType === 'touch' && e.isPrimary) longPress.down(e.clientX, e.clientY); else longPress.cancel(); });
+  addEventListener('pointermove', e => { if (e.pointerType === 'touch') longPress.move(e.clientX, e.clientY); });
+  addEventListener('pointerup', () => longPress.cancel());
+  addEventListener('pointercancel', () => longPress.cancel());
   $('keysHelp').onclick = e => { e.preventDefault(); showShortcuts(); };
+  // a touch screen gets the tap wording and no keys link (mobile UX plan H6); the help line keeps its link after the text
+  const coarse = pointerIsCoarse();
+  $('edHelp').firstChild.textContent = editorHelpText(coarse) + ' ';
+  if (coarse) $('keysHelp').hidden = true;
   $('preview').addEventListener('pointerleave', () => { $('status').textContent = Ed.baseStatus; });
   $('preview').addEventListener('mousemove', e => { if (Ed.splitPick) { const at = splitAtPointer(e); if (at !== null && String(at) !== $('wSplitAt').value) { $('wSplitAt').value = at; draw(); setStatus(`Split ${at} mm from the wall's start · click to split, Esc: cancel`); } return; } if (Ed.placing) { drawPlacingGhost(e); return; } if (Ed.drawing) { Ed.drawing.hover = wallPoint(e); Ed.drawing.shift = e.shiftKey; drawWallOverlay(); } else Ed.measure.hover(e); });
   act.wall = startDrawing;
@@ -484,7 +511,7 @@ async function init() {
   $('save').onclick = save;
   $('dl').onclick = () => download(new Blob([formatJson(Ed.model)], { type: 'application/json' }), 'model.json');
   $('save').disabled = !Ed.saveMode;
-  if (!Ed.saveMode) $('saveOut').textContent = Ed.house.readOnly ? `${Ed.house.where} is read-only: use Download, or copy the house to your own storage on the Storage page.` : 'This page cannot save. Start Plantern with run.cmd (or use Chrome/Edge on the PC); until then use Download and replace the file by hand.';
+  if (!Ed.saveMode) $('saveOut').textContent = Ed.house.readOnly ? `${Ed.house.where} is read-only: use Download, or copy the house to your own storage on the Settings page.` : 'This page cannot save. Start Plantern with run.cmd (or use Chrome/Edge on the PC); until then use Download and replace the file by hand.';
   $('save').title = Ed.saveMode === 'server' ? `Save into ${Ed.house.where}` : Ed.saveMode ? 'Save into the repo folder you pick (first time only)' : 'This page cannot save: use Download';
   addEventListener('beforeunload', e => { if (Ed.dirty || isDirty()) { e.preventDefault(); e.returnValue = ''; } });
 
@@ -508,6 +535,6 @@ $('oHosted')?.addEventListener('click', async e => {
 
 init().catch(e => {
   setStatus(e.message); console.error(e);
-  if (e.noHouses) { $('saveOut').innerHTML = `<div class="iss">${e.html}</div>`; return; }   // nothing connected yet: point to the Storage page
+  if (e.noHouses) { $('saveOut').innerHTML = `<div class="iss">${e.html}</div>`; return; }   // nothing connected yet: point to the Settings page
   $('valBox').hidden = false; $('issues').innerHTML = `<div class="iss error">${esc(e.message)}</div>`;
 });

@@ -10,6 +10,8 @@ import { refresh } from './refresh.js';
 import { fillLevels } from './levels.js';
 import { fillPlace } from './house.js';
 import { Ed } from './state.js';
+import { pointerIsCoarse } from '../../touch.js';
+import { canNudge } from '../nudge-pad.js';
 
 
 // ---- edit mode ----
@@ -115,6 +117,7 @@ export function showEditBar() {
   $('edDelete').title = isNew ? 'A new thing is not created yet: Cancel throws it away' : $(d).hidden ? (Ed.editing.kind === 'wall' ? 'This wall follows its rooms: it goes when its room edges go (or Keep as hand-drawn first)' : 'This one cannot be deleted here') : 'Delete it (confirmed first; Delete key)';
   $('edDup').disabled = isNew || !canDup;
   $('edDup').title = isNew ? 'Apply it first' : !canDup ? (Ed.editing.kind === 'wall' ? 'This wall follows its rooms, so a copy would sit on top of it' : 'Rooms, solids, stairs and materials are copied with Copy from in the new one') : 'A copy beside it, with the same sizes, then opened (Ctrl+D)';
+  $('nudgePad').hidden = isNew || !pointerIsCoarse() || !canNudge(Ed.editing.kind, wall());   // a touch screen has no arrow keys (S4)
   $('edId').hidden = isNew;                                       // the id, clickable: a dialog changes it (fixes list 26)
   $('edId').textContent = Ed.editing.id;
   $('edRevert').disabled = !changed;

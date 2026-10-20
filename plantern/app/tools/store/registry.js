@@ -11,7 +11,7 @@ import { merge3 } from '../../src/model/merge.js';
 import { formatJson } from '../../src/model/format.js';
 
 export const BUILTIN = 'builtin';
-const DEMO = 'demo';                                // the example house in the app folder, which the Storage page can hide
+const DEMO = 'demo';                                // the example house in the app folder, which the Settings page can hide
 const HOUSE_ID = /^[A-Za-z0-9_.-]+$/;
 
 /** Make a store object from its settings (git comes with phase 6). */
@@ -167,9 +167,9 @@ export class Registry extends EventEmitter {
     finally { this.poking.delete(s.id); }
   }
 
-  // ---- storages (the Storage page) ----
+  // ---- storages (the Settings page) ----
 
-  /** What the Storage page shows: no secrets, only whether one is saved. */
+  /** What the Settings page shows: no secrets, only whether one is saved. */
   storeList() {
     return this.stores.map(s => ({
       id: s.id, name: s.cfg?.name || s.id, type: s.type, builtin: !!s.builtin, readOnly: !!s.readOnly,

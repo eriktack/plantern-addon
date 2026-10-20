@@ -46,8 +46,12 @@ svg.measure .fix{cursor:crosshair}
 aside{width:380px;overflow-y:auto;overflow-x:hidden;flex:none;padding:12px;padding-top:calc(12px + env(safe-area-inset-top,0px));background:var(--panel);border-left:1px solid var(--line)}
 #resizer{flex:none;width:6px;cursor:col-resize;background:var(--line);touch-action:none}
 #resizer:hover,#resizer.drag{background:var(--acc)}
-@media(max-width:760px){body{flex-direction:column}aside{width:auto!important;max-height:46%;border-left:0;border-top:1px solid var(--line)}#resizer{display:none}}
-h1{font-size:18px;margin:0 0 8px}
+@media(max-width:760px){body{flex-direction:column}main{min-height:0}aside{width:auto!important;max-height:var(--panel-h,46%);height:var(--panel-h,auto);border-left:0;border-top:1px solid var(--line)}#resizer{display:none}}
+/* phone: a grab bar between the plan and the panel (S2); hidden on a wide screen, where #resizer is on the panel's left edge */
+#vresizer{display:none}
+@media(max-width:760px){#vresizer{display:flex;flex:none;position:relative;height:20px;align-items:center;justify-content:center;background:var(--line);cursor:row-resize;touch-action:none}#vresizer::before{content:"";width:44px;height:5px;border-radius:3px;background:#5a6272}#vresizer::after{content:"";position:absolute;left:0;right:0;top:-12px;bottom:-12px}#vresizer:hover::before,#vresizer.drag::before{background:var(--acc)}}
+/* phone: the plan's tools stop before the zoom tools (~180 px); the level strip and the measure modes wrap under them (H1) */
+@media(max-width:760px){.mtools{max-width:calc(100% - 190px)}.lvstrip{flex-wrap:wrap;max-width:100%}}h1{font-size:18px;margin:0 0 8px}
 h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:14px 0 6px;display:flex;justify-content:space-between;align-items:center}
 button,select{background:#2a2f38;color:var(--fg);border:1px solid #3a404b;border-radius:6px;padding:4px 10px;font:inherit;cursor:pointer}
 button.on{background:var(--acc);color:#14161a;border-color:var(--acc)}
@@ -170,7 +174,8 @@ aside.editing>*{flex-shrink:0}
 .edbar{position:sticky;bottom:-12px;z-index:3;display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px -12px -12px;padding:10px 12px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));background:var(--panel);border-top:1px solid var(--line);box-shadow:0 -6px 12px rgba(0,0,0,.25)}
 .edbar .sp{flex:1}
 /* one row whatever the panel (UX25, R8): Delete and Duplicate left, Revert, Close and Apply right */
-.edbar{flex-wrap:nowrap!important}.edbar button{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 9px}
+.edbar{flex-wrap:nowrap!important}.edbar button{flex:0 0 auto;white-space:nowrap;padding:5px 9px}   /* a label is never cut (S1): if the row is too tight, the row is wrong */
+.edbar .ic{display:none}
 .edbar #edApply{flex:none}
 .edbar .danger{color:var(--bad)}
 .edbar[hidden],#edit[hidden],#browse[hidden],#top[hidden]{display:none}
@@ -269,7 +274,7 @@ h2 .menu.inline{text-transform:none;letter-spacing:0;font-size:13px}
   .ddsel .menulist [role=menuitem] { min-height: 44px; font-size: 16px; }
 }
 /* the Editor's right-click menu (src/menu.js openMenuAt, UX9) */
-.ctxmenu{z-index:50;overflow:auto}
+.ctxmenu{z-index:50;overflow:auto;overscroll-behavior:contain}   /* the wheel over a long menu scrolls it, not the plan under it */
 .ctxmenu .ctxtitle{color:var(--fg);text-transform:none;letter-spacing:0;font-size:12px}
 /* number boxes (src/number-input.js, UX18): a label can be dragged sideways to step its box; a box that is not a number is red */
 #cap label:has(> input[inputmode="numeric"]:not([data-plain])),#cap label:has(> input[inputmode="decimal"]:not([data-plain])),.pform .field:has(input[inputmode="decimal"]) > label{cursor:ew-resize}
@@ -354,3 +359,21 @@ body.phone .fs15{font-size:15px}body.phone .fs16{font-size:16px}body.phone .fs18
 body.phone .cols2{grid-template-columns:1fr 1fr}body.phone .hrow{display:flex;gap:8px;align-items:center}
 body.phone .sketchbox{width:100%;height:110px;background:var(--bg);border:1px solid var(--line);border-radius:10px}
 body.phone .key-blue{background:#6cb6ff}body.phone .key-green{background:#4cc38a}
+/* phone: a field under 16 px makes iOS Safari zoom the page when it is focused (H2). Last in the file: the shared `button, select` rule above sets font: inherit. */
+@media(max-width:760px){input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),select,textarea,.mread .calc input{font-size:16px}}
+/* phone: tap targets are at least 44 px tall (H3). Buttons, selects and summaries; a checkbox or radio is hit through its label. */
+@media(max-width:760px){button,select,summary,.seg button{min-height:44px}.ztools button{min-width:44px}.lvstrip button{min-height:44px;padding:4px 10px}label:has(>input[type=checkbox]),label:has(>input[type=radio]){min-height:44px;display:flex;align-items:center}}
+/* phone: the house and level menus each take a full row, so a long house name is not cut (H4). The viewer and the phone pages only; the Editor keeps its row. */
+@media(max-width:760px){.row.sel,.sel:has(>#loc){flex-direction:column;align-items:stretch}.row.sel>*,.sel:has(>#loc)>*{flex:none;width:100%}}
+/* phone: the three secondary buttons of the edit bar show their icon only, so the bar stays one row and Close/Cancel and Apply keep their words (S1) */
+@media(max-width:600px){.edbar #edDelete .lb,.edbar #edDup .lb,.edbar #edRevert .lb{display:none}.edbar #edDelete .ic,.edbar #edDup .ic,.edbar #edRevert .ic{display:inline-flex}.edbar #edDelete,.edbar #edDup,.edbar #edRevert{min-width:44px;min-height:44px;padding:0;justify-content:center;align-items:center}.edbar .ic svg{width:20px;height:20px}}
+/* the nudge pad of the edit bar: only on a touch screen, for what the arrow keys move (S4) */
+.nudgepad{display:flex;gap:6px;align-items:center;width:100%}
+.nudgepad[hidden]{display:none}
+.nudgepad button{min-width:44px;min-height:44px;padding:0;font-size:20px;line-height:1;touch-action:none;user-select:none;-webkit-user-select:none}
+/* phone: a slider has a 44 px tall hit area (the drawn track stays thin) (S5) */
+@media(max-width:760px){input[type=range]{height:44px;margin-top:0;margin-bottom:0}}
+@media(max-width:760px){dialog.pdialog .pbtns button{min-height:44px}}
+/* phone: the level strip becomes a dropdown, so it does not cover the plan (it is two rows of 44 px buttons there) */
+#lvMenu{display:none}
+@media(max-width:760px){.lvstrip{display:none!important}#lvMenu:not([hidden]){display:inline-block}}

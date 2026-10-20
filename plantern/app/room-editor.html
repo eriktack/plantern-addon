@@ -26,6 +26,7 @@
   <div id="mtools" class="mtools">
     <button id="mOn" title="Measure on the plan (M): distances between points and planes">📏 Measure</button>
     <span id="lvStrip" class="lvstrip" hidden title="Look at another level without leaving what you edit"></span>
+    <span id="lvMenu" class="inline" hidden title="Look at another level without leaving what you edit"></span>
     <span id="mModes" hidden><button data-mm="pp" class="on" title="Two points; shows the right triangle's legs">Point – point</button><button data-mm="pl" title="A point, then a wall face, room edge or chimney side: the square distance">Point – plane</button><button data-mm="ll" title="Two wall faces, room edges or chimney sides: the gap between them">Plane – plane</button></span>
   </div>
   <div id="mRead" class="mread" hidden></div>
@@ -38,6 +39,7 @@
   <div id="compass"></div>
 </main>
 <div id="resizer" title="Drag to resize the panel"></div>
+<div id="vresizer" role="separator" aria-orientation="horizontal" aria-label="Resize the panel" title="Drag to resize the panel (double-tap: default height)"></div>
 <aside id="cap">
   <div id="top">
   <nav class="nav" aria-label="Pages" data-page="editor" data-base=""></nav>
@@ -91,7 +93,7 @@
   </section>
   </div>
   <div id="browse">
-  <p class="help">Click something in the plan or the list to select it; double-click it, press Enter or use ✎ to edit it. Esc lets go. <a href="#" id="keysHelp" title="Every key and mouse gesture (?)">Keys and mouse…</a></p>
+  <p class="help" id="edHelp">Click something in the plan or the list to select it; double-click it, press Enter or use ✎ to edit it. Esc lets go. <a href="#" id="keysHelp" title="Every key and mouse gesture (?)">Keys and mouse…</a></p>
 
   <h2>House <span id="addHouse" class="inline"></span></h2>
   <div id="tree" class="tree"></div>
@@ -591,11 +593,18 @@
   <div id="wallsOut" class="help report"></div>
   <div id="edBar" class="edbar" hidden>
     <div id="edMsg" class="edmsg" role="alert" hidden></div>
+    <div id="nudgePad" class="nudgepad" role="group" aria-label="Move it 10 mm" hidden>
+      <button type="button" data-nudge="left" aria-label="Move left 10 mm">←</button>
+      <button type="button" data-nudge="up" aria-label="Move up (north) 10 mm">↑</button>
+      <button type="button" data-nudge="down" aria-label="Move down (south) 10 mm">↓</button>
+      <button type="button" data-nudge="right" aria-label="Move right 10 mm">→</button>
+      <span class="help">10 mm a tap; hold to repeat</span>
+    </div>
     <div class="edbtns">
-    <button id="edDelete" class="danger" title="Delete it (confirmed first)">Delete</button>
-    <button id="edDup" title="A copy beside it, with the same sizes (then opened)">Duplicate</button>
+    <button id="edDelete" class="danger" aria-label="Delete" title="Delete it (confirmed first)"><span class="ic" data-icon="trash"></span><span class="lb">Delete</span></button>
+    <button id="edDup" aria-label="Duplicate" title="A copy beside it, with the same sizes (then opened)"><span class="ic" data-icon="duplicate"></span><span class="lb">Duplicate</span></button>
     <span class="sp"></span>
-    <button id="edRevert" title="Back to what is stored">Revert</button>
+    <button id="edRevert" aria-label="Revert" title="Back to what is stored"><span class="ic" data-icon="revert"></span><span class="lb">Revert</span></button>
     <button id="edClose" title="Leave the editor (Esc)">Close</button>
     <button id="edApply" class="primary" title="Write the changes into the model (Save stores the file)">Apply</button>
     </div>

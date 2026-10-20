@@ -1,4 +1,4 @@
-// The Storage page's Home Assistant section (roadmap 11, docs/archive/ha-11-12.md S5): connections kept by
+// The Settings page's Home Assistant section (roadmap 11, docs/archive/ha-11-12.md S5): connections kept by
 // Plantern's server (tools/ha/api.js; the token stays there) and, per house, which connection it uses
 // (location.json → integrations.ha.connection). This file only wires the DOM.
 
@@ -78,7 +78,7 @@ async function houses() {
   }));
   const opts = cur => `<option value="">none (lamps not live)</option>${conns.map(c => `<option value="${esc(c.name)}"${c.name === cur ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}${cur && !conns.some(c => c.name === cur) ? `<option value="${esc(cur)}" selected>${esc(cur)} (not set up here)</option>` : ''}`;
   const ok = rows.filter(Boolean);
-  $('haHouses').innerHTML = ok.length && conns.length ? `<div class="card"><div class="title">Which Home Assistant each house uses</div><ul class="houses">${ok.map(({ h, loc }) => `<li><span class="nm">${esc(h.name)} <small>${esc(h.id)}</small></span><span class="acts"><select data-house="${esc(h.id)}" aria-label="Connection for ${esc(h.name)}">${opts(loc.integrations?.ha?.connection)}</select></span></li>`).join('')}</ul></div>` : '';
+  $('haHouses').innerHTML = ok.length && conns.length ? `<div class="card"><div class="title">Which Home Assistant each house uses</div><ul class="houses">${ok.map(({ h, loc }) => `<li><span class="nm" title="${esc(h.id)}">${esc(h.name)}</span><span class="acts"><select data-house="${esc(h.id)}" aria-label="Connection for ${esc(h.name)}">${opts(loc.integrations?.ha?.connection)}</select></span></li>`).join('')}</ul></div>` : '';
   $('haHouses').querySelectorAll('[data-house]').forEach(sel => (sel.onchange = async () => {
     const row = ok.find(r => r.h.id === sel.dataset.house), loc = structuredClone(row.loc);
     if (sel.value) loc.integrations = { ...(loc.integrations || {}), ha: { ...(loc.integrations?.ha || {}), connection: sel.value } };

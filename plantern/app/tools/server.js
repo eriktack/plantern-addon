@@ -126,7 +126,7 @@ export function createPlanternServer(root, { env = process.env, dataDir = defaul
   // As an add-on: mirror the Lovelace card and the houses to /config/www/plantern (tools/ha/publish.js, S15)
   let publisher = null;
   if (publishTo) {
-    publisher = createPublisher({ registry, hub: ha, root, target: publishTo, ...(publishDebounce ? { debounceMs: publishDebounce } : {}), ...(publishTimers ? { timers: publishTimers } : {}) });
+    publisher = createPublisher({ registry, hub: ha, glb, root, target: publishTo, ...(publishDebounce ? { debounceMs: publishDebounce } : {}), ...(publishTimers ? { timers: publishTimers } : {}) });
     const explicit = publishTo !== publishDir({ SUPERVISOR_TOKEN: env.SUPERVISOR_TOKEN });
     // the default folder is inside the add-on's /config mapping: without the mapping there is nothing to publish to
     const mapped = explicit ? Promise.resolve() : fs.access(path.dirname(path.dirname(publishTo)));

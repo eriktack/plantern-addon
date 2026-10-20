@@ -4,6 +4,9 @@
 //
 //   <target>/src/…                the modules the card imports (its import closure, nothing else)
 //   <target>/locations/index.json the houses; <target>/locations/<id>/{location.json,<model>,assets/…}
+//   <target>/locations/<id>/glb/   the models of the house's library objects (docs/plans/card-blueprint-models.md): <hash>.glb
+//                                  and index.json, which maps an object's settings (assetKey()) to its file; built by the server's
+//                                  GLB cache, so the card reads them and never has to reach the add-on's API
 //
 // Runs at start and after every change to a house (registry events), debounced. Never touches anything outside
 // <target>. Pure Node, no dependencies.
@@ -13,6 +16,7 @@ import crypto from 'node:crypto';
 import { promises as fs, existsSync } from 'node:fs';
 import { writeAtomic } from '../store/settings.js';
 import { connectWithin } from './bridge.js';
+import { assetKey } from '../../src/model/assets.js';
 
 export const CARD_ENTRY = 'src/card/plantern-card.js';
 export const BUILTIN_CONNECTION = 'home_assistant';
@@ -123,12 +127,45 @@ async function mirrorAssets(from, to) {
 /**
  * The publisher. registry: the Registry (houses(), load(), find(), events 'changed' and 'houses'); hub: the HA hub
  * (bridge(name)) used to register the resource, or null; root: the app folder; target: the folder to publish to.
+ * glb: the server's GLB cache (createGlbCache(): ensure(), read()); with it the models of every library object of a house are built
+ * and published next to the house. Without it nothing is built and no glb/ folder is written.
  */
-export function createPublisher({ registry, hub = null, root, target, connection = BUILTIN_CONNECTION, log = console.log, debounceMs = 1000, timers = { set: setTimeout, clear: clearTimeout } }) {
-  let timer = null, running = null, again = false, registered = null, warned = false, stopped = false;
+export function createPublisher({ registry, hub = null, glb = null, root, target, connection = BUILTIN_CONNECTION, log = console.log, debounceMs = 1000, timers = { set: setTimeout, clear: clearTimeout } }) {
+  let timer = null, running = null, again = false, registered = null, warned = false, warnedStale = false, stopped = false;
+
+  /**
+   * Builds (or finds in the cache) the model of every blueprint object of a house and writes it to <dir>/<hash>.glb, with
+   * index.json mapping assetKey(object) to { hash, size, light, colour }. An object that cannot be built is skipped, listed in
+   * summary.skipped; the others are still published. Files the index no longer names are removed. Returns how many are published.
+   */
+  async function publishModels(houseId, model, houseDir, dir, summary) {
+    const index = {};
+    for (const level of model.levels || []) {
+      for (const o of level.objects || []) {
+        if (o.kind !== 'asset' || !o.blueprint) continue;
+        const key = assetKey(o);
+        if (key in index) continue;                                  // two objects with the same settings share one model
+        try {
+          const built = await glb.ensure({ houseDir, blueprint: o.blueprint, params: o.params, partMaterials: o.partMaterials });
+          const bytes = await glb.read(built.hash);
+          if (!bytes) throw new Error('the built file is missing from the cache');
+          await writeIfChanged(path.join(dir, `${built.hash}.glb`), bytes);
+          index[key] = { hash: built.hash, size: built.size, light: built.light ?? null, colour: built.colour ?? null };
+        } catch (e) {
+          summary.skipped.push(`${houseId}/${o.id}: ${e.message}`);
+          if (e.status === 503 && !warnedStale) { warnedStale = true; log(`Plantern card: library objects are not published: ${e.message}`); }
+        }
+      }
+    }
+    const sorted = Object.fromEntries(Object.keys(index).sort().map(k => [k, index[k]]));   // canonical: it only changes when an object does
+    await writeIfChanged(path.join(dir, 'index.json'), Buffer.from(JSON.stringify(sorted, null, 2) + '\n'));
+    const named = new Set(Object.values(index).map(i => `${i.hash}.glb`));
+    for (const f of await listFiles(dir)) if (f.endsWith('.glb') && !named.has(f)) await fs.rm(path.join(dir, f), { force: true });
+    return Object.keys(index).length;
+  }
 
   async function publish() {
-    const summary = { files: 0, houses: [], skipped: [], resource: 'none' };
+    const summary = { files: 0, houses: [], skipped: [], resource: 'none', models: 0 };
     // 1. the card's modules
     const closure = await importClosure(CARD_ENTRY, root), hash = crypto.createHash('sha1').update(`mirror-format-${MIRROR_FORMAT}`);
     const files = [...closure, ...THREE_FILES], sources = new Map();
@@ -162,6 +199,7 @@ export function createPublisher({ registry, hub = null, root, target, connection
         await writeIfChanged(path.join(dir, loc.model || 'model.json'), Buffer.from(loaded.model.text));
         const src = registry.find(h.id)?.house?.dir;
         if (src) await mirrorAssets(path.join(src, 'assets'), path.join(dir, 'assets'));
+        if (glb) summary.models += await publishModels(h.id, JSON.parse(loaded.model.text), src, path.join(dir, 'glb'), summary);
         listed.push({ id: h.id, name: h.name || h.id, path: `${h.id}/` });
         summary.houses.push(h.id);
       } catch (e) { summary.skipped.push(`${h.id}: ${e.message}`); }
@@ -193,7 +231,7 @@ export function createPublisher({ registry, hub = null, root, target, connection
     if (running) { again = true; return running; }
     running = publish().catch(e => { log(`Plantern card: publishing failed: ${e.message}`); return null; }).then(s => {
       running = null;
-      if (s) log(`Plantern card published: ${s.files} files, houses ${s.houses.join(', ') || 'none'}${s.skipped.length ? `; skipped ${s.skipped.join('; ')}` : ''}${s.resource === 'created' || s.resource === 'updated' ? `; dashboard resource ${s.resource}` : ''}.`);
+      if (s) log(`Plantern card published: ${s.files} files, houses ${s.houses.join(', ') || 'none'}${s.models ? `, ${s.models} library models` : ''}${s.skipped.length ? `; skipped ${s.skipped.join('; ')}` : ''}${s.resource === 'created' || s.resource === 'updated' ? `; dashboard resource ${s.resource}` : ''}.`);
       if (again && !stopped) { again = false; return run(); }
       return s;
     });

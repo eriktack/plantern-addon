@@ -1,4 +1,4 @@
-// The Storage page's API (decision 106: setup is clicks only). Folder browser, the wizard's checks,
+// The Settings page's API (decision 106: setup is clicks only). Folder browser, the wizard's checks,
 // adding / editing / removing storages, new houses, copying a house to another storage, and the
 // *Show the demo house* switch. Secrets come in here and are never sent back.
 //   GET    /api/stores                 → { stores, showDemo, platform, unc }

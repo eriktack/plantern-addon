@@ -10,6 +10,8 @@ import { $, commit, level, opts } from './core.js';
 import { freePoint, r1d } from './drag.js';
 import { addContext, addPick } from './add-menus.js';
 import { stopDrawing } from './walldraw.js';
+import { editHint, pointerIsCoarse } from '../../touch.js';
+import { NUDGE_STEP } from '../nudge-pad.js';
 import { readableName, selectNone } from './selection.js';
 import { splitAtPointer } from './wall-ops.js';
 import { doSplit } from './panel-fixture.js';
@@ -37,6 +39,8 @@ const SHORTCUTS = [
 export function showShortcuts() {
   openDialog({ title: 'Keys and mouse in the Editor', message: SHORTCUTS.map(([k, v]) => `${k}: ${v}`).join('\n'), buttons: [{ id: 'close', label: 'Close', primary: true }] });
 }
+/** The nudge pad's arrows (mobile UX plan S4): the same move as an arrow key, `dir` one of NUDGE_DIRS, NUDGE_STEP mm; one undo step per burst. */
+export const nudgeBy = dir => nudge([dir[0] * NUDGE_STEP, dir[1] * NUDGE_STEP]);
 /** Move the selection by d mm (plan axes) with an edit operation; things on a wall slide along it by the part of d along the wall. */
 function nudge(d) {
   const sel = selected(), lv = level();
@@ -99,7 +103,7 @@ const ADD_WHERE = { wall: 'wall', room: 'room', opening: 'opening' };
 function contextEntries(kind, id) {
   const out = [];
   if (kind) {
-    out.push({ id: '@edit', label: 'Edit', icon: 'edit', hint: 'Or double-click it, or Enter' });
+    out.push({ id: '@edit', label: 'Edit', icon: 'edit', hint: editHint(pointerIsCoarse()) });
     const canDup = ['object', 'opening', 'fixture'].includes(kind) || (kind === 'wall' && !level().walls.find(w => w.id === id)?.from?.length);
     out.push({ id: '@dup', label: 'Duplicate', icon: 'duplicate', hint: 'Ctrl+D', ...(canDup ? {} : { disabled: kind === 'wall' ? 'It follows its rooms' : 'Not for this kind' }) });
     out.push({ id: '@del', label: 'Delete', icon: 'trash', hint: 'Delete key; asks first' });
@@ -111,6 +115,8 @@ function contextEntries(kind, id) {
 }
 export async function openContextMenu(e) {
   e.preventDefault();
+  // a long press on a touch screen opens the menu itself; the contextmenu event that Android sends for the same press must not open it twice
+  if (e.type === 'contextmenu' && performance.now() - Ed.lastMenuAt < 900) return;
   if (Ed.drawing) { stopDrawing(); return; }
   if (Ed.measure?.isOn() || Ed.peekId || Ed.fromPick || Ed.startPick || Ed.dragging) return;
   const el = e.target.closest('[data-kind]'), kind = el?.dataset.kind ?? null, id = el?.dataset.id ?? null, at = freePoint(e);

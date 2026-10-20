@@ -1,6 +1,8 @@
 // Editor page: levels. Split from ui.js (ui-consistency plan, UX34): no behaviour change, only where the code lives.
 
 import { levelHint } from '../option-hints.js';
+import { createMenu } from '../../menu.js';
+import { levelMenuEntries, levelMenuLabel } from '../level-menu.js';
 import { levelLabel } from '../../model/names.js';
 import { remember, linkPages } from '../../model/current.js';
 import { adjacentLevels } from '../../tools/snap.js';
@@ -46,12 +48,22 @@ export function showUnderlay() {
   return !!Ed.drawing || (!!Ed.editing && ['room', 'solid', 'stairs'].includes(Ed.editing.kind)) || (!Ed.editing && $('anchorCount').closest('details').open);
 }
 /** The level strip on the plan while editing: every level of the building; click one to look at it. */
+const buildingLevels = () => { const lv = level(); return Ed.model.levels.filter(l => (l.building ?? null) === (lv.building ?? null)).sort((a, b) => b.elevation - a.elevation); };
+// the same levels as a dropdown for a phone (the strip is hidden there, src/styles.css); the menu is Ed.levelMenu
 export function renderLevelStrip() {
   const lv = level(), same = Ed.model.levels.filter(l => (l.building ?? null) === (lv.building ?? null)).sort((a, b) => b.elevation - a.elevation);
   const show = !!Ed.editing && same.length > 1;
   $('lvStrip').hidden = !show;
+  $('lvMenu').hidden = !show;
   if (!show) return;
   const near = adjacentLevels(Ed.model, lv).map(l => l.id), shown = Ed.peekId || Ed.levelId;
+  const state = () => ({ edited: Ed.levelId, shown: Ed.peekId || Ed.levelId, near: adjacentLevels(Ed.model, level()).map(l => l.id) });
+  Ed.levelMenu ??= createMenu($('lvMenu'), {
+    label: '', icon: 'level', align: 'right',
+    entries: () => levelMenuEntries(buildingLevels(), state()),   // asked when it opens, so it is never stale
+    onPick: e => (e.id === Ed.levelId ? endPeek() : startPeek(e.id)),
+  });
+  Ed.levelMenu.setLabel(levelMenuLabel(buildingLevels(), state()));
   $('lvStrip').innerHTML = same.map(l => {
     const cls = [l.id === shown ? 'on' : '', l.id === Ed.levelId ? 'edited' : '', near.includes(l.id) ? (l.elevation < lv.elevation ? 'below' : 'above') : ''].filter(Boolean).join(' ');
     return `<button data-lv="${esc(l.id)}" class="${cls}" title="${l.id === Ed.levelId ? 'The level you are editing' : `Look at ${esc(l.name || l.id)} (nothing there is changed; you keep editing)`}">${esc(l.name || l.id)}${l.id === Ed.levelId ? ' ✎' : ''}</button>`;

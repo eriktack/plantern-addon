@@ -53,5 +53,6 @@ export const ICONS = {
   // the right-click menu (ui-consistency plan, UX9)
   edit: svg('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'),
   duplicate: svg('<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>'),
+  revert: svg('<path d="M9 7H5v4"/><path d="M5.5 11A7 7 0 1 1 7 16.5"/>'),
   trash: svg('<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/><path d="M10 11v6M14 11v6"/>'),
 };

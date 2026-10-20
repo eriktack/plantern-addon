@@ -4,7 +4,7 @@
 //            many objects in one request, answered in the same order (the Editor asks for a whole house at once, PF15)
 //   GET    /api/glb/<hash>   → the GLB (model/gltf-binary); it never changes for a hash, so it is cached for a year
 //   GET    /api/houses/<id>/blueprints → { blueprints: [{ id, source, meta, json? }], refused }: the built-in models and the house's own
-//   DELETE /api/glb-cache    → { objects, bytes }: empties the cache (*Clear cache* on the Storage page)
+//   DELETE /api/glb-cache    → { objects, bytes }: empties the cache (*Clear cache* on the Settings page)
 //   POST   /api/houses/<id>/export-asset { blueprint, params?, partMaterials?, name? } → { name, path, size, sync }
 //            writes the model and its meta.json into the house's own assets/<name>/ (default name: the blueprint id;
 //            an existing one is replaced), in whatever storage the house is (decision 225)

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.7
+
+- the card shows library objects
+
 ## 0.5.6
 
 - Stair winders: a moved pivot, an error for an empty wedge and a warning for very uneven treads

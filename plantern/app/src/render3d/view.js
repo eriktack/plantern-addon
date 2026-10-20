@@ -290,6 +290,8 @@ export function createView3d(container, hooks = {}) {
       m.userData = { id: p.id, kind: p.kind };
       m.castShadow = !['glass', 'railing', 'floor'].includes(p.kind);
       m.receiveShadow = p.kind !== 'glass';
+      // a door's leaf gets a thin outline, amber when it is open and grey when closed (issue #29): the leaf stays see-through
+      if (p.kind === 'leaf') m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geom), new THREE.LineBasicMaterial({ color: p.open ? 0xffb454 : 0xc9ced8, transparent: true, opacity: 0.85, depthWrite: false })));
       g.add(m);
       if (p.kind === 'object') objectMeshes.set(p.id, m);
     }

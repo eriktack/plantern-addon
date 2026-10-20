@@ -21,7 +21,9 @@ const CASING = 40;      // mm: a door's frame (jambs and head)
 const SILL_BOARD = 30;  // mm: thickness of the sill board
 const SILL_OVER = 20;   // mm: how far it reaches past each side of the opening
 // a door's leaf is drawn see-through for now (not a closed wall in 3D, so the room behind it stays visible): its frame shows that it is a door
-const LEAF = { opacity: 0.22 };
+// The leaf's outline (view.js) shows whether it is open: `open` tells which (issue #29). Still see-through, so it does not hide the room.
+const LEAF = { opacity: 0.35, open: false };
+const LEAF_OPEN = { opacity: 0.35, open: true };
 const GAP = 25;         // mm: a sliding door's leaf in front of the face
 
 /** { t0, t1, depth }: the unit's extent across the wall (offsets along the wall's left normal from its reference line). */
@@ -76,7 +78,7 @@ export function openingFittings(w, f, o, { open = false } = {}) {
     const toLeft = o.swing === 'left', face = toLeft ? f.offL : -f.offR, dir = toLeft ? 1 : -1;
     const swung = (hinge, near, width) => {
       const s = near ? [hinge, hinge + u.depth] : [hinge - u.depth, hinge], t = [face, face + dir * width].sort((p, q) => p - q);
-      bar('leaf', s[0], s[1], t[0], t[1], sill, top, color, LEAF);
+      bar('leaf', s[0], s[1], t[0], t[1], sill, top, color, LEAF_OPEN);
     };
     if (o.leaves === 2) { const half = (b - a) / 2 - 2; swung(a, true, half); swung(b, false, half); }
     else if (o.hinge === 'far') swung(b, false, b - a);

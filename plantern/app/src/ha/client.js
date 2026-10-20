@@ -30,7 +30,7 @@ export function resolveConnection(location, localConfig, serverConnections = [])
   if (!name) return { name: null, conn: { type: 'mock' }, note: 'location has no HA connection; using mock' };
   if (serverConnections.includes(name)) return { name, conn: { type: 'server', name } };
   const conn = localConfig.connections?.[name];
-  if (!conn) return { name, conn: { type: 'mock' }, note: `connection "${name}" is neither set up in Plantern (Storage page) nor in config.local.json; using mock` };
+  if (!conn) return { name, conn: { type: 'mock' }, note: `connection "${name}" is neither set up in Plantern (Settings page) nor in config.local.json; using mock` };
   return { name, conn };
 }
 

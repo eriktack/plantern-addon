@@ -5,6 +5,7 @@
 
 import { lightInPlan } from '../blueprints/light.js';
 import { unitSpan } from '../geometry/fittings.js';
+import { fallbackName } from './names.js';
 
 /** Plan radius of a lit object’s light (mm) when it has none of its own. */
 export const LIT_RADIUS = 3000;
@@ -44,7 +45,7 @@ export function litLamps(level, geo, lightOf) {
     if (!light || !geo) continue;
     const at = lightInPlan(geo.objectFootprint(o), o.size, light);
     if (!at) continue;
-    out.push({ id: o.id, kind: 'lamp', pos: roomSideOfUnit(o, level, geo, at.pos), z: geo.objectZ(o) + at.z, radius: litRadius(o), derived: true });
+    out.push({ id: o.id, name: fallbackName(o, 'object'), kind: 'lamp', pos: roomSideOfUnit(o, level, geo, at.pos), z: geo.objectZ(o) + at.z, radius: litRadius(o), derived: true });
   }
   return out;
 }

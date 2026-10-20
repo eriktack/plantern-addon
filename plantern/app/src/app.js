@@ -23,6 +23,7 @@ const $ = id => document.getElementById(id);
 import { chooseLocation, chooseLevel, remember, linkPages } from './model/current.js';
 import { compassSvg } from './render2d/compass.js';
 import { wirePanelResize } from './panel-resize.js';
+import { foldOnPhone } from './fold-note.js';
 import { readPrefs, writePrefs, cameraKey } from './model/prefs.js';
 import { shadowLevel, SHADOW_LEVELS, SHADOW_LABEL, SHADOW_COUNT } from './model/shadows.js';
 import { nightLight } from './model/night.js';
@@ -96,7 +97,7 @@ async function main() {
   const issues = [...validateModel(model, geos, { library }), ...validateBindings(loc, model)];
   const showIssues = () => {
     $('issues').innerHTML = issues.length
-      ? issues.map(i => `<div class="iss ${i.severity}"><b>${esc(i.id)}</b>${i.level ? ` <small>${esc(i.level)}</small>` : ''}<br>${esc(i.msg)}</div>`).join('')
+      ? issues.map(i => `<div class="iss ${i.severity}"><b>${esc(i.name || i.id)}</b>${i.name ? ` <small>${esc(i.id)}</small>` : ''}${i.level ?` <small>${esc(i.level)}</small>` : ''}<br>${esc(i.msg)}</div>`).join('')
       : '<small>No problems found.</small>';
     $('issueCount').textContent = issues.length ? `(${issues.length})` : '';
   };
@@ -124,7 +125,8 @@ async function main() {
   let ha;
   try { ha = createHaClient(conn, { entities: boundEntities(loc) }); }
   catch (e) { issues.push({ severity: 'error', id: connName || 'ha', msg: e.message }); showIssues(); ha = createHaClient({ type: 'mock' }, { entities: boundEntities(loc) }); }
-  ha.onStatus((s, detail) => { $('haStatus').textContent = `${connName || 'no connection'} · ${s}${detail ? ` (${detail})` : ''}${note && s === 'mock' ? ` — ${note}` : ''}`; });
+  const haNote = foldOnPhone($('haStatus'));                      // on a phone the long note is one line until opened (mobile UX plan S5)
+  ha.onStatus((s, detail) => { $('haStatus').textContent = `${connName || 'no connection'} · ${s}${detail ? ` (${detail})` : ''}${note && s === 'mock' ? ` — ${note}` : ''}`; haNote.update(); });
 
   // A lamp with no link to Home Assistant, or whose light HA cannot reach, can still be clicked on and off here, to see a room lit: a preview in the
   // colour set on the light (its look), kept only until the page is reloaded. Whatever HA reports wins as soon as it reports something.

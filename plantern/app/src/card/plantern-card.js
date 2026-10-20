@@ -171,11 +171,12 @@ class PlanternCard extends HTMLElement {
       },
     };
     let view3d = null;
-    // asset models of the house (its own assets/ folder; the card has no shared one), decision 146
+    // asset models of the house (its own assets/ folder; the card has no shared one), decision 146; the models of its library objects are published by
+    // the add-on next to the house's files (glb/index.json, glb/<hash>.glb), because the card cannot reach the add-on's API (docs/plans/card-blueprint-models.md)
     // models that have loaded redraw the plans once after a quiet moment, not once each; the 3D view places each model itself when it arrives
     const plansAfterAssets = coalesce(() => renderPlans({ with3d: false }));
-    const assets = createAssetCache({ houseBase: baseUrl, sharedBase: null, onChange: plansAfterAssets });
-    for (const lv of model.levels) for (const o of lv.objects || []) if (o.kind === 'asset' && !o.blueprint) assets.load(o.asset);   // an object made from a blueprint needs Plantern's server, which the card does not reach
+    const assets = createAssetCache({ houseBase: baseUrl, sharedBase: null, published: `${baseUrl}glb/`, onChange: plansAfterAssets });
+    for (const lv of model.levels) for (const o of lv.objects || []) if (o.kind === 'asset') assets.loadFor(o);   // a library object is read from what the add-on published, so its colour and marker are right before 3D opens
     const looks = { materials: materialTable(model), baseUrl, assets, assetStatus: n => assets.status(n), assetColour: n => assets.mainColour(n) };
     // the plan's colours: the dark plan, or the light one on a light theme (CD3); the 3D shadows: the house's setting for this device, or the card's own (CD6)
     // (what the plan sits on is read again when the dashboard's theme changes, see `set hass`)

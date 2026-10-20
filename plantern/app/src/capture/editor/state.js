@@ -55,6 +55,8 @@ export const Ed = {
   autoZoomed: false,
   pan: null,
   suppressClick: false,
+  levelMenu: null,                   // the level dropdown of the plan's tools on a phone (made when first shown)
+  lastMenuAt: -1e9,                  // when the right-click / long-press menu last opened (a touch press must not open it twice)
   panFrame: 0,
   pinch: null,
   lastClick: null,

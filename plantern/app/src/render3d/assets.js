@@ -20,10 +20,13 @@ const settle = p => Promise.resolve(p).then(v => v, () => null);
  * sceneless (the Editor, PF14): a blueprint object is not loaded as a model at all. The server's answer (size, light, main colour) is all that is
  * kept, so the page fetches no model file and never loads three.js for them; mainColour() then gives the colour the server worked out. A plain
  * model file (assets/<name>/model.glb) is still loaded as before.
+ * published (the Lovelace card, docs/plans/card-blueprint-models.md): a URL ending in '/' where the add-on publishes the models of the
+ * house's library objects (index.json, <hash>.glb). A cache with it never asks a server: a blueprint object is looked up in that index
+ * by its assetKey() and its file is read from there (the card cannot reach the add-on's API); an object that is not in the index is 'missing'.
  */
 export function createAssetCache({
   houseBase = null, sharedBase = null, house = null, apiBase = '', onChange = () => {},
-  store = glbStore(), fetchImpl = null, parseImpl = null, sceneless = false,
+  store = glbStore(), fetchImpl = null, parseImpl = null, sceneless = false, published = null,
 } = {}) {
   const entries = new Map();   // name -> { status, scene, meta, ready: Promise }
   let loader = null;
@@ -98,9 +101,72 @@ export function createAssetCache({
    *  3. with no server, the kept copy stays as it is; with neither, the object is 'missing' (a marked box). A blueprint the
    *     server refuses (bad values, a failed build) is 'broken' whatever was kept, with the reason in error(key).
    */
+  // The published index (a page with `published`): read once, shared by every object. null when it cannot be read (no network), {} when
+  // there is none (nothing published yet).
+  let publishedIndex = null;
+  const readPublishedIndex = () => (publishedIndex ??= doFetch(`${published}index.json`, { cache: 'no-store' })
+    .then(r => (r.ok ? r.json().then(j => (j && typeof j === 'object' && !Array.isArray(j) ? j : {}), () => ({})) : r.status === 404 ? {} : null), () => null));
+
+  /**
+   * A blueprint object on a page with `published`: the kept copy first (so a phone shows it offline), then the index: an object that is
+   * in it has its file read from `published` when that is not the copy shown; one that is not is 'missing' ("not published yet") unless a
+   * kept copy is on screen. Nothing here ever requests api/glb.
+   */
+  function loadPublished(o) {
+    const key = assetKey(o);
+    const entry = { status: 'loading', scene: null, meta: null, error: null, hash: null, ready: null };
+    entries.set(key, entry);
+    entry.ready = (async () => {
+      const kept = await settle(store?.getLink(key));
+      const keptBytes = kept ? await settle(store.getFile(kept.hash)) : null;
+      if (keptBytes) {
+        try {
+          entry.scene = await readGlb(keptBytes);
+          Object.assign(entry, { status: 'ok', hash: kept.hash, meta: { size: kept.size }, light: kept.light ?? null });
+          onChange(key, 'ok');
+        } catch { /* a kept copy that cannot be read is not used */ }
+      }
+      const index = await readPublishedIndex();
+      const item = index?.[key];
+      if (!item) {
+        if (!entry.scene) {
+          entry.status = 'missing';
+          entry.error = index === null ? 'the published models cannot be reached' : 'not published yet: the add-on publishes it after the next change';
+        }
+      } else if (entry.scene && entry.hash === item.hash) {
+        Object.assign(entry, { meta: { size: item.size }, light: item.light ?? null, colour: item.colour ?? null, error: null });
+      } else {
+        let bytes = null;
+        try {
+          const file = await doFetch(`${published}${item.hash}.glb`);
+          if (!file.ok) throw new Error(`the published model answered ${file.status}`);
+          bytes = await file.arrayBuffer();
+        } catch (e) {                                     // not reachable: what was kept stays on screen, else a marked box
+          entry.error = e.message;
+          if (!entry.scene) entry.status = 'missing';
+        }
+        if (bytes) {
+          try {
+            entry.scene = await readGlb(bytes);
+            Object.assign(entry, { status: 'ok', hash: item.hash, meta: { size: item.size }, light: item.light ?? null, colour: item.colour ?? null, error: null });
+            await settle(store?.putFile(item.hash, bytes));
+            await settle(store?.putLink(key, item.hash, item.size, item.light ?? null));
+          } catch (e) {                                   // a file that cannot be read
+            entry.error = e.message;
+            if (!entry.scene) entry.status = 'broken';
+          }
+        }
+      }
+      onChange(key, entry.status);
+      return entry;
+    })();
+    return entry;
+  }
+
   function loadObject(o) {
     const key = assetKey(o);
     if (entries.has(key)) return entries.get(key);
+    if (published !== null) return loadPublished(o);
     const entry = { status: 'loading', scene: null, meta: null, error: null, hash: null, ready: null };
     entries.set(key, entry);
     entry.ready = (async () => {

@@ -10,7 +10,7 @@ export const PAGES = [
   { id: 'editor', label: 'Editor', icon: 'editor', href: 'room-editor.html', group: 'Edit', hint: 'Edit rooms, walls, openings and lamps (desktop)' },
   { id: 'wizard', label: 'Room wizard', icon: 'wizard', href: 'wizard.html', group: 'Capture (phone)', hint: 'Measure a room, wall by wall' },
   { id: 'openings', label: 'Doors & lights', icon: 'openings', href: 'openings.html', group: 'Capture (phone)', hint: 'Doors, windows, switches and lamps' },
-  { id: 'storage', label: 'Storage', icon: 'storage', href: 'storage.html', group: 'Manage', hint: 'Where your houses are kept: folders, network shares, git' },
+  { id: 'storage', label: 'Settings', icon: 'storage', href: 'storage.html', group: 'Manage', hint: 'Where your houses are kept, and the Home Assistant connection' },
   { id: 'objects', label: 'Objects', icon: 'objects', href: 'object-designs/index.html', group: 'Manage', hint: 'Parametric objects: set sizes and materials, download a model' },
 ];
 

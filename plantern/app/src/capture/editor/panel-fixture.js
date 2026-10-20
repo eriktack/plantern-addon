@@ -103,7 +103,7 @@ async function showBinding(x) {
   const lamps = Ed.model.levels.flatMap(l => (l.fixtures || []).filter(f => f.kind !== 'switch').map(f => ({ f, l })));
   $('xControls').innerHTML = lamps.map(({ f, l }) => `<label class="inl"><input type="checkbox" value="${esc(f.id)}"${(b.controls || []).includes(f.id) ? ' checked' : ''}> ${esc(displayName(f))}${l.id !== lv.id ? ` <small>${esc(l.name || l.id)}</small>` : ''}</label>`).join('') || 'No lamps yet.';
   const name = Ed.loc.integrations?.ha?.connection;
-  $('xEntityNote').textContent = name ? `in ${name}: type a name or id, the best matches come first; picking one links it when you Apply` : 'pick the house\'s Home Assistant on the Storage page to get a list; or type the entity id';
+  $('xEntityNote').textContent = name ? `in ${name}: type a name or id, the best matches come first; picking one links it when you Apply` : 'pick the house\'s Home Assistant on the Settings page to get a list; or type the entity id';
   const states = await loadHaStates();
   if (fixture() !== x) return;
   const room = (lv.rooms || []).find(r => (x.pos && pointInPolygon(x.pos, r.polygon)) || (x.attach && lv.walls.find(w => w.id === x.attach.wall)?.rooms?.includes(r.id)));
@@ -148,7 +148,7 @@ export function showDoorBinding(o) {
 }
 export async function loadDoorChoices(o) {
   const info = openingInfo(level(), o.id), name = Ed.loc.integrations?.ha?.connection;
-  $('oEntityNote').textContent = name ? `in ${name}: a binary_sensor that says open (on) or closed (off); type a name or id, picking one links it when you Apply` : "pick the house's Home Assistant on the Storage page to get a list; or type the entity id (a binary_sensor: on = open)";
+  $('oEntityNote').textContent = name ? `in ${name}: a binary_sensor that says open (on) or closed (off); type a name or id, picking one links it when you Apply` : "pick the house's Home Assistant on the Settings page to get a list; or type the entity id (a binary_sensor: on = open)";
   const states = await loadHaStates();
   if (opening() !== o) return;
   const rooms = [...new Set([...(info?.sides?.left || []), ...(info?.sides?.right || [])])].map(id => (level().rooms || []).find(r => r.id === id)).filter(Boolean);

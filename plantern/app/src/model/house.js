@@ -57,7 +57,7 @@ export const NO_HOUSES = 'No houses yet. Connect the folder or git repository wh
  * and html NO_HOUSES. An id not in the list is still tried with the server (the hidden demo, typed by hand).
  */
 export async function openHouse(index, id) {
-  if (!id) throw Object.assign(new Error('No houses yet: connect a storage on the Storage page.'), { noHouses: true, html: NO_HOUSES });
+  if (!id) throw Object.assign(new Error('No houses yet: connect a storage on the Settings page.'), { noHouses: true, html: NO_HOUSES });
   const entry = index.locations.find(l => l.id === id) || (index.server ? { id, name: id } : null);
   if (!entry) throw new Error(`unknown house "${id}"`);
   const h = new House(index.server, entry);

@@ -30,6 +30,7 @@ import { drawWallOverlay, selectionMarks, wallEnds } from './walldraw.js';
 import { isRound } from './panel-room.js';
 import { setStatus } from './session.js';
 import { Ed } from './state.js';
+import { pickVerb, pointerIsCoarse } from '../../touch.js';
 
 
 /** A wall on the plan as one clickable group: its body as built (joins, openings), hatched while its thickness is assumed. */
@@ -363,5 +364,5 @@ function drawPlan() {
   svg.innerHTML = out;
   Ed.measure?.draw();
   drawWallOverlay();                                                   // the measurement on top
-  setStatus(cur ? `${Ed.roomId || 'new room'} · walking direction shown on wall A` : Ed.wallId ? `wall ${tip(wall())}` : Ed.openingId ? tip(opening(), opening()?.type) : Ed.fixtureId ? tip(fixture()) : 'click a room, a wall, an opening or a lamp');
+  setStatus(cur ? `${Ed.roomId || 'new room'} · walking direction shown on wall A` : Ed.wallId ? `wall ${tip(wall())}` : Ed.openingId ? tip(opening(), opening()?.type) : Ed.fixtureId ? tip(fixture()) : `${pickVerb(pointerIsCoarse())} a room, a wall, an opening or a lamp`);
 }

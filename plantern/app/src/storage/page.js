@@ -1,4 +1,4 @@
-// The Storage page (storage.html): where houses are kept, and the *Add storage* wizard (decision 106:
+// The Settings page (storage.html): where houses are kept, and the *Add storage* wizard (decision 106:
 // setup is clicks only). Talks to the local server's storage API (tools/store/manage.js); this file only
 // wires the DOM.
 
@@ -56,7 +56,7 @@ function render() {
       ${s.status?.state === 'auth' ? `<div class="btns" style="margin-top:6px"><button data-act="signin">Sign in again (token)</button></div>` : ''}</div>
       <div class="btns">${s.builtin ? '' : `<button data-act="refresh">${s.type === 'git' ? 'Sync now' : 'Look again'}</button>${s.type === 'git' ? `<button data-act="branch" title="Switch to another branch, or start a new one">Branch: ${esc(s.branch || '?')}</button>` : ''}<button data-act="rename">Rename</button><button data-act="remove" class="quiet">Disconnect</button>`}</div></div>
       ${s.builtin ? `<label class="switch" style="margin-top:8px"><input type="checkbox" id="showDemo"${state.showDemo ? ' checked' : ''}> Show the demo house</label>` : ''}
-      <ul class="houses">${s.houses.length || s.builtin ? s.houses.map(h => `<li><span class="nm">${esc(h.name)} <small>${esc(h.id)}</small></span><span class="acts">
+      <ul class="houses">${s.houses.length || s.builtin ? s.houses.map(h => `<li><span class="nm" title="${esc(h.id)}">${esc(h.name)}</span><span class="acts">
         <a href="index.html?loc=${encodeURIComponent(h.id)}" data-loc="${esc(h.id)}">Plan</a><a href="room-editor.html?loc=${encodeURIComponent(h.id)}" data-loc="${esc(h.id)}">Editor</a><a href="wizard.html?loc=${encodeURIComponent(h.id)}" data-loc="${esc(h.id)}">Rooms</a>
         ${copyTo.length ? `<select data-copy="${esc(h.id)}" aria-label="Copy to another storage"><option value="">Copy to…</option>${copyTo.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select>` : ''}</span></li>`).join('') : `<li><span class="help">No houses here yet.</span><span class="acts">${s.readOnly ? '' : `<button data-act="newhouse">+ New house here</button>`}</span></li>`}</ul></div>`;
   }

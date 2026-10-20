@@ -350,7 +350,7 @@ async function done(force) {
     const r = addRoom(model, w.level, { name: w.name, exterior: w.exterior }, result.sol.polygon, result.capture, { settings: resolveSettings(loc, level()) });
     const errs = blockingErrors(r.report), lines = describeReconcile(r.report);
     if (errs.length) {
-      $('doneOut').innerHTML = `<div class="iss error">Not saved: the house would have errors. Fix them in the editor first, or use <b>Copy</b> / <b>Download</b> below.<br>${errs.map(e => `<b>${esc(e.id)}</b> ${esc(e.msg)}`).join('<br>')}</div>`;
+      $('doneOut').innerHTML = `<div class="iss error">Not saved: the house would have errors. Fix them in the editor first, or use <b>Copy</b> / <b>Download</b> below.<br>${errs.map(e => `<b>${esc(e.name || e.id)}</b>${e.name ? ` <small>${esc(e.id)}</small>` : ''} ${esc(e.msg)}`).join('<br>')}</div>`;
       return null;
     }
     if (r.report.preview.length && !(await askConfirm(['Adding this room changes the plan:', ...lines, 'Add it?'].join('\n\n'), { ok: 'Add it' }))) return null;

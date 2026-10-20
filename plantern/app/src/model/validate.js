@@ -226,6 +226,8 @@ export function validateLevel(level, geo, below = true, checks = [], blueprints)
     if (x.attach && !isHosted(x) && !geo.wallById.get(x.attach.wall)) out.push({ severity: 'error', id: x.id, msg: `attached to missing wall "${x.attach.wall}"` });
   }
   for (const fx of level.fixtures || []) {
+    // a derived lamp is a lit object's light (lit.js): the object is checked (checkObject), so its light is not checked again (issue #24)
+    if (fx.derived) continue;
     const { errors, warnings } = checkFixture(fx, level);
     for (const e of errors) out.push({ severity: 'error', id: fx.id, msg: e });
     for (const w of warnings) out.push({ severity: 'warn', id: fx.id, msg: w });
@@ -406,7 +408,29 @@ export function validateModelCached(model, geos, options = {}) {
   return byLib.get(lib);
 }
 
-export function validateModel(model, geos, { blueprints, library } = {}) {
+/** Every issue, with the name of the thing it is about (issue #25): `name` on the issue, and "Name (id)" in its message. */
+export function validateModel(model, geos, options = {}) {
+  return withNames(validateAll(model, geos, options), model);
+}
+
+/** The names of the entities an issue points at. A thing without a name keeps its id alone; ids are matched as whole words. */
+export function withNames(issues, model) {
+  const names = new Map(), add = e => { if (e?.id && typeof e.name === 'string' && e.name.trim()) names.set(e.id, e.name.trim()); };
+  for (const lv of model.levels || []) for (const c of ID_COLLECTIONS) (lv[c] || []).forEach(add);
+  (model.checks || []).forEach(add);
+  (model.anchors || []).forEach(add);
+  if (!names.size) return issues;
+  const ids = [...names.keys()].sort((a, b) => b.length - a.length).map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  // an id already in brackets, as some messages write it ("Trapp" (st_main)), is left as it is
+  const word = new RegExp(`(?<![\\w#(])(${ids.join('|')})(?![\\w#)])`, 'g');
+  return issues.map(i => {
+    const name = names.get(i.id);
+    const msg = typeof i.msg === 'string' ? i.msg.replace(word, (id) => `${names.get(id)} (${id})`) : i.msg;
+    return name ? { ...i, name, msg } : (msg === i.msg ? i : { ...i, msg });
+  });
+}
+
+function validateAll(model, geos, { blueprints, library } = {}) {
   const out = [];
   if (model.units && model.units !== 'mm') out.push({ severity: 'error', id: 'model', msg: `units must be "mm" (got "${model.units}")` });
   checkIds(model, out);

@@ -77,7 +77,7 @@ export function createMenu(host, { label, icon, entries, onPick = () => {}, alig
   button.addEventListener('click', () => set(list.hidden));
   document.addEventListener('pointerdown', e => { if (!list.hidden && !host.contains(e.target)) set(false); });
   // placed on the page, so it would drift away from its button if anything scrolls or the window changes: close it instead
-  const closeIfMoved = e => { if (!list.hidden && !(e?.target instanceof Node && list.contains(e.target))) set(false); };   // the list's own scrolling is fine
+  const closeIfMoved = e => { if (!list.hidden && scrollMovesMenu(e?.target, list)) set(false); };   // the list's own scrolling is fine
   window.addEventListener('scroll', closeIfMoved, true);
   window.addEventListener('resize', closeIfMoved);
   list.addEventListener('click', e => {
@@ -114,6 +114,14 @@ export function menuPosition(x, y, w, h, vw, vh, m = 8) {
   return { left: Math.min(left, Math.max(m, vw - w - m)), top, maxHeight: vh - top - m };
 }
 
+/**
+ * Whether a scroll event moves the menu away from what it belongs to (so it closes): a scroll of the page or of anything else does,
+ * a scroll of the menu's own list (a long menu: the wheel, the scrollbar) does not. `target` is the event's target, `list` the menu's list.
+ */
+export function scrollMovesMenu(target, list) {
+  return !(target && (target === list || list.contains(target)));
+}
+
 let floating = null;
 export function openMenuAt(x, y, { entries, onPick = () => {}, title = '' }) {
   floating?.close();
@@ -133,10 +141,11 @@ export function openMenuAt(x, y, { entries, onPick = () => {}, title = '' }) {
     if (floating !== api) return;
     floating = null; list.remove();
     document.removeEventListener('pointerdown', outside, true);
-    window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close);
+    window.removeEventListener('scroll', onScroll, true); window.removeEventListener('resize', close);
     document.removeEventListener('keydown', keys, true);
   };
   const outside = e => { if (!list.contains(e.target)) close(); };
+  const onScroll = e => { if (scrollMovesMenu(e.target, list)) close(); };   // scrolling the menu's own list (wheel, scrollbar) keeps it open
   const keys = e => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
@@ -154,7 +163,7 @@ export function openMenuAt(x, y, { entries, onPick = () => {}, title = '' }) {
   list.addEventListener('contextmenu', e => e.preventDefault());
   setTimeout(() => {                                                // not the pointerdown that opened it
     document.addEventListener('pointerdown', outside, true);
-    window.addEventListener('scroll', close, true); window.addEventListener('resize', close);
+    window.addEventListener('scroll', onScroll, true); window.addEventListener('resize', close);
   }, 0);
   document.addEventListener('keydown', keys, true);
   items()[0]?.focus();

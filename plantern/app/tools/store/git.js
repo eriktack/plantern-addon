@@ -2,7 +2,7 @@
 // folder storage; every save becomes a commit that is pushed, and the remote is fetched now and then so
 // changes pushed from elsewhere arrive. When both sides moved, the house files are merged by entity id
 // (decision 105); if the same things changed on both sides, the person picks the local or the remote
-// version on the Storage page. Never a force push.
+// version on the Settings page. Never a force push.
 //
 // Uses the git command line (no dependencies). Credentials: a token is given to git through a one-off
 // credential helper that reads it from this process's environment, so it never lands in the remote URL,
@@ -323,7 +323,7 @@ export class GitStore extends FolderStore {
         }
         if (stuck.length) {
           await this.run(['merge', '--abort']);
-          this.setStatus('conflict', `The same things were changed here and in the repository (${stuck.join(', ')}). Pick which version to keep on the Storage page.`);
+          this.setStatus('conflict', `The same things were changed here and in the repository (${stuck.join(', ')}). Pick which version to keep on the Settings page.`);
           return;
         }
       }
@@ -408,7 +408,7 @@ export class GitStore extends FolderStore {
     });
   }
 
-  /** Sync now (the Storage page's button). */
+  /** Sync now (the Settings page's button). */
   sync() { return this.serial(() => this.syncNow()); }
 
   close() { super.close(); clearInterval(this.fetchTimer); clearTimeout(this.retryTimer); }
