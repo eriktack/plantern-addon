@@ -55,7 +55,7 @@ export function doorStates(model, bindings, getState) {
 }
 
 /**
- * How a door's lock is drawn, from `lockOf()`: { colour, open, label }. Locked is a closed padlock in green, unlocked an open one in red, a jammed
+ * How a door's lock is drawn, from `lockOf()`: { colour (the whole padlock), open, label }. Locked is a closed padlock in green, unlocked an open one in red, a jammed
  * lock an open one in amber; an unknown state (unavailable, missing entity) is a closed, grey padlock, never a guess.
  */
 export function padlockLook(state) {
