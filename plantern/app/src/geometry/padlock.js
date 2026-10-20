@@ -22,10 +22,10 @@ export function padlockPrisms(w, f, o, state) {
     const pt = (ds, zz) => { const a = at(ds, tc); return [a[0], a[1], zz]; };
     const rod = (a, b) => out.push({ id: o.id, kind: 'padlock', bar: { a, b, diameter: ROD }, poly: squareAround(a, ROD), z0: Math.min(a[2], b[2]), z1: Math.max(a[2], b[2]), color: look.colour, lock: look.label });
     const knob = p => out.push({ id: o.id, kind: 'padlock', ball: { center: p, diameter: ROD }, poly: squareAround(p, ROD), z0: p[2] - ROD / 2, z1: p[2] + ROD / 2, color: look.colour, lock: look.label });
-    // the shackle: a half circle on two legs. Closed: both legs go down into the body. Open: its left leg still goes into the body and it is taller, with its right leg
+    // the shackle: a half circle on two legs. Closed: both legs go down into the body. Open: its left leg still goes into the body and it is as tall as the closed one, with its right leg
     // ending just above the body and standing beside it.
     const r = look.open ? 0.36 * W : 0.31 * W, leftX = look.open ? 0.36 * W : -r;            // the left leg's place along the wall from the body's middle
-    const top = z1 + (look.open ? 0.93 * W : 0.62 * W), centre = leftX + r, rightX = leftX + 2 * r;
+    const top = z1 + 0.62 * W, centre = leftX + r, rightX = leftX + 2 * r;
     const archZ = top - r, rightEnd = look.open ? z1 + 0.1 * W : z1;                       // the arch's centre height, and where the right leg ends
     const arch = [];
     for (let i = 0; i <= ARCH_STEPS; i++) { const a = Math.PI - (Math.PI * i) / ARCH_STEPS; arch.push(pt(centre + r * Math.cos(a), archZ + r * Math.sin(a))); }

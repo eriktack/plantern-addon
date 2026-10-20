@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.10
+
+- The open padlock on a door's lock is drawn as an open shackle, turned out of the housing as on a real padlock, in 3D and in the plan. The plan's padlock is drawn in the middle of the door.
+
 ## 0.5.9
 
 - Doors: a lock from Home Assistant shows as a padlock in the plan and in 3D (green closed, red open). An open door shows its open or closed state as an outline. The exploded view moves the floors further sideways. Validation messages show the name of the thing beside its id. A lamp of a lit object is no longer reported as outside a room.
