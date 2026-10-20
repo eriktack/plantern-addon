@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.12
+
+- The add-on's commits are linked to your GitHub account (the publisher uses your noreply address).
+
 ## 0.5.11
 
 - Still to measure: each item can be confirmed as measured, one at a time, from its row in the list. Padlock and door-lock fixes; blueprint values that do not apply to a variant are cleared on save, not reported as warnings.
