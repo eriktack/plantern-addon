@@ -75,6 +75,11 @@ const DRAWN = {
   deskArm: '<path d="M4 20h6M7 20v-12l7-2 4 4"/>',
   upDown: '<path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4"/>',
   quarterRound: '<path d="M5 5v14h14"/><path d="M5 5a14 14 0 0 1 14 14"/>',
+  poufDrawn: '<ellipse cx="12" cy="8" rx="8" ry="3"/><path d="M4 8v9c0 1.7 3.6 3 8 3s8-1.3 8-3V8"/>',
+  multiLamp: '<path d="M12 21V12M12 21h-5M12 21h5"/><path d="M6 10h4l1 3H5zM14 7h4l1 3h-6zM9 3h4l1 3h-6z"/>',
+  grilleDrawn: '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M7 8h10M7 12h10M7 16h10"/>',
+  slatsDrawn: '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M8 7v10M12 7v10M16 7v10"/>',
+  caneDrawn: '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M8 7v10M12 7v10M16 7v10M7 8h10M7 12h10M7 16h10"/>',
   pedalBin: '<path d="M7 8h10l-1 13H8z"/><path d="M6 8h12M10 8V5h4v3"/><path d="M12 21h5"/>',
 };
 
@@ -159,7 +164,7 @@ const MORE = {
   pivot: 'pivot', center: 'centre', wall: 'wallSide', top: 'arrowUp', up: 'arrowUp', down: 'arrowDown', rear: 'arrowBack',
   rolled: 'rolledArm', bar: 'barStool', counter: 'stoolDrawn', step: 'stepStool', classic: 'tableLamp', sill: 'lampSill',
   ceramic: 'vase', baluster: 'vase', pole: 'pole', sphere: 'sphereStem', ladder: 'ladder', wall_bar: 'wallBar',
-  single: 'sconceDrawn', hat_shelf: 'hatShelf', narrow: 'hinged', rounded: 'quarterRound', pedal: 'pedalBin',
+  single: 'sconceDrawn', hat_shelf: 'hatShelf', narrow: 'hinged', rounded: 'quarterRound', pedal: 'pedalBin', pouf: 'poufDrawn', multi: 'multiLamp', grille: 'grilleDrawn', slats: 'slatsDrawn', cane: 'caneDrawn',
 };
 Object.assign(BY_NAME, MORE);
 for (const [name, family] of Object.entries(BY_NAME)) ICONS[`opt:${name}`] = svg(DRAWN[family]);

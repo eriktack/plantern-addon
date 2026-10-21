@@ -4,6 +4,7 @@ import { primitives, booleans, transforms, geometries } from '../lib/jscad.js';
 // ASSUMED: leg tops set 85 mm in from the seat edge (typical leg position).
 // ASSUMED: footrest ring 25 mm tall and 20 mm wide at about 28% of seat height, on stools 450 mm or taller.
 // ASSUMED: backrest 250 mm above the seat on two 20 mm posts, at the back (+y) (typical half-round back).
+// ASSUMED: a pouf is a padded round cushion with its top and bottom edges rounded (radius 70 mm, at most a third of its height); it stands directly on the floor, has no legs and no backrest, and is `seatHeight` tall.
 // UNSURE: a variant with a square seat and square legs, like the dining chair but at bar-stool height, is not built.
 //   It could be a fourth variant (for example `square`) with a square seat board and square legs, sized like the
 //   bar stool and optionally with the same footrest and back. Not changed yet; Erik to decide.
@@ -11,27 +12,29 @@ import { primitives, booleans, transforms, geometries } from '../lib/jscad.js';
 export const meta = {
   id: 'stool',
   name: 'Stool',
-  summary: 'A round-seat bar, counter or step stool, with an optional backrest.',
+  summary: 'A round-seat bar, counter or step stool, with an optional backrest, or a round pouf.',
   description:
     'A round-seat stool on four splayed legs, as a bar stool, counter stool or low step stool. A footrest ring is added on tall stools, and an optional half-round backrest sits on two posts. ' +
     'Assumed: seat 40 mm thick; legs 36 mm diameter, splayed so the feet are 60 mm further out than the tops, with the tops set 85 mm in from the seat edge; ' +
     'footrest ring 25 mm tall and 20 mm wide at about 28% of seat height, on stools with seat height of 450 mm or more; ' +
-    'backrest 250 mm tall above the seat, made of a 100 mm tall, 20 mm thick half-round band on two 20 mm posts; the backrest is at the back (+y).',
+    'backrest 250 mm tall above the seat, made of a 100 mm tall, 20 mm thick half-round band on two 20 mm posts; the backrest is at the back (+y). ' +
+    'A pouf is a padded round cushion with rounded top and bottom edges (radius 70 mm, at most a third of its height), standing on the floor without legs or backrest.',
   params: [
-    { key: 'variant', labels: { bar: 'Bar stool', counter: 'Counter stool', step: 'Step stool' }, label: 'Variant', type: 'enum', options: ['bar', 'counter', 'step'], default: 'bar' },
-    { key: 'diameter', label: 'Diameter', unit: 'mm', default: 450, min: 350, max: 550, step: 10 },
+    { key: 'variant', labels: { bar: 'Bar stool', counter: 'Counter stool', step: 'Step stool', pouf: 'Pouf' }, label: 'Variant', type: 'enum', options: ['bar', 'counter', 'step', 'pouf'], default: 'bar' },
+    { key: 'diameter', label: 'Diameter', unit: 'mm', default: 450, min: 350, max: 800, step: 10 },
     { key: 'seatHeight', label: 'Seat height', unit: 'mm', default: 750, min: 250, max: 800, step: 10 },
-    { key: 'backrest', label: 'Backrest', type: 'boolean', default: false },
+    { key: 'backrest', label: 'Backrest', type: 'boolean', default: false, appliesTo: ['bar', 'counter', 'step'] },
     { key: 'material', label: 'Material (whole object)', type: 'material', default: 'oak' },
   ],
   variantDefaults: {
     bar: { seatHeight: 750 },
     counter: { seatHeight: 650 },
     step: { seatHeight: 350, diameter: 350 },
+    pouf: { seatHeight: 420, diameter: 520, material: 'fabric' },
   },
   parts: [
-    { key: 'seat', label: 'Seat' },
-    { key: 'legs', label: 'Legs' },
+    { key: 'seat', label: 'Seat or cushion' },
+    { key: 'legs', label: 'Legs', appliesTo: ['bar', 'counter', 'step'] },
   ],
   sizeParams: { x: 'diameter', y: 'diameter', z: 'seatHeight' },
   placement: { mount: 'floor' },
@@ -43,9 +46,10 @@ const SPLAY = 60;
 const BACK_H = 250;
 
 function check(p) {
-  if (['bar', 'counter', 'step'].indexOf(p.variant) < 0) {
+  if (['bar', 'counter', 'step', 'pouf'].indexOf(p.variant) < 0) {
     throw new Error('Unknown stool variant "' + p.variant + '".');
   }
+  if (p.variant === 'pouf') return;
   const R = p.diameter / 2;
   const sh = p.seatHeight;
   if (sh - SEAT_T - 100 < 100) {
@@ -60,6 +64,13 @@ export function build(p) {
   check(p);
   const R = p.diameter / 2;
   const sh = p.seatHeight;
+
+  if (p.variant === 'pouf') {
+    // a padded cushion: a cylinder with rounded top and bottom edges
+    const round = Math.min(70, sh / 3, R - 1);
+    const cushion = transforms.translate([0, 0, sh / 2], primitives.roundedCylinder({ radius: R, height: sh, roundRadius: round, segments: 32 }));
+    return { seat: cushion, legs: geometries.geom3.create() };
+  }
 
   // ----- seat -----
   const seatParts = [
@@ -146,5 +157,5 @@ export function build(p) {
 
 export function size(p) {
   check(p);
-  return [p.diameter, p.diameter, p.seatHeight + (p.backrest ? BACK_H : 0)];
+  return [p.diameter, p.diameter, p.seatHeight + (p.backrest && p.variant !== 'pouf' ? BACK_H : 0)];
 }

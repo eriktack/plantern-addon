@@ -50,6 +50,8 @@ const DRAWN = {
   tv: '<rect x="2" y="4" width="20" height="13" rx="1"/><path d="M8 21h8M12 17v4"/>',
   deskSetup: '<rect x="6" y="3" width="12" height="9" rx="1"/><path d="M12 12v3M9 15h6"/><rect x="4" y="18" width="12" height="3" rx="1"/><rect x="18" y="17" width="3" height="4" rx="1.5"/>',
   catTree: '<path d="M12 2v20"/><ellipse cx="7" cy="7" rx="4" ry="1.3"/><ellipse cx="17" cy="12" rx="4" ry="1.3"/><ellipse cx="7" cy="17" rx="4" ry="1.3"/><path d="M7 22h10"/>',
+  radiatorCover: '<rect x="3" y="5" width="18" height="15" rx="1"/><path d="M3 8h18M7 11v6M10 11v6M14 11v6M17 11v6"/>',
+  hookRack: '<rect x="3" y="6" width="18" height="4" rx="1"/><path d="M7 10v6M12 10v6M17 10v6M7 16a2 2 0 0 1 3 0M12 16a2 2 0 0 1 3 0M17 16a2 2 0 0 1 3 0"/>',
   wasteBin: '<path d="M6 7h12l-1 14H7z"/><path d="M4 7h16M9 7V4h6v3"/>',
   chest: '<rect x="3" y="12" width="18" height="8" rx="1"/><path d="M3 12c0-4 4-6 9-6s9 2 9 6"/><path d="M12 12v3"/>',
   cube: '<path d="M12 3 4 7v10l8 4 8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/>',
@@ -71,7 +73,7 @@ const TABLE = {
   'heat-pump-indoor': ['Heating & other', 'heatPump'], rug: ['Heating & other', 'rug'], planter: ['Heating & other', 'planter'],
   'water-heater': ['Heating & other', 'waterHeater'], 'sauna-heater': ['Heating & other', 'sauna'],
   tv: ['Electronics', 'tv'], 'desk-setup': ['Electronics', 'deskSetup'],
-  'cat-tree': ['Miscellaneous', 'catTree'], chest: ['Miscellaneous', 'chest'], 'waste-bin': ['Miscellaneous', 'wasteBin'],
+  'cat-tree': ['Miscellaneous', 'catTree'], chest: ['Miscellaneous', 'chest'], 'waste-bin': ['Miscellaneous', 'wasteBin'], 'radiator-cover': ['Heating & other', 'radiatorCover'], 'hook-rack': ['Storage', 'hookRack'],
 };
 
 /** { group, icon } of a model: from the table, else a guess from its id, else Other with a cube. icon is a name in ICONS (`kind:…`). */

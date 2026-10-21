@@ -21,21 +21,24 @@ import { primitives, booleans, transforms, geometries } from '../lib/jscad.js';
 // ASSUMED: lightHeight is measured from z = 0; 0 (the default) means the shade's vertical centre, and other values are kept at least 40 mm from either shade end (room for source and socket).
 // ASSUMED: Main round parts use 32 segments; tubes, sockets and stems use 16 and joint and source spheres 12 (appropriate resolution, low triangle count).
 // ASSUMED: Wiring, switches and internal electrical components are omitted (geometry-only representation).
+// ASSUMED: A multi-shade lamp is one weighted base with `shades` (2 to 5) separate 24 mm stems, each with its own shade, standing on a circle round the middle of the base; the first stem is the tallest (the full height) and each next one is 14% of the height lower. Its shades are 12% of the height tall, do not overlap, and the base is at least as wide as the stems' circle. The footprint is recentred on x and y.
+// ASSUMED: A multi-shade lamp has one light: lightHeight 0 is the middle of the shade heights, and `lightPoint` is the middle of the footprint.
 // UNSURE: Arc reach and curve shape are unspecified; reach is interpreted as horizontal mast-to-shade distance.
 // UNSURE: Torchiere bowl geometry is unspecified; an open upward-flaring cone is used.
 // UNSURE: The tripod footprint is not circular; baseDiameter is its circumscribed diameter, not its bounding-box width.
 // UNSURE: Variant defaults apply only to omitted parameters because supplied-value provenance is unavailable.
 
-const FORMS = ['arc', 'torchiere', 'tripod', 'standard'];
+const FORMS = ['arc', 'torchiere', 'tripod', 'standard', 'multi'];
 const SHADE_TOP = { drum: 1, cone: 0.4, empire: 0.7 };
-const SHADE_HEIGHT = { arc: 0.14, torchiere: 0.1, tripod: 0.18, standard: 0.18 };
+const SHADE_HEIGHT = { arc: 0.14, torchiere: 0.1, tripod: 0.18, standard: 0.18, multi: 0.12 };
+const MULTI_STEP = 0.14;   // each further stem of a multi-shade lamp is this share of the height lower
 
 export const meta = {
   id: 'floor-lamp',
   name: 'Floor lamp',
-  summary: 'A floor lamp: arc, torchiere, tripod or standard, with a choice of shade shape.',
+  summary: 'A floor lamp: arc, torchiere, tripod, standard or multi-shade, with a choice of shade shape.',
   description:
-    'A freestanding lamp with a hollow shade, a supported light source and a stand that depends on the variant. The variant is the form of the lamp; the shade shape (drum, cone, empire) is chosen separately, except for the torchiere bowl. Assumed: height is the complete local height; standard/tripod shade heights are 18% of height, arc shade height 14% and torchiere bowl height 10%; shade top radius is 100% (drum), 40% (cone) or 70% (empire) of the bottom radius, and the torchiere bowl bottom radius is 25% of its top radius; shade walls 5 mm thick radially with open ends; weighted bases 35 mm thick; standard/torchiere columns 12 mm radius with 5 mm base overlap; arc reach extends towards -y and the complete footprint is recentered; the arc is a mast to 65% of height followed by three straight links along a quarter ellipse ending 12 mm below height; arc tube radius 10 mm, mast and joint radii 12 mm, with 5 mm axial tube-to-joint overlap; arc shade top 100 mm below height with 8 mm radius hanger; tripod baseDiameter is its circumscribed foot footprint, with three 18 mm radius spherical feet, 14 mm radius legs, an 18 mm radius hub at 65% of height and a 10 mm radius upper stem; tripod links enter spherical joints axially by 5 mm; source radius 12 mm, socket radius 14 mm and height 25 mm, with 5 mm axial source/socket/stem overlaps; shade support crosses 8 mm wide and 10 mm thick, centred 15 mm from the supported end and clipped to the outer profile; lightHeight measured from z = 0, 0 meaning the shade centre and other values kept at least 40 mm from the shade ends; main round parts use 32 segments and tubes, joints, sources and sockets 16; wiring, switches and electrical internals omitted.',
+    'A freestanding lamp with a hollow shade (or, for the multi-shade form, two to five stems on one base, each with its own shade at its own height), a supported light source and a stand that depends on the variant. The variant is the form of the lamp; the shade shape (drum, cone, empire) is chosen separately, except for the torchiere bowl. Assumed: height is the complete local height; a multi-shade lamp has 24 mm stems on a circle round the middle of one base, the tallest the full height and each next one 14% lower, 12%-tall shades that do not overlap, and one light in the middle; standard/tripod shade heights are 18% of height, arc shade height 14% and torchiere bowl height 10%; shade top radius is 100% (drum), 40% (cone) or 70% (empire) of the bottom radius, and the torchiere bowl bottom radius is 25% of its top radius; shade walls 5 mm thick radially with open ends; weighted bases 35 mm thick; standard/torchiere columns 12 mm radius with 5 mm base overlap; arc reach extends towards -y and the complete footprint is recentered; the arc is a mast to 65% of height followed by three straight links along a quarter ellipse ending 12 mm below height; arc tube radius 10 mm, mast and joint radii 12 mm, with 5 mm axial tube-to-joint overlap; arc shade top 100 mm below height with 8 mm radius hanger; tripod baseDiameter is its circumscribed foot footprint, with three 18 mm radius spherical feet, 14 mm radius legs, an 18 mm radius hub at 65% of height and a 10 mm radius upper stem; tripod links enter spherical joints axially by 5 mm; source radius 12 mm, socket radius 14 mm and height 25 mm, with 5 mm axial source/socket/stem overlaps; shade support crosses 8 mm wide and 10 mm thick, centred 15 mm from the supported end and clipped to the outer profile; lightHeight measured from z = 0, 0 meaning the shade centre and other values kept at least 40 mm from the shade ends; main round parts use 32 segments and tubes, joints, sources and sockets 16; wiring, switches and electrical internals omitted.',
   params: [
     {
       key: 'variant',
@@ -47,6 +50,7 @@ export const meta = {
         torchiere: 'Torchiere (uplighter)',
         tripod: 'Tripod lamp',
         standard: 'Standard lamp',
+        multi: 'Multi-shade lamp (several stems)',
       },
       // not the bed's drawing: the option name `standard` is shared with the bed's variant (issue #35)
       icons: { standard: 'opt:standardLamp' },
@@ -81,7 +85,7 @@ export const meta = {
         empire: 'Empire (slightly tapered)',
       },
       default: 'drum',
-      appliesTo: ['arc', 'tripod', 'standard'],
+      appliesTo: ['arc', 'tripod', 'standard', 'multi'],
     },
     {
       key: 'baseDiameter',
@@ -101,6 +105,16 @@ export const meta = {
       max: 1800,
       step: 10,
       appliesTo: ['arc'],
+    },
+    {
+      key: 'shades',
+      label: 'Shades',
+      type: 'integer',
+      default: 3,
+      min: 2,
+      max: 5,
+      appliesTo: ['multi'],
+      hint: 'How many stems, each with its own shade.',
     },
     {
       key: 'material',
@@ -133,6 +147,13 @@ export const meta = {
     torchiere: {
       shadeDiameter: 350,
       height: 1800,
+    },
+    multi: {
+      height: 1600,
+      shadeDiameter: 280,
+      baseDiameter: 450,
+      shadeShape: 'drum',
+      shades: 3,
     },
     tripod: {
       baseDiameter: 500,
@@ -193,6 +214,14 @@ function resolve(p) {
       );
     }
     q[key] = value;
+  }
+
+  if (variant === 'multi') {
+    const heads = multiHeads(q);
+    const lowest = Math.min(...heads.map(h => h.bottom)), highest = Math.max(...heads.map(h => h.top));
+    const wanted = p.lightHeight > 0 ? p.lightHeight : (lowest + highest) / 2;
+    q.lightHeight = Math.max(lowest + 40, Math.min(highest - 40, wanted));
+    return q;
   }
 
   // 0 means the middle of the shade; any other value is kept inside the shade.
@@ -294,8 +323,55 @@ function layout(q) {
   return { headY, shadeRadius, baseRadius, shiftY: -(minimumY + maximumY) / 2 };
 }
 
+// The stems of a multi-shade lamp: where each stands (a circle round the middle, the first at the back), how tall it is and its shade.
+function multiHeads(q) {
+  const n = q.shades, radius = q.shadeDiameter / 2;
+  const top = SHADE_TOP[q.shadeShape], rBottom = radius, rTop = radius * top;
+  const around = radius / Math.sin(Math.PI / n) * 1.0;                       // shades side by side, just not overlapping
+  const orbit = n === 1 ? 0 : Math.max(around, q.baseDiameter / 2 - radius);
+  return Array.from({ length: n }, (_, i) => {
+    const a = Math.PI / 2 + (2 * Math.PI * i) / n, h = q.height * (1 - MULTI_STEP * i);
+    return { x: orbit * Math.cos(a), y: orbit * Math.sin(a), top: h, bottom: h - SHADE_HEIGHT.multi * q.height, rBottom, rTop };
+  });
+}
+
+// the footprint of a multi-shade lamp (its shades and its base) recentred on x and y
+function multiLayout(q) {
+  const heads = multiHeads(q), radius = q.shadeDiameter / 2;
+  const orbit = Math.hypot(heads[0].x, heads[0].y);
+  const baseRadius = Math.max(q.baseDiameter / 2, orbit + 30);
+  const xs = [-baseRadius, baseRadius, ...heads.flatMap(h => [h.x - radius, h.x + radius])];
+  const ys = [-baseRadius, baseRadius, ...heads.flatMap(h => [h.y - radius, h.y + radius])];
+  return { heads, baseRadius, shiftX: -(Math.min(...xs) + Math.max(...xs)) / 2, shiftY: -(Math.min(...ys) + Math.max(...ys)) / 2 };
+}
+
+function buildMulti(q) {
+  const { heads, baseRadius, shiftX, shiftY } = multiLayout(q);
+  const stand = [upright(baseRadius, 0, 35)];
+  const shades = [];
+  for (const h of heads) {
+    const at = z => z;
+    const outer = taper(h.rBottom, h.rTop, h.bottom, h.top), inner = taper(h.rBottom - 5, h.rTop - 5, h.bottom, h.top);
+    shades.push(transforms.translate([h.x, h.y, 0], booleans.subtract(outer, inner)));
+    const lamp = h.bottom + (h.top - h.bottom) / 2;
+    // stem up to a socket under the source, a source, and a cross that holds the shade
+    stand.push(
+      transforms.translate([h.x, h.y, 0], upright(12, 30, lamp - 27, 0, 16)),
+      transforms.translate([h.x, h.y, 0], upright(14, lamp - 32, lamp - 7, 0, 16)),
+      ball(12, [h.x, h.y, lamp]),
+    );
+    const cross = booleans.union(box(-h.rBottom, h.rBottom, -4, 4, h.bottom + 10, h.bottom + 20), box(-4, 4, -h.rBottom, h.rBottom, h.bottom + 10, h.bottom + 20));
+    stand.push(transforms.translate([h.x, h.y, at(0)], booleans.subtract(cross, booleans.subtract(cross, outer))));
+  }
+  return {
+    stand: transforms.translate([shiftX, shiftY, 0], combine(stand)),
+    shade: transforms.translate([shiftX, shiftY, 0], combine(shades)),
+  };
+}
+
 export function build(p = {}) {
   const q = resolve(p);
+  if (q.variant === 'multi') return buildMulti(q);
   const head = shadeDimensions(q);
   const { bottom, top, radiusBottom, radiusTop } = head;
   const { headY, shadeRadius, baseRadius, shiftY } = layout(q);
@@ -387,6 +463,7 @@ export function build(p = {}) {
 /** Where the fixture sits, [x, y, z] in mm (AGENT_INSTRUCTIONS §3.3): at the lamp head, at the light source height. */
 export function lightPoint(p = {}) {
   const q = resolve(p);
+  if (q.variant === 'multi') return [0, 0, q.lightHeight];
   const { headY, shiftY } = layout(q);
   return [0, headY + shiftY, q.lightHeight];
 }

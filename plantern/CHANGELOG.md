@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.4
+
+- Closes the library gaps found while furnishing BBV28: a radiator cover, a hook rack, a floor lamp with several shades, a round wood stove (braskamin) and a pouf. The wood stove, side table and stool take larger sizes, and a waste bin, shower fittings and a rounded corner shower arrived earlier in 0.6.3. Houses that use the new models or sizes show them correctly after this update.
+
 ## 0.6.3
 
 - A waste bin for the object library, shower fittings and a rounded corner shower, and wall objects on the left face of a wall now stand with their back on the wall (towel rails were the wrong way round). The pedal bin's pedal reaches out from the front.

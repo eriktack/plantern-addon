@@ -4370,3 +4370,163 @@ Per generator:
   ]
 }
 ```
+
+```json
+{
+  "category": "heating and misc",
+  "generators": [
+    {
+      "id": "radiator_cover",
+      "parameters": [
+        {
+          "key": "width",
+          "label": "Width",
+          "type": "number",
+          "unit": "mm",
+          "default": 900,
+          "min": 400,
+          "max": 2000,
+          "step": 10
+        },
+        {
+          "key": "height",
+          "label": "Height",
+          "type": "number",
+          "unit": "mm",
+          "default": 900,
+          "min": 300,
+          "max": 1200,
+          "step": 10
+        },
+        {
+          "key": "depth",
+          "label": "Depth",
+          "type": "number",
+          "unit": "mm",
+          "default": 180,
+          "min": 100,
+          "max": 300,
+          "step": 10
+        },
+        {
+          "key": "frontStyle",
+          "label": "Front",
+          "type": "enum",
+          "options": [
+            "grille",
+            "slats",
+            "cane"
+          ],
+          "default": "grille"
+        },
+        {
+          "key": "shelf",
+          "label": "Shelf on top",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "key": "material",
+          "label": "Material (whole object)",
+          "type": "material",
+          "default": "white-paint"
+        }
+      ],
+      "parts": [
+        [
+          "frame",
+          "Casing"
+        ],
+        [
+          "front",
+          "Front panel"
+        ],
+        [
+          "top",
+          "Shelf"
+        ]
+      ],
+      "placement": {
+        "mount": "floor"
+      },
+      "notes": [
+        "A casing over a wall radiator (radiatorskydd): side panels, rails, an open back and a perforated front (slots, slats or a cane weave), with an optional shelf on top. The radiator and a hinged front are omitted."
+      ]
+    }
+  ]
+}
+```
+
+```json
+{
+  "category": "storage",
+  "generators": [
+    {
+      "id": "hook_rack",
+      "parameters": [
+        {
+          "key": "width",
+          "label": "Width",
+          "type": "number",
+          "unit": "mm",
+          "default": 600,
+          "min": 200,
+          "max": 1500,
+          "step": 10
+        },
+        {
+          "key": "height",
+          "label": "Height",
+          "type": "number",
+          "unit": "mm",
+          "default": 120,
+          "min": 80,
+          "max": 400,
+          "step": 10
+        },
+        {
+          "key": "depth",
+          "label": "Depth",
+          "type": "number",
+          "unit": "mm",
+          "default": 90,
+          "min": 60,
+          "max": 150,
+          "step": 10
+        },
+        {
+          "key": "hooks",
+          "label": "Hooks",
+          "type": "integer",
+          "default": 5,
+          "min": 1,
+          "max": 10
+        },
+        {
+          "key": "material",
+          "label": "Material (whole object)",
+          "type": "material",
+          "default": "oak"
+        }
+      ],
+      "parts": [
+        [
+          "board",
+          "Board"
+        ],
+        [
+          "hooks",
+          "Hooks"
+        ]
+      ],
+      "placement": {
+        "mount": "wall",
+        "z": 1500
+      },
+      "notes": [
+        "A board on the wall with a row of coat hooks (hatthylla without the shelf, a krokbräda). Evenly spaced hooks, each with an upturned tip and a knob."
+      ]
+    }
+  ]
+}
+```

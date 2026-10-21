@@ -41,7 +41,7 @@ export const meta = {
       unit: 'mm',
       default: 450,
       min: 350,
-      max: 600,
+      max: 800,
       step: 10,
     },
     {
@@ -50,7 +50,7 @@ export const meta = {
       unit: 'mm',
       default: 450,
       min: 350,
-      max: 600,
+      max: 800,
       step: 10,
     },
     {
@@ -59,7 +59,7 @@ export const meta = {
       unit: 'mm',
       default: 550,
       min: 450,
-      max: 650,
+      max: 900,
       step: 10,
     },
     {
