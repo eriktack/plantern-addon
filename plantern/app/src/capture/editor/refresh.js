@@ -116,6 +116,7 @@ export function refreshNextTo() {
 
 export function refresh() {
   if (Ed.selecting) return;                          // PF4: a selection inside enterEdit() refreshes once, below
+  Ed.livePreview = false;                            // the plan is drawn from the stored model again (a draft shown while typing is gone)
   P('snaps', refreshSnaps);
   P('nextTo', refreshNextTo);
   // the house view, or only the thing being edited

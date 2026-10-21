@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.13
+
+- The Editor previews a form's changes on the plan before they are applied. A new model of a desk with its equipment, and a standard lamp icon. Still to measure items can be confirmed one at a time from the list. Blueprint values that do not apply to a variant are cleared on save, not reported as warnings.
+
 ## 0.5.12
 
 - The add-on's commits are linked to your GitHub account (the publisher uses your noreply address).

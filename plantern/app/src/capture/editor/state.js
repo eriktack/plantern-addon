@@ -120,6 +120,10 @@ export const Ed = {
 
 // ---- the link to Home Assistant: location.json → bindings (saved at once, a file of its own) ----
   haStates: null,       // the states of the house's connection kept by Plantern's server, once loaded
+  dry: null,            // an Apply being run to see what it gives (live-preview.js): commit() keeps its model here instead of storing it
+  livePreview: false,   // the plan shows a draft of the form, not the stored model
+  liveQueued: false,    // a preview is asked for in the next frame
+  liveSeq: 0,           // the newest preview asked for; an older answer is dropped
   haConn: null,         // resolveConnection() for the house: { name, conn, note?, fallback? }; its note says why the list may be empty (a fallback, or mock)
   haAsked: 0,           // when the server was last asked (ms); asked again only after HA_RETRY_MS, never on every click
 

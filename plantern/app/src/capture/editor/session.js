@@ -327,5 +327,5 @@ export function undoRedo(which) {
   if (was) snap();                                                  // the refilled form is the base again: nothing unapplied
   setStatus(which === 'undo' ? 'undone' : 'redone');
 }
-export const setStatus = t => { Ed.baseStatus = t; $('status').textContent = t; };
+export const setStatus = t => { if (Ed.dry) return; Ed.baseStatus = t; $('status').textContent = t; };
 export const KIND_WORD = { room: 'room', solid: 'solid', wall: 'wall', opening: 'opening', fixture: 'lamp or switch', stairs: 'stairs', object: 'object' };

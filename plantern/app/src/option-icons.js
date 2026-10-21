@@ -161,6 +161,8 @@ const MORE = {
 };
 Object.assign(BY_NAME, MORE);
 for (const [name, family] of Object.entries(BY_NAME)) ICONS[`opt:${name}`] = svg(DRAWN[family]);
+// a drawing a model names itself through its parameter's `icons` (the floor lamp's standard form: its option name is also the bed's `standard`)
+ICONS['opt:standardLamp'] = svg('<path d="M8 3h8l2 5H6z"/><path d="M12 8v12M8 21h8"/>');
 
 /** Every option name that has a drawing (for the coverage test). */
 export const DRAWN_OPTIONS = Object.keys(BY_NAME);

@@ -35,6 +35,7 @@ import { BAR, FRESH_ERR, PANEL_MSG, SELECT, afterLeave, closeEdit, confirmItem, 
 import { endPeek, fillLevels, goToLevel, showPeekCard, showUnderlayMode } from './editor/levels.js';
 import { HS_FIELDS, applyHouse, applyPlace, editLevel, fillHouse, fillPlace, fillPlaceWalls, hideHouseView, newLevel, previewPlace, showHouseView, useWallBearing } from './editor/house.js';
 import { draw, moveViewBox } from './editor/plan-draw.js';
+import { wireLivePreview } from './editor/live-preview.js';
 import { fillRoundWalls, isRound, loadRound, recompute, scheduleOverlaps, syncRound, wireWallTable } from './editor/panel-room.js';
 import { drawWallOverlay, drawingClick, fillWallPos, nearStartDot, pickStart, showWallPos, snapPos, startDrawing, stopDrawing, typedWallEnd, wallPoint } from './editor/walldraw.js';
 import { HEIGHT_BOXES, applyOpening, chooseFrom, linkOpeningHeights, showOpeningRows, startFromPick, stopFromPick, switchFrom, syncOriginPick } from './editor/panel-opening.js';
@@ -139,6 +140,7 @@ async function init() {
   for (const el of document.querySelectorAll('#edBar [data-icon]')) el.innerHTML = ICONS[el.dataset.icon];   // the phone shows these buttons as their icon (S1)
   $('edId').onclick = renameEditing;
   $('edRevert').onclick = revertEdit;
+  wireLivePreview();                                                // the plan shows the form's draft before Apply (live-preview.js)
   $('edClose').onclick = closeEdit;
   $('edBack').onclick = closeEdit;
   for (const ev of ['input', 'change']) $('edit').addEventListener(ev, () => queueMicrotask(showEditBar));

@@ -280,7 +280,7 @@ export function applyFixture() {
   if (!Object.keys(props).length && !bindingChanged) { $('xErr').textContent = 'Nothing changed.'; return; }
   const r = Object.keys(props).length ? setFixture(Ed.model, Ed.levelId, Ed.fixtureId, props, opts()) : { model: Ed.model, report: { errors: [] } };
   if (r.report.errors.length) { $('xErr').textContent = r.report.errors.join('; '); return; }
-  if (bindingChanged) Ed.loc = bd.next;                              // the link is stored with the house (Save), undone with the model
+  if (bindingChanged && !Ed.dry) Ed.loc = bd.next;                   // the link is stored with the house (Save), undone with the model
   commit(bindingChanged && r.model === Ed.model ? { ...Ed.model } : r.model);
   setStatus(`${Ed.fixtureId}: ${[...Object.keys(props), ...(bindingChanged ? ['link'] : [])].join(', ')} changed (not saved yet)`);
 }

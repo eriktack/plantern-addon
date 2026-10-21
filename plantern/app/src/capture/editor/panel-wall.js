@@ -228,8 +228,8 @@ export async function applyWall() {
   const id = Ed.wallId, r = setWallProps(Ed.model, Ed.levelId, id, props, opts());
   if (r.report.errors.length) { $('wErr').textContent = r.report.errors.join('; '); return; }
   const lines = describeReconcile(r.report);
-  if (r.report.preview.length && !(await askConfirm(['This changes the plan:', ...lines, 'Apply?'].join('\n\n'), { ok: 'Apply' }))) return;
-  $('wallsOut').innerHTML = lines.map(esc).join('<br>');
+  if (r.report.preview.length && !Ed.dry && !(await askConfirm(['This changes the plan:', ...lines, 'Apply?'].join('\n\n'), { ok: 'Apply' }))) return;
+  if (!Ed.dry) $('wallsOut').innerHTML = lines.map(esc).join('<br>');
   commit(r.model);
   setStatus(`${id}: ${Object.keys(props).join(', ')} changed (not saved yet)`);
 }

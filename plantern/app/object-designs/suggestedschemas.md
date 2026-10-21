@@ -4192,3 +4192,79 @@ Per generator:
   ]
 }
 ```
+
+```json
+{
+  "category": "electronics",
+  "generators": [
+    {
+      "id": "desk_setup",
+      "parameters": [
+        {
+          "key": "diagonal",
+          "label": "Monitor size (diagonal)",
+          "type": "enum_number",
+          "unit": "in",
+          "options": [
+            22,
+            24,
+            27,
+            32,
+            34
+          ],
+          "default": 27
+        },
+        {
+          "key": "speakers",
+          "label": "Speakers",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "key": "material",
+          "label": "Material (whole object)",
+          "type": "material",
+          "default": "charcoal"
+        }
+      ],
+      "parts": [
+        [
+          "monitor",
+          "Monitor housing"
+        ],
+        [
+          "screen",
+          "Screen"
+        ],
+        [
+          "stand",
+          "Monitor stand"
+        ],
+        [
+          "keyboard",
+          "Keyboard"
+        ],
+        [
+          "keys",
+          "Keys"
+        ],
+        [
+          "mouse",
+          "Mouse"
+        ],
+        [
+          "speakers",
+          "Speakers"
+        ]
+      ],
+      "placement": {
+        "mount": "floor",
+        "z": 740
+      },
+      "notes": [
+        "A computer workplace for a desk (issue #34): a 16:9 monitor on a stand, a keyboard and a mouse in front of it, and a speaker on each side. The monitor size is its diagonal in inches (27 by default). It starts on a desk top (740 up). Cables and ports are omitted."
+      ]
+    }
+  ]
+}
+```

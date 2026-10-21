@@ -287,7 +287,7 @@ export async function applyObjectForm() {
   }
   const switching = !!Ed.placeDraft && Ed.placeDraft.to !== placedAs(o);
   if (!Object.keys(props).length && !optionsEdit && !bindingChanged && !switching) { $('obErr').textContent = 'Nothing changed.'; return; }
-  if (optionsEdit) {
+  if (optionsEdit && !Ed.dry) {                              // (a dry run, for the live preview, never asks the server: options are not previewed)
     $('obErr').textContent = 'Building…';
     let built;
     try { built = await assetCache().rebuild({ ...o, params: optionsEdit.params, partMaterials: optionsEdit.partMaterials }); }
@@ -300,7 +300,7 @@ export async function applyObjectForm() {
   }
   // a blueprint object's size is what its options build: a typed size changes the option that sets it, the server builds it again
   // and the object takes the size of that build (src/blueprints/size.js); nothing is applied when that cannot be done
-  else if (o.blueprint && props.size) {
+  else if (o.blueprint && props.size && !Ed.dry) {            // a dry run shows the typed footprint without the build
     const meta = Ed.blueprints?.get(o.blueprint);
     if (!meta) { $('obErr').textContent = `The size of a blueprint object follows its options, and the blueprint "${o.blueprint}" is not known here (Plantern's server must be running).`; return; }
     const edit = sizeEdit(meta, o, props.size);
@@ -323,7 +323,7 @@ export async function applyObjectForm() {
   const r = setObject(Ed.model, Ed.levelId, Ed.objectId, props, opts());
   if (r.report.errors.length) { $('obErr').textContent = r.report.errors.join('; '); return; }
   $('obErr').textContent = '';
-  if (bindingChanged) Ed.loc = bd.next;                              // the link is stored with the house (Save), undone with the model
+  if (bindingChanged && !Ed.dry) Ed.loc = bd.next;                   // the link is stored with the house (Save), undone with the model
   commit(bindingChanged && r.model === Ed.model ? { ...Ed.model } : r.model);
   setStatus(`${Ed.objectId}: ${[...Object.keys(props), ...(bindingChanged ? ['light link'] : [])].join(', ')} changed (not saved yet)`);
 }

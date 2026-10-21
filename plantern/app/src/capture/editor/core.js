@@ -64,6 +64,7 @@ export const innerThickness = () => resolveSettings(Ed.loc, level()).wallThickne
 
 /** Every model change ends here: one undo step (same key = same step), then redraw. */
 export function commit(next, key = null) {
+  if (Ed.dry) { Ed.dry.model = next; return; }                       // an Apply run as a dry run (live-preview.js): the model is kept, nothing is stored
   perfAs('commit');
   locOf.set(next, Ed.loc);
   Ed.model = Ed.history.push(next, key);

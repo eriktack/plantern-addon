@@ -48,6 +48,8 @@ export const meta = {
         tripod: 'Tripod lamp',
         standard: 'Standard lamp',
       },
+      // not the bed's drawing: the option name `standard` is shared with the bed's variant (issue #35)
+      icons: { standard: 'opt:standardLamp' },
       default: 'arc',
     },
     {

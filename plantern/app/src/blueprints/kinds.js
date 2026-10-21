@@ -48,6 +48,7 @@ const DRAWN = {
   waterHeater: '<rect x="7" y="3" width="10" height="18" rx="5"/><path d="M12 7v4"/>',
   sauna: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M8 19h8M7 11h10"/>',
   tv: '<rect x="2" y="4" width="20" height="13" rx="1"/><path d="M8 21h8M12 17v4"/>',
+  deskSetup: '<rect x="6" y="3" width="12" height="9" rx="1"/><path d="M12 12v3M9 15h6"/><rect x="4" y="18" width="12" height="3" rx="1"/><rect x="18" y="17" width="3" height="4" rx="1.5"/>',
   catTree: '<path d="M12 2v20"/><ellipse cx="7" cy="7" rx="4" ry="1.3"/><ellipse cx="17" cy="12" rx="4" ry="1.3"/><ellipse cx="7" cy="17" rx="4" ry="1.3"/><path d="M7 22h10"/>',
   chest: '<rect x="3" y="12" width="18" height="8" rx="1"/><path d="M3 12c0-4 4-6 9-6s9 2 9 6"/><path d="M12 12v3"/>',
   cube: '<path d="M12 3 4 7v10l8 4 8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/>',
@@ -68,7 +69,7 @@ const TABLE = {
   radiator: ['Heating & other', 'radiator'], 'tile-stove': ['Heating & other', 'stove'], 'wood-stove': ['Heating & other', 'stove'],
   'heat-pump-indoor': ['Heating & other', 'heatPump'], rug: ['Heating & other', 'rug'], planter: ['Heating & other', 'planter'],
   'water-heater': ['Heating & other', 'waterHeater'], 'sauna-heater': ['Heating & other', 'sauna'],
-  tv: ['Electronics', 'tv'],
+  tv: ['Electronics', 'tv'], 'desk-setup': ['Electronics', 'deskSetup'],
   'cat-tree': ['Miscellaneous', 'catTree'], chest: ['Miscellaneous', 'chest'],
 };
 
