@@ -111,7 +111,8 @@ async function applySolidForm() {
   const r = applySolid(Ed.model, Ed.levelId, s, opts());
   if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
   const lines = describeReconcile(r.report);
-  if (r.report.preview.length && !(await askConfirm([`Applying ${id} changes the plan:`, ...lines, 'Apply?'].join('\n\n'), { ok: 'Apply' }))) return;
+  if (r.report.preview.length && !Ed.dry && !(await askConfirm([`Applying ${id} changes the plan:`, ...lines, 'Apply?'].join('\n\n'), { ok: 'Apply' }))) return;
+  if (Ed.dry) { commit(r.model); return; }                            // a dry run (the live preview) keeps the model and changes nothing else
   Ed.shape = 'solid'; Ed.roomId = id; Ed.draft = null;
   $('wallsOut').innerHTML = lines.map(esc).join('<br>');
   commit(r.model);

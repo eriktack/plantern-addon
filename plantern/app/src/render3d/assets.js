@@ -225,6 +225,40 @@ export function createAssetCache({
   }
 
   /**
+   * Takes an answer the page already has for an object's settings ({ hash, size, light, colour }, from POST api/glb) and loads that model: the kept copy of
+   * the hash, else GET api/glb/<hash> (kept for next time). It never posts again: the Editor's 3D preview asks once per pause (docs/archive/2026-10-21-live-3d-preview.md PV5)
+   * and hands the answer both to the size line and here. A model already loaded for these settings and this hash is left as it is.
+   */
+  function loadFromAnswer(o, answer) {
+    const key = assetKey(o), have = entries.get(key);
+    if (have?.scene && have.hash === answer.hash) { Object.assign(have, { meta: { size: answer.size }, light: answer.light ?? null, colour: answer.colour ?? null, error: null }); return have; }
+    const entry = have ?? { status: 'loading', scene: null, meta: null, error: null, hash: null, ready: null };
+    entries.set(key, entry);
+    entry.ready = (async () => {
+      let bytes = await settle(store?.getFile(answer.hash)), fromStore = !!bytes;
+      try {
+        if (!bytes) {
+          const file = await doFetch(`${apiBase}api/glb/${answer.hash}`);
+          if (!file.ok) throw new Error(`the server answered ${file.status}`);
+          bytes = await file.arrayBuffer();
+        }
+        entry.scene = await readGlb(bytes);
+        Object.assign(entry, { status: 'ok', hash: answer.hash, meta: { size: answer.size }, light: answer.light ?? null, colour: answer.colour ?? null, error: null });
+        if (!fromStore) { await settle(store?.putFile(answer.hash, bytes)); await settle(store?.putLink(key, answer.hash, answer.size, answer.light ?? null)); }
+      } catch (e) {                                              // what was on screen stays; with nothing, a marked box
+        entry.error = e.message;
+        if (!entry.scene) entry.status = 'broken';
+      }
+      onChange(key, entry.status);
+      return entry;
+    })();
+    return entry;
+  }
+
+  /** The entry kept for a key (a model name or assetKey(object)), or null: what a stand-in shows while a newer build is on its way. */
+  const entry = key => entries.get(key) ?? null;
+
+  /**
    * The server's build of an object with its stored options now: { hash, size }. Unlike meta(), it is asked for again each time,
    * so a changed blueprint or library gives the size of the new build. Throws with the server's reason, or the network error.
    */
@@ -307,7 +341,7 @@ export function createAssetCache({
   /** Why a blueprint object's model is missing or broken (the server's reason), or null. */
   const error = key => entries.get(key)?.error ?? null;
 
-  return { load, loadObject, loadFor, status, meta, error, rebuild, mainColour, light, prefetch };
+  return { load, loadObject, loadFor, loadFromAnswer, entry, status, meta, error, rebuild, mainColour, light, prefetch };
 }
 
 /**

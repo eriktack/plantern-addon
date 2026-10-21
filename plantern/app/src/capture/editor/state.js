@@ -124,6 +124,10 @@ export const Ed = {
   livePreview: false,   // the plan shows a draft of the form, not the stored model
   liveQueued: false,    // a preview is asked for in the next frame
   liveSeq: 0,           // the newest preview asked for; an older answer is dropped
+  draft3d: null,        // the draft of the form as published by live-preview.js: { model, kind, id } or null (draft-bus.js)
+  draftSubs: new Set(), // who wants it: the plan and the 3D preview pane
+  // the 3D preview pane (preview3d.js): its view, the draft it shows, the lights the person switched on, and the choices made in it
+  pv: { open: false, view: null, loading: null, timer: 0, seq: 0, draft: null, assets: null, assetsFor: null, cache: null, edited: null, lights: new Map(), dayChoice: null, lightsUsed: false, solidWalls: false, side: 1, before: false, frameKey: null, updating: 0, error: '', focus: null, fixtures: [], settings: null, elevation: 0 },
   haConn: null,         // resolveConnection() for the house: { name, conn, note?, fallback? }; its note says why the list may be empty (a fallback, or mock)
   haAsked: 0,           // when the server was last asked (ms); asked again only after HA_RETRY_MS, never on every click
 

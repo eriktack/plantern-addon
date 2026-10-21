@@ -124,7 +124,8 @@ export function objectSvg(o, lv, geo, fs) {
   const fp = geo?.objectFootprint(o);
   if (!fp) return { body: '', handles: '' };
   let body = '', handles = '';
-  if (o.kind === 'asset') assetCache().loadFor(o);
+  // a draft shown while the form is typed in does not ask the server for options it has not built: the options form asks once per pause (draftObjectBuild)
+  if (o.kind === 'asset' && !(Ed.livePreview && assetCache().status(assetKey(o)) === 'unknown')) assetCache().loadFor(o);
   const sel = o.id === Ed.objectId, above = (o.z ?? 0) >= resolveSettings(Ed.loc, lv).cutPlane;
   // an asset whose model is missing is red and dashed, so it is seen and fixed (decision 146)
   const missing = o.kind === 'asset' && ['missing', 'broken'].includes(assetCache().status(assetKey(o)));

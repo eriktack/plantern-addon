@@ -33,11 +33,24 @@
   <div id="peekBar" class="peekbar" hidden></div>
   <div id="peekCard" class="peekcard" hidden></div>
   <div id="ztools" class="ztools" title="Zoom: scroll wheel over the plan; drag to move it">
-    <button id="zIn" title="Zoom in">+</button><button id="zOut" title="Zoom out">−</button><button id="zFit" hidden title="Show the whole level again">⤢ Fit</button><button id="uMode" title="The level below (blue) and above (amber), faintly under the plan: while placing something, always, or never">Levels: auto</button>
+    <button id="zIn" title="Zoom in">+</button><button id="zOut" title="Zoom out">−</button><button id="zFit" hidden title="Show the whole level again">⤢ Fit</button><button id="pvToggle" title="The 3D preview of what is selected or edited (3)" aria-pressed="false">3D</button><button id="uMode" title="The level below (blue) and above (amber), faintly under the plan: while placing something, always, or never">Levels: auto</button>
   </div>
   <div id="status"></div>
   <div id="compass"></div>
 </main>
+<div id="pvResizer" class="pvresizer" hidden title="Drag to resize the 3D preview (double-click: default width)"></div>
+<section id="pv" aria-label="3D preview" hidden>
+  <div class="pvbar"><b>3D preview</b><span id="pvWhat" class="pvwhat"></span><span class="pvgrow"></span><button id="pvClose" title="Close the 3D preview (3)" aria-label="Close the 3D preview">✕</button></div>
+  <div class="pvtools">
+    <button id="pvReset" title="Frame what is edited again">Reset view</button>
+    <button id="pvSide" title="Look at it from the other side of its wall" hidden>Other side</button>
+    <button id="pvWalls" title="The walls round it: see-through, or solid">Walls: dimmed</button>
+    <button id="pvBefore" title="Hold to see what is stored now, without your changes">Before (hold)</button>
+    <span class="pvlights"><button id="pvOn" title="Switch on every light that has nothing to switch, here only (nothing is sent to Home Assistant)">All on</button><button id="pvOff" title="Switch those lights off again">All off</button><button id="pvDay" title="Day or night: night shows what a light gives in the dark">Day</button></span>
+  </div>
+  <div id="pvView" class="pvview"><div id="pvCanvas" class="pvcanvas"></div><div id="pvMsg" class="pvmsg" hidden></div></div>
+  <div id="pvNote" class="pvnote" aria-live="polite"></div>
+</section>
 <div id="resizer" title="Drag to resize the panel"></div>
 <div id="vresizer" role="separator" aria-orientation="horizontal" aria-label="Resize the panel" title="Drag to resize the panel (double-tap: default height)"></div>
 <aside id="cap">
@@ -607,6 +620,7 @@
     <div class="edbtns">
     <button id="edDelete" class="danger" aria-label="Delete" title="Delete it (confirmed first)"><span class="ic" data-icon="trash"></span><span class="lb">Delete</span></button>
     <button id="edDup" aria-label="Duplicate" title="A copy beside it, with the same sizes (then opened)"><span class="ic" data-icon="duplicate"></span><span class="lb">Duplicate</span></button>
+    <button id="edPv" aria-label="3D preview" aria-pressed="false" title="Show or hide the 3D preview of what you edit (3)"><span class="lb">3D</span></button>
     <span class="sp"></span>
     <button id="edRevert" aria-label="Revert" title="Back to what is stored"><span class="ic" data-icon="revert"></span><span class="lb">Revert</span></button>
     <button id="edClose" title="Leave the editor (Esc)">Close</button>

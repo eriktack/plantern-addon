@@ -16,6 +16,7 @@ import { readableName, selectNone } from './selection.js';
 import { splitAtPointer } from './wall-ops.js';
 import { doSplit } from './panel-fixture.js';
 import { save } from './room-apply.js';
+import { togglePreview } from './preview3d.js';
 import { Ed } from './state.js';
 
 // ---- the keyboard on the plan (ui-consistency plan, UX8); never while a field has focus ----
@@ -30,6 +31,7 @@ const SHORTCUTS = [
   ['Ctrl+Z, Ctrl+Y', 'undo, redo'],
   ['M', 'measure on the plan'],
   ['F', 'show the whole level'],
+  ['3', 'show or hide the 3D preview of what is selected or edited'],
   ['Drag', 'move the plan; on a selected thing, move it (stored when you let go); on a corner of the room being edited, reshape it'],
   ['Alt while dragging', 'no snapping, exact millimetres'],
   ['Shift while dragging', 'keep a line straight'],
@@ -151,6 +153,7 @@ export function planKey(e) {
   }
   if (ctrl || e.altKey && !k.startsWith('Arrow')) return false;
   if (k === '?') { showShortcuts(); return true; }
+  if (k === '3' && !e.shiftKey) { togglePreview(); return true; }          // the 3D preview pane (preview3d.js); never while a field has focus
   if ((k === 'f' || k === 'F') && !e.shiftKey) { if (Ed.view) $('zFit').click(); return true; }
   if (k === 'Delete' || k === 'Backspace') {
     if (!(Ed.editing || selected())) return false;

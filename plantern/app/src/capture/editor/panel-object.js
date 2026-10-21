@@ -24,6 +24,7 @@ import { nameOf, titleHtml } from './selection.js';
 import { objectBindingDraft, showObjectLight } from './panel-fixture.js';
 import { fillCopyInto } from './copy.js';
 import { numOf } from './panel-stairs.js';
+import { paneBuilding, paneModelAnswer } from './preview3d.js';
 import { Ed } from './state.js';
 
 
@@ -69,9 +70,30 @@ async function showOptions(o) {
   Ed.optionLibraryLoaded ??= fetch('object-designs/materials/library.json').then(r => (r.ok ? r.json() : {})).then(l => Object.assign(optionLibrary, l)).catch(() => {});
   await Ed.optionLibraryLoaded;
   if (Ed.optionsShownFor !== o) return;                           // another object was shown meanwhile
-  Ed.optionsForm ??= createParamForm({ container: $('obOptions'), summary: $('obOptionsSummary'), library: optionLibrary, onValid: previewOptions });
+  Ed.optionsForm ??= createParamForm({ container: $('obOptions'), summary: $('obOptionsSummary'), library: optionLibrary, onValid: optionsChangedNow });
   Ed.optionsForm.show(meta, { params: o.params, partMaterials: o.partMaterials });
   $('obOptionsNote').textContent = '';
+}
+
+/**
+ * The server's build of the object with the options in the form now: { hash, size, light, colour }, asked once per pause. The answer is the size line's and the 3D
+ * preview's (docs/archive/2026-10-21-live-3d-preview.md PV5): the pane loads that model from it without asking again, and says "Updating…" until it has arrived. Throws with the reason.
+ */
+export async function draftObjectBuild(o, form) {
+  const draft = { ...o, params: form.params, partMaterials: form.partMaterials };
+  paneBuilding('start');
+  try {
+    const built = await assetCache().rebuild(draft);
+    paneModelAnswer(draft, built);
+    paneBuilding('end');
+    return built;
+  } catch (e) { paneBuilding('end', e.message); throw e; }
+}
+
+/** The options form has a valid new value (after its own pause): the plan and the 3D preview show the draft (a button row sends no input event of its own), and the server is asked what it builds. */
+function optionsChangedNow() {
+  $('obOptions').dispatchEvent(new Event('input', { bubbles: true }));
+  previewOptions();
 }
 
 /** After a pause in the options form: what these options would build (the server's answer), until Apply takes them. */
@@ -81,7 +103,7 @@ async function previewOptions() {
   const form = Ed.optionsForm.readForObject();
   $('obOptionsNote').textContent = 'Building…';
   try {
-    const built = await assetCache().rebuild({ ...o, params: form.params, partMaterials: form.partMaterials });
+    const built = await draftObjectBuild(o, form);
     if (object()?.id !== o.id) return;
     Ed.optionsForm.setBuildError(null);
     $('obOptionsNote').textContent = optionsChanged(meta, o, form) ? `With these options it builds ${built.size.join(' × ')} mm. Apply to use them.` : '';
@@ -287,7 +309,7 @@ export async function applyObjectForm() {
   }
   const switching = !!Ed.placeDraft && Ed.placeDraft.to !== placedAs(o);
   if (!Object.keys(props).length && !optionsEdit && !bindingChanged && !switching) { $('obErr').textContent = 'Nothing changed.'; return; }
-  if (optionsEdit && !Ed.dry) {                              // (a dry run, for the live preview, never asks the server: options are not previewed)
+  if (optionsEdit && !Ed.dry) {                              // (a dry run, for the live preview, never asks the server: the options form asks once per pause, draftObjectBuild())
     $('obErr').textContent = 'Building…';
     let built;
     try { built = await assetCache().rebuild({ ...o, params: optionsEdit.params, partMaterials: optionsEdit.partMaterials }); }
@@ -297,6 +319,11 @@ export async function applyObjectForm() {
     props.partMaterials = Object.keys(optionsEdit.partMaterials).length ? optionsEdit.partMaterials : null;
     props.size = built.size;
     props.light = built.light ?? null;
+  }
+  // a dry run (the live preview) keeps the typed options on the draft object, so the 3D preview finds its model by them; the size and the light stay as stored until the server's answer
+  else if (optionsEdit) {
+    props.params = optionsEdit.params;
+    props.partMaterials = Object.keys(optionsEdit.partMaterials).length ? optionsEdit.partMaterials : null;
   }
   // a blueprint object's size is what its options build: a typed size changes the option that sets it, the server builds it again
   // and the object takes the size of that build (src/blueprints/size.js); nothing is applied when that cannot be done
@@ -323,7 +350,7 @@ export async function applyObjectForm() {
   const r = setObject(Ed.model, Ed.levelId, Ed.objectId, props, opts());
   if (r.report.errors.length) { $('obErr').textContent = r.report.errors.join('; '); return; }
   $('obErr').textContent = '';
-  if (bindingChanged && !Ed.dry) Ed.loc = bd.next;                   // the link is stored with the house (Save), undone with the model
+  if (bindingChanged) { if (Ed.dry) Ed.dry.loc = bd.next; else Ed.loc = bd.next; }                   // the link is stored with the house (Save), undone with the model
   commit(bindingChanged && r.model === Ed.model ? { ...Ed.model } : r.model);
   setStatus(`${Ed.objectId}: ${[...Object.keys(props), ...(bindingChanged ? ['light link'] : [])].join(', ')} changed (not saved yet)`);
 }

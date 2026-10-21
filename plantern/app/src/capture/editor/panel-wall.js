@@ -213,8 +213,9 @@ export function applyMaterial() {
     const w = level().walls.find(x => x.id === Ed.wallId), sides = { ...(w.sides || {}), [side]: { material: r.id } };
     const s = setWallProps(next, Ed.levelId, Ed.wallId, { sides }, opts());
     if (!s.report.errors.length) next = s.model;
-    Ed.wallFormFor = null;
+    if (!Ed.dry) Ed.wallFormFor = null;
   }
+  if (Ed.dry) { commit(next); return; }                               // a dry run (the live preview) keeps the model and changes nothing else
   Ed.matId = r.id; $('matForm').dataset.forSide = '';
   commit(next);
   openMaterial(r.id);

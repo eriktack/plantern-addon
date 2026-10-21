@@ -50,6 +50,28 @@ aside{width:380px;overflow-y:auto;overflow-x:hidden;flex:none;padding:12px;paddi
 /* phone: a grab bar between the plan and the panel (S2); hidden on a wide screen, where #resizer is on the panel's left edge */
 #vresizer{display:none}
 @media(max-width:760px){#vresizer{display:flex;flex:none;position:relative;height:20px;align-items:center;justify-content:center;background:var(--line);cursor:row-resize;touch-action:none}#vresizer::before{content:"";width:44px;height:5px;border-radius:3px;background:#5a6272}#vresizer::after{content:"";position:absolute;left:0;right:0;top:-12px;bottom:-12px}#vresizer:hover::before,#vresizer.drag::before{background:var(--acc)}}
+/* the Editor's 3D preview (docs/archive/2026-10-21-live-3d-preview.md): docked right of the plan, resizable from its left edge; under the plan on a phone */
+.pvresizer{flex:none;width:6px;cursor:col-resize;background:var(--line);touch-action:none}
+.pvresizer:hover,.pvresizer.drag{background:var(--acc)}
+#pv{flex:none;width:clamp(300px,30vw,520px);min-width:0;display:flex;flex-direction:column;background:var(--bg);border-left:1px solid var(--line)}
+#pv[hidden],.pvresizer[hidden]{display:none}
+#pv .pvbar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--line)}
+#pv .pvwhat{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#pv .pvgrow{flex:1}
+#pv .pvtools{display:flex;flex-wrap:wrap;gap:4px 6px;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--line)}
+#pv .pvlights{display:inline-flex;gap:4px;margin-left:auto}
+#pv button{font:12px system-ui,sans-serif;padding:3px 8px;background:#262b33;color:var(--fg);border:1px solid #3a404b;border-radius:6px;cursor:pointer;user-select:none;touch-action:manipulation}
+#pv button:hover{border-color:var(--acc)}
+#pv button.on,#pv button:active{background:#3a3226;border-color:var(--acc)}
+#pv button[hidden]{display:none}
+.pvview{position:relative;flex:1;min-height:0}
+.pvcanvas{position:absolute;inset:0}
+.pvcanvas canvas{width:100%;height:100%;display:block}
+.pvmsg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;color:var(--mut);font-size:13px;pointer-events:none}
+.pvmsg[hidden]{display:none}
+.pvnote{min-height:20px;padding:3px 10px;color:var(--mut);font-size:12px;border-top:1px solid var(--line)}
+#pvToggle.on{border-color:var(--acc)}
+@media(max-width:760px){.pvresizer{display:none}#pv{width:auto!important;height:40%;border-left:0;border-top:1px solid var(--line)}#pv .pvbar{padding:2px 10px}#pv .pvtools{flex-wrap:nowrap;overflow-x:auto;gap:6px}#pv button{flex:none;white-space:nowrap;min-height:44px;min-width:44px;padding:6px 12px}#pv .pvlights{margin-left:0;display:contents}}
 /* phone: the plan's tools stop before the zoom tools (~180 px); the level strip and the measure modes wrap under them (H1) */
 @media(max-width:760px){.mtools{max-width:calc(100% - 190px)}.lvstrip{flex-wrap:wrap;max-width:100%}}h1{font-size:18px;margin:0 0 8px}
 h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:14px 0 6px;display:flex;justify-content:space-between;align-items:center}
@@ -181,6 +203,8 @@ aside.editing>*{flex-shrink:0}
 .edbar .ic{display:none}
 .edbar #edApply{flex:none}
 .edbar .danger{color:var(--bad)}
+.edbar #edPv.on{background:#3a3226;border-color:var(--acc);color:var(--acc)}
+@media(max-width:600px){.edbar #edPv{min-width:44px;min-height:44px;padding:0}}
 .edbar[hidden],#edit[hidden],#browse[hidden],#top[hidden]{display:none}
 #wallsOut:empty{display:none}
 #wallsOut.report{margin:8px 0}

@@ -23,6 +23,7 @@ import { showObject } from './panel-object.js';
 import { renderAnchors, renderAreas, renderChecks } from './checks.js';
 import { SELECT, afterLeave, confirmItem, enterEdit, isDoubleClick, mayLeave, showEditBar } from './session.js';
 import { Ed } from './state.js';
+import { publishDraft } from './draft-bus.js';
 
 
 // what refreshSnaps / refreshNextTo last built their lists for: they are rebuilt only when one of these changed (UX5)
@@ -171,6 +172,7 @@ export function refresh() {
   $('save').title = errs ? 'Fix the errors below to save (Download still works)' : $('save').title.replace(/^Fix the errors.*$/, `Save into ${Ed.house.where}`);
   $('undo').disabled = !Ed.history.canUndo; $('redo').disabled = !Ed.history.canRedo;
   showEditBar();
+  publishDraft(null);                                // everyone who draws the draft shows the stored model again (the 3D preview pane; also what a new selection needs)
 }
 
 /**

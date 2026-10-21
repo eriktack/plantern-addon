@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+
+- Editor 3D preview: see the thing you edit in 3D, in its room, before Apply. Colours, fabrics, options, windows, walls and materials show as you type; try lights on and off by day or night; the plan previews solids, materials and new things too.
+
 ## 0.5.13
 
 - The Editor previews a form's changes on the plan before they are applied. A new model of a desk with its equipment, and a standard lamp icon. Still to measure items can be confirmed one at a time from the list. Blueprint values that do not apply to a variant are cleared on save, not reported as warnings.

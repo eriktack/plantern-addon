@@ -56,6 +56,7 @@ export function createView3d(container, hooks = {}) {
   const maskUniforms = installLampMask(THREE);   // null when this three.js is not the one the shader patch is for: the lights stay as they are
   let nightLight = DEFAULT_NIGHT_LIGHT;      // the ambient light with daylight off (setNightLight)
   let buildGen = 0;
+  let disposed = false;                      // dispose(): nothing is drawn after it, a callback that is still queued does nothing
 
   // Light counts stay the same whatever is on. Three compiles a shader for every material for every number of lights and of
   // shadow casters, so lamps that were switched off and on (visible = false / true) recompiled every shader the first time each new
@@ -82,7 +83,7 @@ export function createView3d(container, hooks = {}) {
     if (sunShadowDirty) { sun.shadow.needsUpdate = true; sunShadowDirty = false; }
     if (waiting) renderSoon();
   }
-  const render = () => { flushShadows(); renderer.render(scene, camera); };
+  const render = () => { if (disposed) return; flushShadows(); renderer.render(scene, camera); };
   // a change of state (a lamp, the shadows, the light) asks for one frame, not one each: a loop that sets 30 lamps draws once.
   // A frame per lamp was the slow start of a house with many lights: each frame compiled the shaders for the lights on so far.
   let frameQueued = false;
@@ -126,12 +127,31 @@ export function createView3d(container, hooks = {}) {
     ortho.updateProjectionMatrix();
     render();
   }
-  new ResizeObserver(resize).observe(container);
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(container);
 
   /** Isometric-ish view from the south-east, framing the whole model. */
   function resetView() {
     const c = bounds.getCenter(new THREE.Vector3()), s = bounds.getSize(new THREE.Vector3());
     const span = Math.max(s.x, s.z, 4) + Math.max(0, s.y - 3) * 1.1, dir = new THREE.Vector3(0.75, 1.05, 0.95).normalize();
+    ortho.userData.size = span * 1.05;
+    ortho.position.copy(c).addScaledVector(dir, span * 3);
+    persp.position.copy(c).addScaledVector(dir, span * 1.6);
+    for (const cam of [ortho, persp]) { cam.lookAt(c); cam.zoom = 1; cam.updateProjectionMatrix(); }
+    makeControls();
+    controls.target.copy(c);
+    controls.update();
+    resize();
+  }
+
+  /**
+   * Aims the camera at one thing: `focus` = { centre: [x, y], z, radius } in plan mm (the Editor's preview, focus.js), on a level whose floor is at `elevation` mm.
+   * The same angle as resetView() (or looking along `azimuth`), but the view is as wide as the thing (twice its radius) instead of the whole model.
+   */
+  function frame(focus, elevation = 0, { azimuth = null } = {}) {
+    const c = new THREE.Vector3(...toThree(focus.centre, (focus.z ?? 1000) + elevation)), span = Math.max((focus.radius ?? 1500) * 2 * MM, 1.2);
+    // azimuth: the plan direction from the thing to the camera (a wall's normal looks at its face); the angle above the floor stays as in resetView()
+    const dir = (azimuth ? new THREE.Vector3(...dirToThree(azimuth)).normalize().multiplyScalar(1.21).setY(1.05) : new THREE.Vector3(0.75, 1.05, 0.95)).normalize();
     ortho.userData.size = span * 1.05;
     ortho.position.copy(c).addScaledVector(dir, span * 3);
     persp.position.copy(c).addScaledVector(dir, span * 1.6);
@@ -220,14 +240,14 @@ export function createView3d(container, hooks = {}) {
    * a level up, shift [dx, dy] sideways in the plan, for the exploded view). Lamps and switches of every shown level are live; the number of lamps casting
    * shadows is shared between them.
    */
-  function build({ level, geo, levels, settings: s, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', ceilings = false, assets = null, doorStates = null }) {
+  function build({ level, geo, levels, settings: s, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', ceilings = false, assets = null, doorStates = null, keepView = false, dim = null }) {
     const gen = ++buildGen;     // asset models that finish loading after a newer build are dropped
     clear();
     settings = s;
     const shown = levels ?? (level ? [{ level, geo, lift: 0 }] : []);
     if (!shown.length) { bounds.set(new THREE.Vector3(-2, 0, -2), new THREE.Vector3(2, 1, 2)); resetView(); return; }
     for (const sh of shown) buildLevel(sh.level, sh.geo, sh.lift || 0, sh.shift || [0, 0]);
-    finishBuild();
+    finishBuild(keepView);
 
     // An asset object: its model replaces the object's box once loaded, at its footprint's centre and heading (the
     // model's own x axis is the object's width). A missing model leaves the box, in red with a red outline.
@@ -286,10 +306,13 @@ export function createView3d(container, hooks = {}) {
       if (p.sides) paintSides(geom, p.sides);
       mat = material(p);
       if (p.sides?.tex) ({ geometry: geom, materials: mat } = texturedWall(geom, p, baseUrl, mat));
+      // `dim` ({ ids, opacity }): the walls round the thing being edited (and the pieces of them round its openings) are drawn see-through (the Editor's preview)
+      const dimmed = !!dim && ['wall', 'railing', 'rail'].includes(p.kind) && dim.ids.has(p.id);
+      if (dimmed) for (const x of [].concat(mat)) Object.assign(x, { transparent: true, opacity: dim.opacity ?? 0.3, depthWrite: false });
       const m = new THREE.Mesh(geom, mat);
       m.name = `${p.id}:${p.kind}`;
       m.userData = { id: p.id, kind: p.kind };
-      m.castShadow = !['glass', 'railing', 'floor'].includes(p.kind);
+      m.castShadow = !dimmed && !['glass', 'railing', 'floor'].includes(p.kind);
       m.receiveShadow = p.kind !== 'glass';
       // a door's leaf gets a thin outline, amber when it is open and grey when closed (issue #29): the leaf stays see-through
       if (p.kind === 'leaf') m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geom), new THREE.LineBasicMaterial({ color: p.open ? 0xffb454 : 0xc9ced8, transparent: true, opacity: 0.85, depthWrite: false })));
@@ -395,7 +418,7 @@ export function createView3d(container, hooks = {}) {
     fixtures.set(fx.id, { kind: 'strip', meshes, halos, lights });
   }
 
-  function finishBuild() {
+  function finishBuild(keepView = false) {
     bounds = new THREE.Box3().setFromObject(root);
     ground.position.y = bounds.min.y - 0.002;
     const c = bounds.getCenter(new THREE.Vector3()), r = bounds.getSize(new THREE.Vector3()).length() / 2 + 1;
@@ -410,7 +433,7 @@ export function createView3d(container, hooks = {}) {
     makeLampMasks();
     assignShadows();
     markShadowsDirty();
-    resetView();
+    if (keepView && controls) resize(); else resetView();          // keepView: the person's orbit stays while the thing changes (the Editor's preview)
     }
   }
 
@@ -520,24 +543,52 @@ export function createView3d(container, hooks = {}) {
   // Click (not drag) on a bulb or switch → hooks.onFixtureClick
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
   let down = null;
-  renderer.domElement.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; });
-  renderer.domElement.addEventListener('pointerup', e => {
+  const onPointerDown = e => { down = [e.clientX, e.clientY]; };
+  const onPointerUp = e => {
     if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) return;
     const r = renderer.domElement.getBoundingClientRect();
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
     const hit = ray.intersectObjects(pickables, false)[0];
     if (hit) hooks.onFixtureClick?.(hit.object.userData.fixture);
-  });
-  renderer.domElement.addEventListener('pointermove', e => {
+  };
+  const onPointerMove = e => {
     const r = renderer.domElement.getBoundingClientRect();
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
     const hit = ray.intersectObjects(pickables, false)[0];
     renderer.domElement.style.cursor = hit ? 'pointer' : '';
     renderer.domElement.title = hit ? hit.object.userData.label : '';
-  });
+  };
+  renderer.domElement.addEventListener('pointerdown', onPointerDown);
+  renderer.domElement.addEventListener('pointerup', onPointerUp);
+  renderer.domElement.addEventListener('pointermove', onPointerMove);
+
+  /**
+   * Gives everything back: the scene's geometries, materials and textures, the controls, the renderer and its GL context, the resize observer and the
+   * pointer listeners, and takes the canvas out of the page. The viewer and the card live as long as their page and never call it; the Editor's preview
+   * pane does when it is closed. Nothing is drawn afterwards; a view is not reused (make another).
+   */
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    clear();
+    for (const t of textures.values()) t.dispose();
+    textures.clear();
+    ground.geometry.dispose();
+    [].concat(ground.material).forEach(m => m.dispose());
+    sun.shadow.map?.dispose();
+    controls?.dispose();
+    resizeObserver.disconnect();
+    const el = renderer.domElement;
+    el.removeEventListener('pointerdown', onPointerDown);
+    el.removeEventListener('pointerup', onPointerUp);
+    el.removeEventListener('pointermove', onPointerMove);
+    renderer.dispose();
+    renderer.forceContextLoss();
+    el.remove();
+  }
 
   setDaylight(false);
-  return { build, setFixture, setShadows, setNightLight, setDaylight, setBackground, setProjection, resetView, getCamera, setCamera, render, root, isDaylight: () => daylight };
+  return { build, setFixture, setShadows, setNightLight, setDaylight, setBackground, setProjection, resetView, frame, getCamera, setCamera, render, dispose, root, isDaylight: () => daylight };
 }

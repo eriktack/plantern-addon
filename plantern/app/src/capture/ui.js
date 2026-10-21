@@ -36,6 +36,7 @@ import { endPeek, fillLevels, goToLevel, showPeekCard, showUnderlayMode } from '
 import { HS_FIELDS, applyHouse, applyPlace, editLevel, fillHouse, fillPlace, fillPlaceWalls, hideHouseView, newLevel, previewPlace, showHouseView, useWallBearing } from './editor/house.js';
 import { draw, moveViewBox } from './editor/plan-draw.js';
 import { wireLivePreview } from './editor/live-preview.js';
+import { wirePreview3d } from './editor/preview3d.js';
 import { fillRoundWalls, isRound, loadRound, recompute, scheduleOverlaps, syncRound, wireWallTable } from './editor/panel-room.js';
 import { drawWallOverlay, drawingClick, fillWallPos, nearStartDot, pickStart, showWallPos, snapPos, startDrawing, stopDrawing, typedWallEnd, wallPoint } from './editor/walldraw.js';
 import { HEIGHT_BOXES, applyOpening, chooseFrom, linkOpeningHeights, showOpeningRows, startFromPick, stopFromPick, switchFrom, syncOriginPick } from './editor/panel-opening.js';
@@ -523,6 +524,7 @@ async function init() {
   Ed.roomId = null;                                                  // start with nothing selected: the plan and the tree
   loadFormForSelection();
   refresh();
+  wirePreview3d();                                                  // the 3D preview pane: open by default on a desktop (preview3d.js)
   if (!level().rooms?.length) editDraft({ name: '', exterior: false });   // an empty level: the new-room form (nothing unapplied: the level was just changed)
 }
 /** The lists of the opening panel: a click selects the thing, Remove deletes it (after a question). */

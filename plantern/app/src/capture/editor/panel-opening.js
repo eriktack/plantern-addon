@@ -171,7 +171,7 @@ export function applyOpening() {
   if (!Object.keys(props).length && !bindingChanged) { $('oErr').textContent = 'Nothing changed.'; return; }
   const r = Object.keys(props).length ? setOpening(Ed.model, Ed.levelId, Ed.openingId, props, opts()) : { model: Ed.model, report: { errors: [] } };
   if (r.report.errors.length) { $('oErr').textContent = r.report.errors.join('; '); return; }
-  if (bindingChanged && !Ed.dry) Ed.loc = bd.next;                   // the sensor is stored with the house (Save), undone with the model
+  if (bindingChanged) { if (Ed.dry) Ed.dry.loc = bd.next; else Ed.loc = bd.next; }                   // the sensor is stored with the house (Save), undone with the model
   commit(bindingChanged && r.model === Ed.model ? { ...Ed.model } : r.model);
   setStatus(`${Ed.openingId}: ${[...Object.keys(props), ...(bindingChanged ? ['sensor'] : [])].join(', ')} changed (not saved yet)`);
 }
