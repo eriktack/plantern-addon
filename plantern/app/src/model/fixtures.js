@@ -80,7 +80,7 @@ export function checkFixture(fx, level) {
       top = wallProfile(w, level).at(fx.attach.offset ?? 0).top;           // the wall's height where it is
       const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]);
       if (!(fx.attach.offset >= 0 && fx.attach.offset <= L + 1)) errors.push(`not on ${w.id} (${Math.round(L)} mm long): offset ${fx.attach.offset}`);
-      else if (strip && fx.attach.length > 0 && fx.attach.offset + fx.attach.length > L + 1) errors.push(`runs past the end of ${w.id} (${Math.round(L)} mm long): ${Math.round(fx.attach.offset)} + ${Math.round(fx.attach.length)} mm`);
+      else if (strip && fx.attach.vertical !== true && fx.attach.length > 0 && fx.attach.offset + fx.attach.length > L + 1) errors.push(`runs past the end of ${w.id} (${Math.round(L)} mm long): ${Math.round(fx.attach.offset)} + ${Math.round(fx.attach.length)} mm`);
       if (!['left', 'right'].includes(fx.attach.side)) errors.push('attach.side must be "left" or "right"');
       const here = (level.openings || []).filter(o => o.wall === w.id);
       if (fx.attach.opening !== undefined) {

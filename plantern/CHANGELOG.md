@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.5
+
+- A tall vertical LED strip on a short wall is no longer refused: its length is its height, not a run along the wall (for example the strips beside a shelf opening).
+
 ## 0.6.4
 
 - Closes the library gaps found while furnishing BBV28: a radiator cover, a hook rack, a floor lamp with several shades, a round wood stove (braskamin) and a pouf. The wood stove, side table and stool take larger sizes, and a waste bin, shower fittings and a rounded corner shower arrived earlier in 0.6.3. Houses that use the new models or sizes show them correctly after this update.
