@@ -251,6 +251,7 @@ export function createView3d(container, hooks = {}) {
 
     // An asset object: its model replaces the object's box once loaded, at its footprint's centre and heading (the
     // model's own x axis is the object's width). A missing model leaves the box, in red with a red outline.
+    const seeThrough = m => (Array.isArray(m) ? m : [m]).some(x => x && x.transparent && x.opacity < 1);
     function placeAsset(o, geo, g, box, lit) {
       const fp = geo.objectFootprint(o);
       if (!fp) return;
@@ -265,7 +266,7 @@ export function createView3d(container, hooks = {}) {
           m.position.set(...toThree(centre, z));
           m.rotation.y = heading;
           // a lit object does not shadow its own light: the light sits inside its shade, so its stem, base and shade would throw dark wedges across the room
-          m.traverse(c => { if (c.isMesh) { c.castShadow = !lit; c.receiveShadow = true; } });
+          m.traverse(c => { if (c.isMesh) { c.castShadow = !lit && !seeThrough(c.material); c.receiveShadow = true; } });   // glass and other see-through parts let the light pass
           g.add(m);
           if (box) box.visible = false;
           // a lit object is its lamp (lit.js): its model is what is clicked to switch the light, not a ball at the light
@@ -295,9 +296,18 @@ export function createView3d(container, hooks = {}) {
     root.add(g);
 
     // the shadows go to the lamps whose light the walls would otherwise let through (a shadowless lamp lights through walls)
-    for (const [id, reach] of lampReach(geo, (level.fixtures || []).filter(f => f.kind === 'lamp'), { cutPlane: settings?.cutPlane ?? 1200, doorStates })) {
+    const reachOptions = { cutPlane: settings?.cutPlane ?? 1200, doorStates };
+    for (const [id, reach] of lampReach(geo, (level.fixtures || []).filter(f => f.kind === 'lamp'), reachOptions)) {
       leakOf.set(id, reach.leak);
       maskInput.push({ id, reach, group: g, level });
+    }
+    // an LED strip's three lights reach 1.8 times its radius (addStrip): each gets the mask of where its place sees (a vertical strip is one place, one mask)
+    for (const fx of (level.fixtures || []).filter(f => f.kind === 'strip')) {
+      const line = stripLine(fx, geo);
+      if (!line) continue;
+      const vertical = fx.attach?.vertical === true && fx.attach?.wall !== undefined, at = vertical ? [0] : [0, 0.5, 1];
+      const points = at.map(t => ({ id: `${fx.id}:${t}`, kind: 'lamp', pos: pointAlong(line, polylineLength(line) * t), radius: (fx.radius || 1200) * 1.8 }));
+      for (const [id, reach] of lampReach(geo, points, reachOptions)) maskInput.push({ id, reach, group: g, level, strip: fx.id, lightIndexes: vertical ? [0, 1, 2] : [at.indexOf(Number(id.split(':')[1]))] });
     }
 
     const objectMeshes = new Map();
@@ -326,7 +336,7 @@ export function createView3d(container, hooks = {}) {
       const pos = geo.fixturePos(fx);
       if (!pos) continue;
       if (fx.kind === 'strip') { addStrip(fx, geo, level, g, fixtureLabel); continue; }
-      const at = new THREE.Vector3(...toThree(pos, fx.z ?? (fx.kind === 'lamp' ? level.ceilingHeight - 100 : 1100)));
+      const at = new THREE.Vector3(...toThree(pos, geo.fixtureZ(fx) ?? (fx.kind === 'lamp' ? level.ceilingHeight - 100 : 1100)));
       if (fx.kind === 'lamp') {
         const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 12), new THREE.MeshStandardMaterial({ color: 0x444444, emissive: 0x000000 }));
         bulb.position.copy(at);
@@ -376,13 +386,18 @@ export function createView3d(container, hooks = {}) {
    * An LED strip (decision 121): thin emissive segments along its line, and three real lights (its two ends and its middle),
    * so the room is lit along it without one light per few centimetres. Strips never cast shadows.
    */
-  function addStrip(fx, geo, level, g, fixtureLabel) {
-    let line = geo.fixtureLine(fx);
-    if (!line) return;
-    // just off the wall face (a strip on a wall or along a window); one on an object follows the object's edge as it is
+  /** The plan line of a strip, just off the wall face (a strip on a wall or along a window); one on an object follows the object's edge as it is. */
+  function stripLine(fx, geo) {
+    const line = geo.fixtureLine(fx);
+    if (!line) return null;
     const face = fx.attach?.wall !== undefined ? fx.attach : fx.attach?.opening !== undefined ? { wall: geo.level.openings?.find(o => o.id === fx.attach.opening)?.wall, side: fx.attach.side, offset: 0 } : null;
     const a = face?.wall && geo.resolveAttach(face);
-    if (a) line = line.map(p => [p[0] + a.dir[0] * 12, p[1] + a.dir[1] * 12]);
+    return a ? line.map(p => [p[0] + a.dir[0] * 12, p[1] + a.dir[1] * 12]) : line;
+  }
+
+  function addStrip(fx, geo, level, g, fixtureLabel) {
+    const line = stripLine(fx, geo);
+    if (!line) return;
     const z = geo.fixtureZ(fx) ?? 1400, meshes = [], halos = [];
     // a vertical strip (fixes list 48): one bar from its bottom z up its length, on the wall face
     const vertical = fx.attach?.vertical === true && fx.attach?.wall !== undefined, H = vertical ? (fx.attach.length || 0) : 0;
@@ -445,17 +460,18 @@ export function createView3d(container, hooks = {}) {
     root.updateMatrixWorld(true);
     const v = new THREE.Vector3(), picked = [];
     for (const m of maskInput) {
-      const f = fixtures.get(m.id);
-      if (!f || f.kind !== 'lamp') continue;
-      f.light.decay = 2;
+      const f = fixtures.get(m.strip ?? m.id);
+      if (!f || (m.strip ? f.kind !== 'strip' : f.kind !== 'lamp')) continue;
+      const lights = m.strip ? m.lightIndexes.map(i => f.lights[i]).filter(Boolean) : [f.light];
+      for (const L of lights) L.decay = 2;
       const disc = Math.PI * m.reach.radius * m.reach.radius;
-      if (!on || m.reach.leak < disc * 0.03 || picked.length >= MAX_MASKS) continue;     // nothing much in the way: no mask
-      f.light.getWorldPosition(v);
+      if (!on || m.reach.leak < disc * 0.03 || picked.length >= MAX_MASKS || !lights.length) continue;     // nothing much in the way: no mask
+      lights[0].getWorldPosition(v);
       const floorY = m.group.position.y;
-      picked.push({ id: m.id, polygon: m.reach.polygon, centre: m.reach.centre, radius: m.reach.radius, world: [v.x, v.z], yMin: floorY - 0.03, yMax: floorY + (m.level.ceilingHeight ?? 2400) * MM + 0.06 });
+      picked.push({ id: m.id, lights, polygon: m.reach.polygon, centre: m.reach.centre, radius: m.reach.radius, world: [v.x, v.z], yMin: floorY - 0.03, yMax: floorY + (m.level.ceilingHeight ?? 2400) * MM + 0.06 });
     }
     const packed = packMasks(picked);
-    picked.forEach((p, i) => { fixtures.get(p.id).light.decay = decayFor(i); });
+    picked.forEach((p, i) => { for (const L of p.lights) L.decay = decayFor(i); });
     setLampMasks(THREE, maskUniforms, packed);
   }
 

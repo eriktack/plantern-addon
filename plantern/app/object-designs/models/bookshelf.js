@@ -2,6 +2,7 @@ import { primitives, booleans, transforms, geometries } from '../lib/jscad.js';
 
 // ASSUMED: width is the overall width and the bays adapt to it: the clear bay width is the width minus one support more than there are bays, divided by the number of bays (the width is exact, as typed).
 // ASSUMED: A bay is at least 150 mm clear; when the width is too narrow for the columns asked for, fewer columns are used (the width wins).
+// ASSUMED: The inner shelves (every board but the bottom and the top one) are their own part, `shelves`, so they can have a material of their own (glass shelves in a wooden frame); the bottom and top boards, the sides, dividers, back and feet are the frame. A unit has at least two rows, so it has at least one inner shelf.
 // ASSUMED: height is the overall height of the unit (feet included; for the String variant the top of its wire panels). rows counts clear storage openings and rows + 1 horizontal boards include bottom and top; the clear opening of each row is worked out from the height: (height - feet - (rows + 1) boards) / rows, so no shelf spacing is typed (decision 276).
 // ASSUMED: feetHeight (open and glass_door only; 0 = none, the default) lifts the whole unit on four 40 mm square feet that high, 15 mm in from each corner; height includes them. The feet are part of the frame (one material).
 // ASSUMED: Cabinet sides, dividers and shelves are 18 mm thick; optional backs are 12 mm thick (timber cabinetry).
@@ -109,7 +110,7 @@ export const meta = {
       label: 'Rows',
       type: 'integer',
       default: 5,
-      min: 1,
+      min: 2,
       max: 8,
     },
     {
@@ -157,7 +158,8 @@ export const meta = {
     },
   ],
   parts: [
-    { key: 'carcass', label: 'Frame and shelves' },
+    { key: 'carcass', label: 'Frame' },
+    { key: 'shelves', label: 'Inner shelves' },
     { key: 'glass', label: 'Glass doors', appliesTo: GLASS_VARIANTS, defaultMaterial: 'glass' },
     { key: 'wires', label: 'Wire side panels', appliesTo: ['string'] },
   ],
@@ -297,6 +299,7 @@ function buildString(q, board, levelPitch, totalHeight) {
   const bayPitch = (q.width - wire) / count;
   const panelTop = totalHeight + 80;
   const boards = [];
+  const shelfBoards = [];
   const wires = [];
 
   // Boards end at the wire centre lines; neighbours overlap 2 mm inside the shared wire.
@@ -307,7 +310,7 @@ function buildString(q, board, levelPitch, totalHeight) {
 
     for (let row = 0; row <= q.rows; row += 1) {
       const bottom = row * levelPitch;
-      boards.push(
+      (row > 0 && row < q.rows ? shelfBoards : boards).push(
         box(left, right, WIRE_RADIUS, q.depth - WIRE_RADIUS, bottom, bottom + board)
       );
     }
@@ -334,6 +337,7 @@ function buildString(q, board, levelPitch, totalHeight) {
   const shift = [-q.width / 2, -q.depth / 2, 0];
   return {
     carcass: transforms.translate(shift, combine(boards)),
+    shelves: transforms.translate(shift, combine(shelfBoards)),
     glass: empty(),
     wires: transforms.translate(shift, combine(wires)),
   };
@@ -350,6 +354,7 @@ export function build(p = {}) {
   const levelPitch = q.shelfSpacing + board;
   const totalHeight = q.carcassHeight;                                  // = rows * pitch + board
   const carcass = [];
+  const shelfBoards = [];
   const glass = [];
 
   if (q.variant === 'string') {
@@ -374,7 +379,7 @@ export function build(p = {}) {
 
       for (let row = 0; row <= q.rows; row += 1) {
         const bottom = row * levelPitch;
-        carcass.push(
+        (row > 0 && row < q.rows ? shelfBoards : carcass).push(
           box(left, right, 0, q.depth, bottom, bottom + board)
         );
       }
@@ -384,6 +389,10 @@ export function build(p = {}) {
       carcass: transforms.translate(
         [-q.width / 2, -q.depth / 2, 0],
         combine(carcass)
+      ),
+      shelves: transforms.translate(
+        [-q.width / 2, -q.depth / 2, 0],
+        combine(shelfBoards)
       ),
       glass: empty(),
       wires: empty(),
@@ -451,7 +460,7 @@ export function build(p = {}) {
 
     for (let row = 0; row <= q.rows; row += 1) {
       const bottom = row * levelPitch;
-      carcass.push(
+      (row > 0 && row < q.rows ? shelfBoards : carcass).push(
         box(left, right, shelfFront, shelfBack, bottom, bottom + board)
       );
     }
@@ -507,7 +516,7 @@ export function build(p = {}) {
 
       for (let row = 0; row <= q.rows; row += 1) {
         const bottom = row * levelPitch;
-        carcass.push(
+        (row > 0 && row < q.rows ? shelfBoards : carcass).push(
           box(
             returnShelfFront,
             returnShelfBack,
@@ -574,6 +583,7 @@ export function build(p = {}) {
 
   return {
     carcass: transforms.translate(shift, combine(carcass)),
+    shelves: transforms.translate(shift, combine(shelfBoards)),
     glass: glass.length > 0
       ? transforms.translate(shift, combine(glass))
       : empty(),

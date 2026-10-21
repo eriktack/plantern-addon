@@ -41,7 +41,7 @@ function anchorOf(level, geo, sel) {
   }
   if (sel?.kind === 'fixture') {
     const f = find(level.fixtures, sel.id), p = f && geo.fixturePos(f);
-    if (p) return { centre: p, z: f.z ?? ceiling - 100, radius: 1200, wall: wallOfAttach(level, f.attach) };
+    if (p) return { centre: p, z: geo.fixtureZ(f) ?? ceiling - 100, radius: 1200, wall: wallOfAttach(level, f.attach) };
   }
   if (sel?.kind === 'solid') {
     const s = find(level.solids, sel.id);

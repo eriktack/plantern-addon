@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.7
+
+- A light on an object now stands at the height you set (it used to hang near the ceiling), a bookshelf's inner shelves can have a material of their own (glass shelves in a wooden frame), glass no longer casts shadows in the 3D view, and LED strips no longer light through walls.
+
 ## 0.6.6
 
 - Bookshelves take a height and optional feet (the shelf spacing follows from the height), objects can carry a light of their own (+ Light in the object panel), Alt now pulls an object off its wall at once while dragging, and beds get pillows.
