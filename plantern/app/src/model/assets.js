@@ -28,7 +28,19 @@ export function assetPlacement(o, footprint, z = o.z ?? 0) {
   const cx = footprint.reduce((s, p) => s + p[0], 0) / footprint.length;
   const cy = footprint.reduce((s, p) => s + p[1], 0) / footprint.length;
   const [p0, p1] = footprint;
-  return { centre: [cx, cy], z, heading: Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) };
+  return { centre: [cx, cy], z, heading: Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) + (turnedToWall(o, footprint) ? Math.PI : 0) };
+}
+
+/**
+ * True when a model standing on a wall face must be turned half a turn from the heading of its footprint's first edge. The model's +y (its back)
+ * is to the left of its width axis. On the right side of a wall the footprint runs clockwise, so the depth (into the room) is on the model's -y
+ * side and the back is on the wall. On the left side the footprint runs counter-clockwise, so the same heading would put the back into the room
+ * (a towel rail with its rack on the wall): turn it. A free object has no wall, and keeps its heading.
+ */
+export function turnedToWall(o, footprint) {
+  if (!o?.attach || !Array.isArray(footprint) || footprint.length < 4) return false;
+  const [p0, p1, , p3] = footprint;
+  return (p1[0] - p0[0]) * (p3[1] - p0[1]) - (p1[1] - p0[1]) * (p3[0] - p0[0]) > 0;
 }
 
 /**

@@ -74,6 +74,8 @@ const DRAWN = {
   orb: '<circle cx="12" cy="12" r="6"/>',
   deskArm: '<path d="M4 20h6M7 20v-12l7-2 4 4"/>',
   upDown: '<path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4"/>',
+  quarterRound: '<path d="M5 5v14h14"/><path d="M5 5a14 14 0 0 1 14 14"/>',
+  pedalBin: '<path d="M7 8h10l-1 13H8z"/><path d="M6 8h12M10 8V5h4v3"/><path d="M12 21h5"/>',
 };
 
 // the names the batches list, mapped to their family's drawing (ND5 batches 1 to 4)
@@ -157,7 +159,7 @@ const MORE = {
   pivot: 'pivot', center: 'centre', wall: 'wallSide', top: 'arrowUp', up: 'arrowUp', down: 'arrowDown', rear: 'arrowBack',
   rolled: 'rolledArm', bar: 'barStool', counter: 'stoolDrawn', step: 'stepStool', classic: 'tableLamp', sill: 'lampSill',
   ceramic: 'vase', baluster: 'vase', pole: 'pole', sphere: 'sphereStem', ladder: 'ladder', wall_bar: 'wallBar',
-  single: 'sconceDrawn', hat_shelf: 'hatShelf', narrow: 'hinged',
+  single: 'sconceDrawn', hat_shelf: 'hatShelf', narrow: 'hinged', rounded: 'quarterRound', pedal: 'pedalBin',
 };
 Object.assign(BY_NAME, MORE);
 for (const [name, family] of Object.entries(BY_NAME)) ICONS[`opt:${name}`] = svg(DRAWN[family]);

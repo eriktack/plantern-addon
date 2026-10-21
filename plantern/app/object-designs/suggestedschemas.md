@@ -4268,3 +4268,105 @@ Per generator:
   ]
 }
 ```
+
+```json
+{
+  "category": "misc",
+  "generators": [
+    {
+      "id": "waste_bin",
+      "parameters": [
+        {
+          "key": "variant",
+          "label": "Variant",
+          "type": "enum",
+          "options": [
+            "round",
+            "rectangular",
+            "pedal"
+          ],
+          "default": "round"
+        },
+        {
+          "key": "width",
+          "label": "Width (diameter if round)",
+          "type": "number",
+          "unit": "mm",
+          "default": 260,
+          "min": 150,
+          "max": 600,
+          "step": 10
+        },
+        {
+          "key": "depth",
+          "label": "Depth",
+          "type": "number",
+          "unit": "mm",
+          "default": 250,
+          "min": 150,
+          "max": 600,
+          "step": 10
+        },
+        {
+          "key": "height",
+          "label": "Height",
+          "type": "number",
+          "unit": "mm",
+          "default": 300,
+          "min": 150,
+          "max": 900,
+          "step": 10
+        },
+        {
+          "key": "lid",
+          "label": "Lid",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "key": "material",
+          "label": "Material (whole object)",
+          "type": "material",
+          "default": "white-paint"
+        }
+      ],
+      "parts": [
+        [
+          "body",
+          "Bin"
+        ],
+        [
+          "lid",
+          "Lid"
+        ],
+        [
+          "pedal",
+          "Foot pedal"
+        ]
+      ],
+      "placement": {
+        "mount": "floor"
+      },
+      "variant_defaults": {
+        "round": {
+          "width": 260,
+          "height": 300
+        },
+        "rectangular": {
+          "width": 300,
+          "depth": 250,
+          "height": 350
+        },
+        "pedal": {
+          "width": 300,
+          "height": 600,
+          "lid": true
+        }
+      },
+      "notes": [
+        "A small waste bin (a trash can): round, rectangular, or a round pedal bin with a lid. The lid is optional; an open bin is hollow. Swing lids, handles and inner buckets are omitted."
+      ]
+    }
+  ]
+}
+```

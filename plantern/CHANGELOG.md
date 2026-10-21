@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.3
+
+- A waste bin for the object library, shower fittings and a rounded corner shower, and wall objects on the left face of a wall now stand with their back on the wall (towel rails were the wrong way round). The pedal bin's pedal reaches out from the front.
+
 ## 0.6.2
 
 - Rooms with corners other than 90° join cleanly: walls a little off parallel carry on as one wall, and corners where three rooms meet no longer poke into the next wall, so no more overlap warnings there (issue #28).
