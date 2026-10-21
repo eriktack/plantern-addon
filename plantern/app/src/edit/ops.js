@@ -18,7 +18,8 @@ import { followLevels, levelOfRef } from './levels.js';
 import { DEFAULT_CEILING, DEFAULT_FLOOR_THICKNESS, resolveElevations, checkElevationFrom, RELATIONS } from '../model/elevation.js';
 import { shiftLevelGeometry } from './align.js';
 import { anchorStatus, newAnchorId } from '../model/anchors.js';
-import { isShared, edgeOfRef } from '../geometry/bound.js';
+import { isShared, edgeOfRef, boundEdges } from '../geometry/bound.js';
+import { generateWalls, PAIR_ANGLE } from '../capture/walls.js';
 import { wallProfile } from '../geometry/walls.js';
 import { OPENING_TYPES, OPENING_DEFAULTS, checkOpening, openingAssumed, DOOR_OPENS, WINDOW_OPENS } from '../model/openings.js';
 import { FIXTURE_KINDS, FIXTURE_DEFAULTS, checkFixture, stripForm } from '../model/fixtures.js';
@@ -449,6 +450,132 @@ export function unbindWall(model, levelId, wallId, options = {}) {
   const { from, ...rest } = w;
   const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, walls: l.walls.map(x => x.id === wallId ? rest : x) });
   return finish({ ...model, levels }, levelId, {}, options);
+}
+
+/**
+ * Separate a wall shared by two rooms into one wall per room (walls[].apart, issue #28): each keeps its own room's edge, both
+ * half the gap thick (listed in `assumed`, to be measured), and the two rooms never share a wall there again until
+ * shareWall(). The wall keeps its id and its room's side; the new one, along the other room, gets that room's look, the things
+ * on that face, and a `passage` opposite each opening (the door in one wall, the hole through the other). Returns
+ * { model, report } with report.separated = [wallId, the new wall's id].
+ */
+export function separateWall(model, levelId, wallId, options = {}) {
+  const lv = levelOf(model, levelId), w = lv?.walls?.find(x => x.id === wallId);
+  if (!w) return refuse(model, `no wall "${wallId}" on level "${levelId}"`);
+  const roomsById = new Map((lv.rooms || []).filter(r => r.polygon?.length >= 3).map(r => [r.id, r])), be = boundEdges(w, roomsById);
+  if (!w.from?.length || !be.facing.length) return refuse(model, `${wallId} is not shared by two rooms: there is nothing to separate`);
+  if (w.kind === 'virtual') return refuse(model, `${wallId} is open between two rooms that touch: there is no gap for two walls`);
+  if (w.cut) return refuse(model, `${wallId} is one part of a wall split by hand: join the parts first`);
+  if (be.along.length !== 1 || be.facing.length !== 1) return refuse(model, `${wallId} follows more than one edge on a side; it cannot be separated`);
+  const keep = be.along[0], other = be.facing[0];
+  // half the narrowest gap along the stretch they share (two rooms a little off parallel: the gap tapers), so the two never overlap
+  const ts = [other.p, other.q].map(p => (p[0] - keep.p[0]) * keep.u[0] + (p[1] - keep.p[1]) * keep.u[1]);
+  const lo = Math.max(0, Math.min(...ts)), hi = Math.min(keep.L, Math.max(...ts));
+  const gapAt = s => { const p = [keep.p[0] + keep.u[0] * s, keep.p[1] + keep.u[1] * s], d = [other.q[0] - other.p[0], other.q[1] - other.p[1]], l = Math.hypot(d[0], d[1]); return Math.abs((p[0] - other.p[0]) * d[1] - (p[1] - other.p[1]) * d[0]) / l; };
+  const t = Math.floor(Math.min(gapAt(lo), gapAt(hi), w.thickness || 0) / 2);
+  if (t < 1) return refuse(model, `${wallId} is too thin (${w.thickness} mm) for two walls`);
+  const r1 = v => Math.round(v * 10) / 10;
+  // the stretch each edge shared: the other walls already on those edges (a room's own wall past the other room's corner) keep
+  // theirs, cut where it starts and ends (walls[].cut), so a new wall covers only that stretch and nothing else changes
+  const at = (e, p) => (p[0] - e.p[0]) * e.u[0] + (p[1] - e.p[1]) * e.u[1];
+  const spanOn = (e, x) => { const v = [at(e, x.a), at(e, x.b)].sort((m, n) => m - n); return [Math.max(0, v[0]), Math.min(e.L, v[1])]; };
+  const cutOf = (e, [s0, s1]) => { const c = [s0 > 1 ? r1(s0) : null, s1 < e.L - 1 ? r1(s1) : null]; return c[0] === null && c[1] === null ? undefined : c; };
+  const withCut = (x, c) => { const y = { ...x }; if (c) y.cut = c; else delete y.cut; return y; };
+  // on each edge, the stretch between the walls already there (the shared wall may have taken a corner beyond the other room)
+  const freeSpan = e => {
+    const mid = (spanOn(e, w)[0] + spanOn(e, w)[1]) / 2, others = lv.walls.filter(x => x.id !== wallId && x.from?.length === 1 && x.from[0] === e.ref).map(x => spanOn(e, x));
+    return [Math.max(0, ...others.filter(s => s[1] <= mid).map(s => s[1])), Math.min(e.L, ...others.filter(s => s[0] >= mid).map(s => s[0]))];
+  };
+  const keepSpan = freeSpan(keep), otherSpan = freeSpan(other);
+  const assumed = [...new Set([...(w.assumed || []), 'thickness'])];
+  const { [other.room.id]: otherLook, ...ownLooks } = w.roomSides || {};
+  const kept = withCut({ ...w, from: [keep.ref], rooms: [keep.room.id], thickness: t, assumed, apart: true }, cutOf(keep, keepSpan));
+  if (w.roomSides) { if (Object.keys(ownLooks).length) kept.roomSides = ownLooks; else delete kept.roomSides; }
+  // the other room's own wall along the stretch, walked the way that room is (its room on the right), the same kind and height
+  const used = allIds(model), base = `w_${other.room.id.replace(/^r_/, '')}_e${other.ref.split('#e')[1]}`;
+  let id = base, k = 2;
+  while (used.has(id)) id = `${base}_${k++}`;
+  used.add(id);
+  const pt = s => [r1(other.p[0] + other.u[0] * s), r1(other.p[1] + other.u[1] * s)];
+  const turn = e => (e ? { ...e, a: e.b, b: e.a, ...(e.flatA !== undefined || e.flatB !== undefined ? { flatA: e.flatB, flatB: e.flatA } : {}) } : e);   // it runs the other way
+  const look = otherLook ?? w.sides?.left;
+  const nw = withCut({ id, kind: w.kind, a: pt(otherSpan[0]), b: pt(otherSpan[1]), thickness: t, justify: 'left', rooms: [other.room.id], from: [other.ref], assumed: ['thickness'], apart: true }, cutOf(other, otherSpan));
+  for (const key of ['base', 'height', 'lightBlocking', 'style']) if (w[key] !== undefined) nw[key] = w[key];
+  for (const key of ['top', 'bottom']) if (w[key]) nw[key] = turn(w[key]);
+  if (look) nw.sides = { right: look };
+  const neighbour = (x, e, sp) => (x.id !== wallId && !x.cut && x.from?.length === 1 && x.from[0] === e.ref ? withCut(x, cutOf(e, spanOn(e, x))) : x);
+  const walls = lv.walls.flatMap(x => (x.id === wallId ? [kept, nw] : [neighbour(neighbour(x, keep), other)]));
+  // where a point along the old wall lies along the new one
+  const L1 = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), u1 = [(w.b[0] - w.a[0]) / L1, (w.b[1] - w.a[1]) / L1];
+  const Ln = Math.hypot(nw.b[0] - nw.a[0], nw.b[1] - nw.a[1]), un = [(nw.b[0] - nw.a[0]) / Ln, (nw.b[1] - nw.a[1]) / Ln];
+  const along = s => (w.a[0] + u1[0] * s - nw.a[0]) * un[0] + (w.a[1] + u1[1] * s - nw.a[1]) * un[1];
+  const span = (s, size) => r1(Math.min(along(s), along(s + size)));
+  const passages = [], openings = [...(lv.openings || [])];
+  for (const o of lv.openings || []) {
+    if (o.wall !== wallId) continue;
+    let pid = `${o.id}_2`, n = 3;
+    while (used.has(pid)) pid = `${o.id}_${n++}`;
+    used.add(pid);
+    openings.push({ id: pid, wall: nw.id, type: 'passage', offset: span(o.offset, o.width), width: o.width, sill: o.sill ?? 0, head: o.head });
+    passages.push(pid);
+  }
+  // things on the far face of the old wall (the other room's side, its left) move to the new wall, on its room's side
+  const move = key => (lv[key] || []).map(x => {
+    if (x.attach?.wall !== wallId || x.attach.side !== 'left' || x.attach.opening) return x;
+    const size = key === 'objects' ? x.size?.[0] ?? 0 : x.attach.length ?? 0;
+    return { ...x, attach: { ...x.attach, wall: nw.id, side: 'right', offset: span(x.attach.offset, size) } };
+  });
+  const levels = model.levels.map(l => (l.id !== levelId ? l : { ...l, walls, openings, ...(l.objects ? { objects: move('objects') } : {}), ...(l.fixtures ? { fixtures: move('fixtures') } : {}) }));
+  const r = finish({ ...model, levels }, levelId, { walls: [wallId, nw.id] }, options);
+  return { model: r.model, report: { ...r.report, separated: [wallId, nw.id], passages } };
+}
+
+/**
+ * The walls kept apart that `wallId` could share one wall with again: [{ id, room }] of the walls along the facing edges of
+ * another room (within the pairing angle and gap), as generateWalls() would pair them.
+ */
+export function sharePartners(level, wallId) {
+  const w = level?.walls?.find(x => x.id === wallId);
+  if (!w?.apart || !w.from?.length) return [];
+  const rooms = (level.rooms || []).filter(r => r.polygon?.length >= 3);
+  const refs = new Set(generateWalls(rooms, { angleTol: PAIR_ANGLE, solids: level.solids }).shared.filter(s => s.edges.some(e => w.from.includes(e))).flatMap(s => s.edges).filter(e => !w.from.includes(e)));
+  return (level.walls || []).filter(x => x.id !== wallId && x.apart && x.from?.some(f => refs.has(f))).map(x => ({ id: x.id, room: x.rooms?.[0] ?? x.from[0].split('#')[0] }));
+}
+
+/**
+ * Share one wall between two rooms again (the reverse of separateWall): `apart` comes off the wall and off the walls along the
+ * facing edges, and reconcile makes one wall as thick as the gap; what is on the other wall moves onto it, and a passage that
+ * then lies on an opening of the same wall (the hole opposite a door) is dropped. report.wall = the shared wall's id.
+ */
+export function shareWall(model, levelId, wallId, options = {}) {
+  const lv = levelOf(model, levelId), w = lv?.walls?.find(x => x.id === wallId);
+  if (!w) return refuse(model, `no wall "${wallId}" on level "${levelId}"`);
+  if (!w.apart) return refuse(model, `${wallId} is not kept apart from another room's wall`);
+  const partners = sharePartners(lv, wallId);
+  if (!partners.length) return refuse(model, `${wallId} faces no other room's edge close enough to share one wall`);
+  const ids = new Set([wallId, ...partners.map(p => p.id)]);
+  // their cuts came with separateWall (the walls beside them keep theirs, so the shared stretch stays where it was)
+  const step = reconcile({ ...model, levels: model.levels.map(l => (l.id !== levelId ? l : { ...l, walls: l.walls.map(x => (ids.has(x.id) ? (({ apart, cut, ...rest }) => rest)(x) : x)) })) }, levelId, {}, options);
+  const lv1 = levelOf(step.model, levelId), host = lv1.walls.find(x => x.from?.includes(w.from[0]) && x.from.length > 1);
+  if (!host) return refuse(model, `${wallId}: the two rooms did not make one wall (check the gap between them)`);
+  // the walls beside it on the same edges lose a cut where the shared wall now ends (separateWall put it there)
+  const rooms1 = new Map((lv1.rooms || []).map(r => [r.id, r])), ends = new Map();
+  for (const ref of host.from) {
+    const e = edgeOfRef(ref, rooms1);
+    if (e) ends.set(ref, [host.a, host.b].map(p => (p[0] - e.p[0]) * e.u[0] + (p[1] - e.p[1]) * e.u[1]));
+  }
+  const uncut = x => {
+    const sp = x.cut && x.id !== host.id && x.from?.length === 1 && ends.get(x.from[0]);
+    if (!sp) return x;
+    const cut = x.cut.map(c => (c !== null && sp.some(s => Math.abs(s - c) <= 2) ? null : c));
+    const { cut: _old, ...rest } = x;
+    return cut[0] === null && cut[1] === null ? rest : { ...rest, cut };
+  };
+  const on = (lv1.openings || []).filter(o => o.wall === host.id);
+  const dropped = on.filter(p => p.type === 'passage' && on.some(o => o !== p && Math.min(o.offset + o.width, p.offset + p.width) - Math.max(o.offset, p.offset) > 1)).map(p => p.id);
+  const levels = step.model.levels.map(l => (l.id !== levelId ? l : { ...l, walls: l.walls.map(uncut), ...(dropped.length ? { openings: l.openings.filter(o => !dropped.includes(o.id)) } : {}) }));
+  const r = finish({ ...step.model, levels }, levelId, { walls: [host.id] }, options);
+  return { model: r.model, report: { ...r.report, wall: host.id, droppedPassages: dropped } };
 }
 
 /** Fill room edges that no wall covers (and bring bound walls up to date), without any room change. */

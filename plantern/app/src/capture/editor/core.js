@@ -42,7 +42,7 @@ export const perfAs = label => {
   if (cur && PERF_RANK[cur] > PERF_RANK[label]) return;
   if (Ed.perfLabel) Ed.perfLabel = label; else Ed.nextLabel = label;
 };
-export const FIELDS = ['mode', 'lengths', 'turns', 'corners', 'diagonals', 'originRef', 'ox', 'oy', 'heading', 'closure', 'derived', 'exact', 'checks', 'locks'];
+export const FIELDS = ['mode', 'lengths', 'turns', 'corners', 'diagonals', 'originRef', 'ox', 'oy', 'heading', 'closure', 'derived', 'exact', 'exactCorners', 'checks', 'locks'];
 export const expanded = new Set();   // open nodes of the sidebar tree (by key)
 export const locOf = new WeakMap();   // the location each model of the undo history goes with
 export const isModelDirty = () => Ed.model !== Ed.savedModel || Ed.loc !== Ed.savedLoc;   // the model as last loaded or saved (dirty = anything else)

@@ -229,7 +229,9 @@ export function reconcile(model, levelId, change = {}, options = {}) {
     function updateWalls() {
       const valid = level.rooms.filter(r => r.polygon?.length >= 3);
       roomsById = new Map(valid.map(r => [r.id, r]));
-      const gen = generateWalls(valid, { angleTol: PAIR_ANGLE, defaultThickness: outer, solids: level.solids });
+      // walls kept apart (walls[].apart): their edges share no wall; the edges as they are now, so renumbering follows
+      const apart = new Set((level.walls || []).filter(w => w.apart).flatMap(w => liveFrom.get(w.id) || []));
+      const gen = generateWalls(valid, { angleTol: PAIR_ANGLE, defaultThickness: outer, solids: level.solids, apart });
       const fac = mergeFacades(gen.walls, roomsById), ideal = cutIdeal(fac.walls, level.walls, liveFrom, roomsById);
       for (const m of fac.merged) if (m.offset > 1) report.warnings.push(`the faces along one facade (${m.pieces.join(', ')}) are up to ${m.offset} mm out of line; the facade follows the first`);
       const tiltOf = g => Math.max(0, ...gen.shared.filter(s => s.edges.every(e => g.from.includes(e))).map(s => s.tilt));
@@ -269,7 +271,10 @@ export function reconcile(model, levelId, change = {}, options = {}) {
           // nothing for it: merged into a neighbour's wall (removed if nothing is on it), or an orphan
           const lf = liveFrom.get(w.id) || [];
           const coveredElsewhere = lf.length && lf.every(ref => [...placed.values()].some(p => p.from.includes(ref)));
-          const into = coveredElsewhere && [...placed.entries()].find(([, p]) => p.from.includes(lf[0]))?.[0];
+          // into the wall on that edge where this one was (an edge may carry several: a shared stretch and the room's own wall beside it)
+          const mid = [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2];
+          const off = p => { const d = [p.b[0] - p.a[0], p.b[1] - p.a[1]], l2 = d[0] ** 2 + d[1] ** 2 || 1, k = Math.max(0, Math.min(1, ((mid[0] - p.a[0]) * d[0] + (mid[1] - p.a[1]) * d[1]) / l2)); return Math.hypot(mid[0] - p.a[0] - d[0] * k, mid[1] - p.a[1] - d[1] * k); };
+          const into = coveredElsewhere && [...placed.entries()].filter(([, p]) => p.from.includes(lf[0])).sort((x, y) => off(x[1]) - off(y[1]))[0]?.[0];
           if (into) { mergedAway.push({ w, into }); continue; }
           if (!orphanFrom.has(w.id)) orphanFrom.set(w.id, w.from);
           report.orphans.push({ id: w.id, reason: 'its room edges are gone' });
@@ -466,7 +471,7 @@ export function reconcile(model, levelId, change = {}, options = {}) {
     added.push(w);
   });
   level = { ...level, walls: [...level.walls, ...added] };
-  const fill = generateMissingWalls(level, { defaultThickness: outer, angleTol: PAIR_ANGLE });
+  const fill = generateMissingWalls(level, { defaultThickness: outer, angleTol: PAIR_ANGLE, apart: new Set(level.walls.filter(w => w.apart).flatMap(w => w.from || [])) });
   level = { ...fill.level, walls: fill.level.walls.map(w => fill.added.includes(w.id) && w.kind !== 'virtual' && w.from.length === 1 ? { ...w, assumed: ['thickness'] } : w) };
   report.added = [...added.map(w => w.id), ...fill.added];
   level = rehome(level, report);

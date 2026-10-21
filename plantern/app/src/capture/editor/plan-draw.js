@@ -46,7 +46,7 @@ export function wallSvg(w, lv, geo, fs, orphans = new Set()) {
   if (pieces?.length) for (const pc of pieces) {
     out += poly(pc, `fill="${fill}"${overhead ? ` fill-opacity="0.3" stroke-dasharray="${fs / 2} ${fs / 3}"` : low ? ' fill-opacity="0.4"' : ''} ${(overhead || low) && !sel && !bad ? `stroke="${fill === 'url(#hatch)' ? '#6b7482' : fill}" stroke-width="${fs / 10}"` : stroke}`);
     for (const lp of wallLookPieces(w, geo.frames.get(w.id), [pc], lv.rooms)) {
-      const strips = sideStrips(lp.poly, w.thickness);
+      const strips = sideStrips(lp.poly, w.thickness, 40, w, geo.frames.get(w.id));
       for (const side of ['left', 'right']) { const look = resolveSide(lp[side], materialTable(Ed.model)); if (look?.color) out += poly(strips[side], `fill="${look.color}" pointer-events="none"`); }
     }
   }

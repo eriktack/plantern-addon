@@ -47,7 +47,7 @@ function currentForm() {
   FIELDS.forEach(f => (form[f] = $(f).value));
   return form;
 }
-const WT_TEXT = ['lengths', 'turns', 'corners', 'derived', 'exact', 'locks', 'checks', 'diagonals'];
+const WT_TEXT = ['lengths', 'turns', 'corners', 'derived', 'exact', 'exactCorners', 'locks', 'checks', 'diagonals'];
 /** Draw the table: from the text fields (fromForm), or from its own rows (after a change made in it: empty rows stay). */
 function renderWallTable(fromForm = true) {
   const box = $('wallTable');
@@ -56,11 +56,13 @@ function renderWallTable(fromForm = true) {
   if (box.hidden) return;
   const form = Object.fromEntries(WT_TEXT.map(k => [k, $(k).value])), t = fromForm || !Ed.wt ? tableFromForm(form) : { rows: Ed.wt.rows, diagonals: Ed.wt.diagonals, errors: [] }, mode = $('mode').value;
   Ed.wt = { rows: t.rows.length ? t.rows : [emptyRow(), emptyRow(), emptyRow(), emptyRow()], diagonals: t.diagonals };
-  const cornerHead = mode === 'rectilinear' ? '<th title="The corner at the end of the wall: R a normal corner, L an inside corner (walking with the room on your right)">Corner</th>' : mode === 'traverse' ? '<th title="Interior angle at the end of the wall, degrees">Angle °</th>' : '';
+  const cornerHead = mode === 'rectilinear' ? '<th title="The corner the wall starts from (corner 0 for wall A): R a normal corner, L an inside corner (walking with the room on your right)">Corner</th>' : mode === 'traverse' ? '<th title="Interior angle at the corner the wall starts from (corner 0 for wall A), degrees">Angle °</th>' : '';
   const lockHead = mode === 'lengths' ? '' : '<th title="Lock the wall to lie exactly along x or y">Lock</th>';
+  const exactCornerHead = mode === 'lengths' ? '' : '<th title="The angle of this corner is exact: it is kept and the other corners and the lengths take the closing gap (at least two corners must stay free when walls are locked)">Exact °</th>';
   const row = (r, i) => `<tr data-i="${i}"><td class="wl">${wallName(i)}</td>`
     + `<td><input data-f="length" inputmode="decimal" autocomplete="off" value="${esc(r.length)}" aria-label="Wall ${wallName(i)} length"></td>`
     + (mode === 'rectilinear' ? `<td><button type="button" data-f="turn" class="tg${r.turn === 'L' ? ' on' : ''}" title="R: normal corner · L: inside corner">${r.turn || 'R'}</button></td>` : mode === 'traverse' ? `<td><input data-f="corner" inputmode="decimal" autocomplete="off" placeholder="90" value="${esc(r.corner)}"></td>` : '')
+    + (mode === 'lengths' ? '' : `<td><input type="checkbox" data-f="exactCorner"${r.exactCorner ? ' checked' : ''} title="Corner ${i}'s angle is exact" aria-label="Corner ${i} exact"></td>`)
     + `<td><input type="checkbox" data-f="derived"${r.derived ? ' checked' : ''} title="Worked out, not measured"></td>`
     + `<td><input type="checkbox" data-f="exact"${r.exact ? ' checked' : ''} title="Exact: takes none of the closing gap"></td>`
     + (mode === 'lengths' ? '' : `<td><button type="button" data-f="lock" class="tg${r.lock ? ' on' : ''}" title="Lock it along an axis: none, x, y">${r.lock || '—'}</button></td>`)
@@ -68,7 +70,7 @@ function renderWallTable(fromForm = true) {
     + `<td class="res" data-res="${i}"></td></tr>`;
   const n = Ed.wt.rows.length, corner = (v, f) => `<select data-d="${f}" data-native>${Array.from({ length: n }, (_, k) => `<option value="${k}"${k === v ? ' selected' : ''}>${k}</option>`).join('')}</select>`;
   box.innerHTML = (t.errors.length ? `<div class="iss">The text below has something the table cannot show: ${esc(t.errors[0])}. Fix it there.</div>` : '')
-    + `<table class="wt"><thead><tr><th>Wall</th><th>Length <small>mm</small></th>${cornerHead}<th title="Worked out, not measured">Worked out</th><th title="Exact: takes none of the closing gap">Exact</th>${lockHead}<th title="Measured, replaced by a worked-out length">Replaced</th><th title="Solved minus measured">Δ</th></tr></thead><tbody>${Ed.wt.rows.map(row).join('')}</tbody></table>`
+    + `<table class="wt"><thead><tr><th>Wall</th><th>Length <small>mm</small></th>${cornerHead}${exactCornerHead}<th title="Worked out, not measured">Worked out</th><th title="Exact: takes none of the closing gap">Exact</th>${lockHead}<th title="Measured, replaced by a worked-out length">Replaced</th><th title="Solved minus measured">Δ</th></tr></thead><tbody>${Ed.wt.rows.map(row).join('')}</tbody></table>`
     + `<div class="row btns"><button type="button" data-act="add">+ Wall</button><button type="button" data-act="remove"${n ? '' : ' disabled'}>− Last wall</button><button type="button" data-act="diag">+ Diagonal</button></div>`
     + (Ed.wt.diagonals.length ? `<table class="wt diag"><thead><tr><th>Diagonal from corner</th><th>to corner</th><th>Length <small>mm</small></th><th></th><th>Δ</th></tr></thead><tbody>${Ed.wt.diagonals.map((d, j) => `<tr data-j="${j}"><td>${corner(d.a, 'a')}</td><td>${corner(d.b, 'b')}</td><td><input data-d="length" inputmode="decimal" autocomplete="off" value="${esc(d.length)}"></td><td><button type="button" data-act="undiag" title="Remove this diagonal">×</button></td><td class="res" data-dres="${j}"></td></tr>`).join('')}</tbody></table>` : '');
   if (t.errors.length) $('asText').open = true;
@@ -152,7 +154,7 @@ export function recompute() {
   $('turnsRow').hidden = mode === 'traverse';
   $('cornersRow').hidden = mode === 'rectilinear';
   $('closureRow').hidden = mode === 'lengths';
-  $('locksRow').hidden = mode === 'lengths';
+  $('locksRow').hidden = mode === 'lengths'; $('exactCornersRow').hidden = mode === 'lengths';
   const sq = $('closure').querySelector('[value=square]');
   sq.disabled = mode !== 'rectilinear';
   if (sq.disabled && $('closure').value === 'square') $('closure').value = 'line';
@@ -209,7 +211,7 @@ function showResult() {
   $('result').innerHTML = ov + `<div class="help">${head.join(' · ')}</div>` + s.warnings.map(w => `<div class="iss">${esc(w)}</div>`).join('');
   const cls = c => { const a = Math.abs(c.residual), [ok, warn] = c.unit === 'deg' ? [0.2, 0.5] : [tol.ok, tol.warn]; return a <= ok ? 'ok' : a <= warn ? 'warn' : 'bad'; };
   $('resid').innerHTML = `<table class="res"><tr><th></th><th>measured</th><th>solved</th><th>Δ</th></tr>${s.residuals.map((r, i) => {
-    const c = residualCells(r, s.capture.raw.derived, s.capture.raw.exact);
+    const c = residualCells(r, s.capture.raw.derived, s.capture.raw.exact, s.capture.raw.exactCorners);
     return `<tr${i === s.worst && s.maxAbs > tol.ok ? ' class="worst"' : ''}><td>${esc(c.label)}</td><td>${esc(c.measured)}</td><td>${esc(c.model)}</td><td><b class="${cls(c)}">${esc(c.delta)}</b></td></tr>`;
   }).join('')}</table>`;
   // walls that are almost exactly on an axis: offer to lock them (fills the Locked walls field)

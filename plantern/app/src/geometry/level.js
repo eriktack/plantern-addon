@@ -4,7 +4,7 @@ import { fixtureHeight, stripForm } from '../model/fixtures.js';
 import { isHosted, hostedPlacement } from '../model/hosted.js';
 import { openingSymbol } from './openings.js';
 import { isHingedDoor, doorOpen } from '../model/doors.js';
-import { wallFrame, wallJoins, wallPieces, hasBody, facePoint, centrePoint, wallProfile } from './walls.js';
+import { wallFrame, wallJoins, wallPieces, clipWallPieces, hasBody, facePoint, centrePoint, wallProfile } from './walls.js';
 import { cutWallPieces, clipConvex } from './solids.js';
 import { isConvex, signedArea, pointInPolygon, distToOutline, triangulate } from './polygon.js';
 import { stairLayout, stairStart, stairOpening, openingRectPoly, unionOutlines } from './stairs.js';
@@ -17,11 +17,12 @@ import { DEFAULT_SETTINGS } from '../model/settings.js';
  */
 export function buildLevelGeometry(level) {
   const walls = level.walls || [], openings = level.openings || [];
-  const { caps, issues } = wallJoins(walls, level);
+  const { caps, clips, issues } = wallJoins(walls, level);
   const frames = new Map(walls.map(w => [w.id, wallFrame(w)]));
   const wallById = new Map(walls.map(w => [w.id, w]));
-  // wall bodies between openings, cut where a solid that walls give way to stands (solids[].cutsWalls)
-  const pieces = new Map(walls.filter(hasBody).map(w => [w.id, cutWallPieces(w, frames.get(w.id), wallPieces(w, frames.get(w.id), caps.get(w.id), openings), level.solids)]));
+  // wall bodies between openings, cut where they run into a third wall (wallJoins' clips) and where a solid that walls
+  // give way to stands (solids[].cutsWalls)
+  const pieces = new Map(walls.filter(hasBody).map(w => [w.id, cutWallPieces(w, frames.get(w.id), clipWallPieces(w, frames.get(w.id), wallPieces(w, frames.get(w.id), caps.get(w.id), openings), clips.get(w.id)), level.solids)]));
 
   /** The single attach resolver: { wall, side, offset, gap? } → point on that face, outward direction, wall frame. */
   function resolveAttach(at) {

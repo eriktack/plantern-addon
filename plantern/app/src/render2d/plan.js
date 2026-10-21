@@ -117,7 +117,7 @@ export function createPlanView(svg, hooks = {}) {
         else el('polygon', { points: svgPoints(poly), fill, stroke: fill, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'stroke-linejoin': 'round' }, gWall);
         // each side's own colour (or its material's, or a room's: roomSides) as a strip along that face
         for (const lp of wallLookPieces(w, geo.frames.get(w.id), [poly], level.rooms)) {
-          const strips = sideStrips(lp.poly, w.thickness);
+          const strips = sideStrips(lp.poly, w.thickness, 40, w, geo.frames.get(w.id));
           for (const side of ['left', 'right']) {
             const look = resolveSide(lp[side], materials);
             if (look?.color) el('polygon', { points: svgPoints(strips[side]), fill: look.color }, gWall);

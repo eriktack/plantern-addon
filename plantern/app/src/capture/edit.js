@@ -19,6 +19,16 @@ export function parseNumbers(text) {
   return { values, errors };
 }
 
+/** Corner numbers, e.g. "2, 4 5" → { corners: [2, 4, 5], errors }. */
+export function parseCorners(text) {
+  const corners = [], errors = [];
+  for (const p of String(text ?? '').split(/[\s;,]+/).filter(Boolean)) {
+    if (/^\d+$/.test(p)) corners.push(Number(p)); else errors.push(`"${p}" is not a corner number (0, 1, 2, …)`);
+  }
+  return { corners: [...new Set(corners)].sort((a, b) => a - b), errors };
+}
+export const cornersToText = list => (list || []).join(', ');
+
 /** One diagonal per line: "0-2: 6403", "0 2 6403" or "0,2,6403" (corner indices, then length). */
 export function parseDiagonals(text) {
   const diagonals = [], errors = [];
@@ -65,6 +75,11 @@ export function buildCapture(form, snapPos = () => undefined) {
   const ex = parseWalls(form.exact);
   errors.push(...ex.errors.map(e => `exact lengths: ${e}`));
   if (ex.walls.length) raw.exact = ex.walls;
+  if (form.mode !== 'lengths') {
+    const ec = parseCorners(form.exactCorners);
+    errors.push(...ec.errors.map(e => `exact corners: ${e}`));
+    if (ec.corners.length) raw.exactCorners = ec.corners;
+  }
   const ck = parseChecks(form.checks);
   errors.push(...ck.errors);
   if (ck.checks.length) raw.checks = ck.checks;
@@ -88,6 +103,7 @@ export function captureToForm(capture) {
     locks: locksToText(raw.locks),
     derived: wallsToText(raw.derived),
     exact: wallsToText(raw.exact),
+    exactCorners: cornersToText(raw.exactCorners),
     checks: checksToText(raw.checks),
     turns: typeof raw.turns === 'string' ? raw.turns : (raw.turns || []).join(''),
     corners: (raw.corners || []).join(', '),
@@ -241,9 +257,9 @@ export function lockOffers(capture, polygon, maxDeg = 1) {
  * One residual as table cells: { label, measured, model, delta, unit }. Corners are degrees; a
  * `check` is a typed length that a worked-out one replaced; worked-out lengths are not measurements.
  */
-export function residualCells(r, derived = [], exact = []) {
+export function residualCells(r, derived = [], exact = [], exactCorners = []) {
   const f1 = v => (Math.round(v * 10) / 10).toFixed(1), sign = v => (v >= 0 ? '+' : '') + v;
-  if (r.kind === 'corner') return { label: `corner ${r.a}`, measured: `${r.measured}°`, model: `${r.model}°`, delta: sign(r.residual.toFixed(2)) + '°', unit: 'deg', residual: r.residual };
+  if (r.kind === 'corner') return { label: `corner ${r.a}`, measured: `${r.measured}°${exactCorners.includes(r.a) ? ' (exact)' : ''}`, model: `${r.model}°`, delta: sign(r.residual.toFixed(2)) + '°', unit: 'deg', residual: r.residual };
   const wall = `wall ${wallName(r.a)} (${r.a}→${r.b})`;
   const label = r.kind === 'diagonal' ? (r.check ? `check ${r.a}–${r.b} (${r.check})` : `diag ${r.a}–${r.b}`) : r.kind === 'check' ? `${wall}, check` : wall;
   const measured = r.kind === 'edge' && derived.includes(r.a) ? 'worked out' : `${Math.round(r.measured * 10) / 10}${r.kind === 'edge' && exact.includes(r.a) ? ' (exact)' : ''}`;

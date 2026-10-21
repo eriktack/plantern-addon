@@ -16,6 +16,7 @@
 //   options.usedIds            ids already taken (existing walls); generated ids avoid them
 //   options.skip               Set of edge keys that already have a wall: nothing is generated for them
 //   options.gaps               Map edge key → [[t0, t1]] mm along the edge that still need a wall; solo walls are clipped to them
+//   options.apart              Set of edge keys whose walls are kept apart (walls[].apart): they share no wall
 //   options.solids             the level's solids: stretches of an edge along a solid's face beyond it get no wall,
 //                              and two rooms with a chimney between them share no wall there (PLANTERN.md §4)
 // walls[].rooms lists the rooms a wall bounds and walls[].from the room edges it was made from (the
@@ -26,8 +27,9 @@
 
 import { sub, dot, cross, len } from '../geometry/vec.js';
 import { solidCover, subtractIntervals } from '../geometry/solids.js';
+import { PAIR_ANGLE } from '../geometry/walls.js';
 
-export const PAIR_ANGLE = 2;          // degrees: shared-wall pairing tolerance used by reconcile() (a closing wall may tilt a little)
+export { PAIR_ANGLE };                // degrees: shared-wall pairing tolerance used by reconcile() (a closing wall may tilt a little)
 export const MAX_SHARED_GAP = 600;    // mm: the largest face distance still treated as one shared wall
 
 const edgeKey = (room, i) => `${room.id}#e${i}`;
@@ -51,7 +53,7 @@ export function generateWalls(rooms, options = {}) {
   const pairs = [];
   for (let x = 0; x < edges.length; x++) for (let y = x + 1; y < edges.length; y++) {
     const A = edges[x], B = edges[y];
-    if (A.room === B.room) continue;
+    if (A.room === B.room || o.apart?.has(A.key) || o.apart?.has(B.key)) continue;     // kept apart: each room its own wall
     if (Math.abs(cross(A.u, B.u)) > sinTol || dot(A.u, B.u) > 0) continue;       // not antiparallel
     // overlap along A's direction
     const tb0 = dot(sub(B.q, A.p), A.u), tb1 = dot(sub(B.p, A.p), A.u);          // B runs opposite to A

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.2
+
+- Rooms with corners other than 90° join cleanly: walls a little off parallel carry on as one wall, and corners where three rooms meet no longer poke into the next wall, so no more overlap warnings there (issue #28).
+- Separate walls: a wall shared by two rooms can be made one wall per room (Separate walls in the wall panel), and shared again with one click. A door in it keeps a matching passage through the other wall.
+- Exact corners: mark a corner whose angle you are sure of (Exact ° in the room's measurements) and the other corners and lengths take the closing gap, instead of every corner moving a little.
+- Fixes: things on a wall that merges away move to the right wall, and a wall a few degrees off no longer loses its body at a junction.
+
 ## 0.6.1
 
 - 3D preview: Updating… and other messages now sit over the bottom-left of the view, so the view no longer jumps.

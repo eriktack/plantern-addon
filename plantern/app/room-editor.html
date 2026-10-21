@@ -231,6 +231,8 @@
       <input id="derived" spellcheck="false" autocomplete="off"></label>
     <label>Exact lengths <small>walls whose length you are sure of, e.g. <code>A</code>: they take none of the closing gap, the other walls adjust</small>
       <input id="exact" spellcheck="false" autocomplete="off"></label>
+    <label id="exactCornersRow">Exact corners <small>corner numbers whose angle you are sure of, e.g. <code>4, 5, 6</code>: they keep their angle, the other corners and the lengths adjust (with locked walls, leave at least two corners free)</small>
+      <input id="exactCorners" spellcheck="false" autocomplete="off"></label>
     <label>Measured, replaced <small>lengths measured but replaced by worked-out ones (a corner moved on the plan, the way back on the phone), one per line: <code>D 3125</code>; kept as checks</small>
       <textarea id="checks" rows="1" spellcheck="false"></textarea></label>
     <label id="turnsRow">Turns <small>R = normal corner, L = inside corner; one letter per corner (empty = all R)</small>
@@ -346,6 +348,8 @@
       <div><button id="wSplit" title="Two walls, each with its own thickness, kind and colours (e.g. a closet front next to a chimney)">Split wall here</button> <button id="wSplitPick" type="button" title="Point at the wall on the plan and click where it splits (whole centimetres, Alt: exact); a right-click on a wall offers it too">Split on the plan…</button></div>
     </div>
     <div class="row btns" id="wJoinRow" hidden></div>
+    <div class="row btns"><button id="wSeparate" hidden title="Each room gets its own wall, half the gap each; type their thicknesses after">Separate walls (one per room)</button></div>
+    <div class="row btns" id="wShareRow" hidden></div>
     <div id="wErr" class="help err"></div>
     <div class="row btns">
       <button class="moved" id="wApply">Apply wall changes</button>

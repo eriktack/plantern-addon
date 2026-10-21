@@ -3,7 +3,7 @@
 import { groupByRoom } from '../option-hints.js';
 import { wallInfo, wallToForm, cornerAt, wallPropsFromForm } from '../../edit/inspect.js';
 import { wallFaceRooms } from '../../geometry/paint.js';
-import { joinableWalls, materialFromColor, setMaterial, setWallProps } from '../../edit/ops.js';
+import { joinableWalls, materialFromColor, setMaterial, setWallProps, sharePartners } from '../../edit/ops.js';
 import { usedColors, materialTable, materialUse } from '../../model/materials.js';
 import { askConfirm } from '../dialog.js';
 import { materialKind, MATERIAL_KINDS, materialSwatch } from '../../model/material-kind.js';
@@ -13,7 +13,7 @@ import { titleHtml } from './selection.js';
 import { ROOM_CORNER, anchorForm, fillWallPos, wallEnds } from './walldraw.js';
 import { readLookRows, renderWallRoomLooks } from './room-apply.js';
 import { afterLeave, enterEdit, setStatus } from './session.js';
-import { doJoin } from './wall-ops.js';
+import { doJoin, doSeparate, doShare } from './wall-ops.js';
 import { askText, nameColour } from './add-menus.js';
 import { Ed } from './state.js';
 
@@ -92,6 +92,13 @@ export function showWall() {
   $('wJoinRow').innerHTML = joins.map(j => `<button data-join="${esc(j.id)}" title="One wall again, with this wall's thickness, kind and colours; what is on ${esc(j.id)} moves onto it">Join with ${esc(j.id)} <small>(at its ${j.side === 'b' ? 'end' : 'start'})</small></button>`).join('');
   $('wJoinRow').querySelectorAll('[data-join]').forEach(b => (b.onclick = () => doJoin(b.dataset.join)));
   $('wUnbind').hidden = !info.bound;
+  // a wall shared by two rooms can be made one wall per room (walls[].apart), and back
+  $('wSeparate').hidden = !(info.shared && w.kind !== 'virtual' && !w.cut);
+  $('wSeparate').onclick = doSeparate;
+  const partners = sharePartners(level(), w.id), roomName = id => level().rooms.find(r => r.id === id)?.name || id;
+  $('wShareRow').hidden = !partners.length;
+  $('wShareRow').innerHTML = partners.map(p => `<button data-share="${esc(roomName(p.room))}" title="One wall between the two rooms again, as thick as the gap; what is on ${esc(p.id)} moves onto it">Share one wall with ${esc(roomName(p.room))}</button>`).join('');
+  $('wShareRow').querySelectorAll('[data-share]').forEach(b => (b.onclick = () => doShare(b.dataset.share)));
   $('wDelete').hidden = info.bound && !info.orphan;
 }
 

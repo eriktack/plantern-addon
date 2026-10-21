@@ -1,6 +1,6 @@
 // Editor page: wall-ops. Split from ui.js (ui-consistency plan, UX34): no behaviour change, only where the code lives.
 
-import { joinWalls, deleteWall, linkWalls, fillWalls } from '../../edit/ops.js';
+import { joinWalls, deleteWall, linkWalls, fillWalls, separateWall, shareWall } from '../../edit/ops.js';
 import { askConfirm } from '../dialog.js';
 import { describeReconcile } from '../../edit/reconcile.js';
 import { wallInfo } from '../../edit/inspect.js';
@@ -38,6 +38,32 @@ ${otherId}'s own ${r.report.dropped.join(', ')} ${r.report.dropped.length > 1 ? 
   Ed.wallFormFor = null;
   commit(r.model);
   setStatus(`${otherId} joined into ${Ed.wallId} (not saved yet)`);
+}
+
+/** One wall per room instead of one shared wall (walls[].apart, issue #28); the editor stays on this room's wall. */
+export async function doSeparate() {
+  if (!(await mayRefill())) return;
+  const id = Ed.wallId, r = separateWall(Ed.model, Ed.levelId, id, opts());
+  if (r.report.errors.length) { $('wErr').textContent = r.report.errors.join('; '); return; }
+  const [, made] = r.report.separated, t = r.model.levels.find(l => l.id === Ed.levelId).walls.find(w => w.id === id).thickness;
+  const extra = r.report.passages.length ? ` A passage opposite each opening in it goes through ${made} (${r.report.passages.join(', ')}).` : '';
+  $('wallsOut').innerHTML = [`Separated: ${id} and ${made}, ${t} mm each, still to measure.${extra}`, ...describeReconcile(r.report)].map(esc).join('<br>');
+  Ed.wallFormFor = null;
+  commit(r.model);
+  setStatus(`${id} and ${made} are separate walls now (not saved yet)`);
+}
+
+/** One shared wall again with the wall of the room on the other side. */
+export async function doShare(roomName) {
+  if (!(await mayRefill())) return;
+  const r = shareWall(Ed.model, Ed.levelId, Ed.wallId, opts());
+  if (r.report.errors.length) { $('wErr').textContent = r.report.errors.join('; '); return; }
+  const gone = r.report.droppedPassages.length ? ` The passage${r.report.droppedPassages.length > 1 ? 's' : ''} opposite its openings ${r.report.droppedPassages.length > 1 ? 'are' : 'is'} gone (${r.report.droppedPassages.join(', ')}).` : '';
+  $('wallsOut').innerHTML = [`One shared wall again: ${r.report.wall}, with ${roomName}.${gone}`, ...describeReconcile(r.report)].map(esc).join('<br>');
+  Ed.wallId = r.report.wall;
+  Ed.wallFormFor = null;
+  commit(r.model);
+  setStatus(`${r.report.wall} is shared by both rooms again (not saved yet)`);
 }
 
 export async function removeWall() {

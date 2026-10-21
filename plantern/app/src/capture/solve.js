@@ -30,6 +30,9 @@
 //   exact?: [i, …]       lengths known to be right (checked twice, laser): they take none of the closing
 //                       gap ("square", "spread"), are held in least squares, and the other walls adjust.
 //                       Not together with `derived` for the same wall
+//   exactCorners?: [i, …]  corners whose angle is known to be right (corner i, where wall i starts): the room is
+//                       solved by least squares, these corners are held (±0.005°) and the others and the
+//                       lengths adjust. Without locks, wall 0 keeps its heading. Not in "lengths" mode
 //   diagonals?: [{ a, b, length }]   corner indices + measured distance
 //   checks?: [{ edge, measured, note? }]   a length that was measured but replaced by a worked-out one
 //                       (not used by the solver; reported as a `check` residual so it is never lost)
@@ -90,6 +93,10 @@ export function validateRaw(mode, raw) {
     if (mode === 'lengths') err.push('raw.locks work with modes "rectilinear" and "traverse" (in "lengths" mode, set the heading)');
     else if (!Array.isArray(locks) || locks.some(k => !Number.isInteger(k?.edge) || k.edge < 0 || k.edge >= n || (k.axis !== 'x' && k.axis !== 'y'))) err.push(`raw.locks must be [{ edge: 0..${n - 1}, axis: "x" or "y" }]`);
     else if (new Set(locks.map(k => k.edge)).size !== locks.length) err.push('raw.locks lists an edge twice');
+  }
+  if (raw.exactCorners !== undefined) {
+    if (mode === 'lengths') err.push('raw.exactCorners work with modes "rectilinear" and "traverse" (in "lengths" mode the corners are not measured)');
+    else if (!Array.isArray(raw.exactCorners) || raw.exactCorners.some(i => !Number.isInteger(i) || i < 0 || i >= n)) err.push(`raw.exactCorners must list corner numbers 0..${n - 1}`);
   }
   if (mode === 'rectilinear' && corners !== undefined) err.push('rectilinear mode uses raw.turns (R/L), not raw.corners; use mode "traverse" for other angles');
   return err;
@@ -152,7 +159,7 @@ function solveTraverse(raw) {
     return fail(`interior angles add up to ${sum}°, a ${n}-sided room needs ${want}° (check for a missing inside corner)`);
   }
   if (raw.closure === 'square') return solveSquare(raw, corners);
-  if (raw.locks?.length) return solveLocked(raw, corners);
+  if (raw.locks?.length || raw.exactCorners?.length) return solveLocked(raw, corners);
   const pts = walk(raw.lengths, corners, raw.heading ?? 0);
   const e = pts[n];                              // gap between where the walk ends and p0
   const total = raw.lengths.reduce((s, l) => s + l, 0);
@@ -244,23 +251,26 @@ function solveSquare(raw, corners) {
   return { ok: true, polygon, residuals, ...summarize(residuals), closure: closureOf(g), warnings, errors: [] };
 }
 
-const SIGMA_LENGTH = 5, SIGMA_DERIVED = 1000, SIGMA_EXACT = 0.05, SIGMA_CORNER = 0.5 * RAD;   // mm, mm, mm, rad
+const SIGMA_LENGTH = 5, SIGMA_DERIVED = 1000, SIGMA_EXACT = 0.05, SIGMA_CORNER = 0.5 * RAD, SIGMA_EXACT_CORNER = 0.005 * RAD;   // mm, mm, mm, rad, rad
 const wrapPi = a => Math.atan2(Math.sin(a), Math.cos(a));
 
 /**
- * Locks without "square": least squares over the edge headings and lengths. Measured lengths ±5 mm,
- * corner angles ±0.5°, worked-out lengths nearly free; hard constraints: the room closes and each
- * locked edge lies exactly on its axis (Gauss–Newton on the KKT system). The locks fix the rotation.
+ * Locks without "square", or exact corners: least squares over the edge headings and lengths. Measured
+ * lengths ±5 mm, corner angles ±0.5° (exact ones ±0.005°), worked-out lengths nearly free; hard constraints:
+ * the room closes and each locked edge lies exactly on its axis (Gauss–Newton on the KKT system). The locks
+ * fix the rotation; without locks, wall 0 keeps its heading.
  */
 function solveLocked(raw, corners) {
   const n = raw.lengths.length, warnings = [];
-  const heading = raw.heading ?? 0, derived = new Set(raw.derived || []), exactSet = new Set(raw.exact || []);
+  const heading = raw.heading ?? 0, derived = new Set(raw.derived || []), exactSet = new Set(raw.exact || []), exactCorner = new Set(raw.exactCorners || []);
+  const locks = raw.locks || [];
   const g = walkGap(raw, corners, heading);
   // start values: the plain walk; locked edges snapped onto their axis direction nearest the walk
   const h = g.pts.slice(0, n).map((p, i) => Math.atan2(g.pts[i + 1][1] - p[1], g.pts[i + 1][0] - p[0]));
   const l = [...raw.lengths];
   const fixed = new Map();
-  for (const k of raw.locks) {
+  if (!locks.length) fixed.set(0, h[0]);                    // nothing else fixes the rotation: wall 0 as walked
+  for (const k of locks) {
     const base = k.axis === 'x' ? 0 : Math.PI / 2, a = h[k.edge];
     const target = [base, base + Math.PI, base - Math.PI].reduce((best, t) => (Math.abs(wrapPi(a - t)) < Math.abs(wrapPi(a - best)) ? t : best));
     const off = Math.abs(wrapPi(a - target)) / RAD;
@@ -280,7 +290,7 @@ function solveLocked(raw, corners) {
       const prev = (i + n - 1) % n, cols = [];
       if (hi(i) >= 0) cols.push([hi(i), 1]);
       if (hi(prev) >= 0) cols.push([hi(prev), -1]);
-      rows.push({ cols, r: wrapPi(h[i] - h[prev] - turnObs(i)), w: 1 / SIGMA_CORNER ** 2 });
+      rows.push({ cols, r: wrapPi(h[i] - h[prev] - turnObs(i)), w: 1 / (exactCorner.has(i) ? SIGMA_EXACT_CORNER : SIGMA_CORNER) ** 2 });
     }
     // constraints: sum l cos h = 0, sum l sin h = 0
     const C = [new Array(m).fill(0), new Array(m).fill(0)];
@@ -314,7 +324,8 @@ function solveLocked(raw, corners) {
     return { kind: 'corner', a: i, b: i, measured: c, model: Math.round(model * 100) / 100, residual: Math.round((model - c) * 100) / 100 };
   }).filter(r => Math.abs(r.residual) >= 0.01);
   const residuals = [...edgeRes(pts, raw.lengths), ...cornerRes, ...diagRes(pts, raw.diagonals)];
-  if (g.distance > 0.5) warnings.push(`the walls as measured miss corner 0 by ${round1(g.distance)} mm (1:${Math.round(g.total / g.distance)}); spread by least squares with the locked walls kept exactly on their axes`);
+  const held = [locks.length ? 'the locked walls kept exactly on their axes' : '', exactCorner.size ? `the exact corner${exactCorner.size > 1 ? 's' : ''} (${[...exactCorner].sort((a, b) => a - b).join(', ')}) kept` : ''].filter(Boolean).join(' and ');
+  if (g.distance > 0.5) warnings.push(`the walls as measured miss corner 0 by ${round1(g.distance)} mm (1:${Math.round(g.total / g.distance)}); spread by least squares with ${held}`);
   return { ok: true, polygon, residuals, ...summarize(residuals), closure: closureOf(g), warnings, errors: [] };
 }
 

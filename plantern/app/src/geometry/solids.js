@@ -169,7 +169,7 @@ export function paintStrip(st, depth = 40) {
  * taken out of each piece by clipping with half-planes, so pieces stay convex. Where it covers the
  * whole thickness the piece ends at the solid; where it covers part, a thinner strip stays beside it.
  * Four-cornered results keep the order [left s0, left s1, right s1, right s0]; a piece cut inside a
- * mitred end can have three or five corners (sideStrips() then draws no colour strip on it).
+ * mitred end can have three or five corners (sideStrips() then clips its colour strips from it).
  */
 export function cutWallPieces(w, f, pieces, solids = []) {
   const cutters = solids.filter(s => s.cutsWalls && s.polygon?.length >= 3 && !raised(s));   // a beam overhead cuts no wall

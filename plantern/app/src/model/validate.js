@@ -187,6 +187,9 @@ export function validateLevel(level, geo, below = true, checks = [], blueprints)
         if (!refs.has(an.ref)) out.push({ severity: 'warn', id: w.id, msg: `its ${end === 'a' ? 'start' : 'end'} hangs on ${an.ref}, which does not exist` });
       }
     }
+    // kept apart from the neighbouring room's wall (walls[].apart): only a wall that follows room edges has a neighbour to share with
+    if (w.apart !== undefined && w.apart !== true) out.push({ severity: 'error', id: w.id, msg: 'apart must be true (or left out)' });
+    else if (w.apart && !w.from?.length) out.push({ severity: 'warn', id: w.id, msg: 'apart is ignored on a hand-drawn wall' });
     if (w.lock !== undefined) {
       // kept along x or y when an end is dragged (hand-drawn walls; bound ones lock through their room)
       if (w.lock !== 'axis') out.push({ severity: 'error', id: w.id, msg: `lock must be "axis" (got ${JSON.stringify(w.lock)})` });
