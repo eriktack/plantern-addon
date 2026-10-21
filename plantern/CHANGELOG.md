@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.8
+
+- The Lovelace card: ticking every floor shows the floor picker, the same as ticking none. The 3D view follows the floors you ticked, and the floor pills keep their height. The stack menu is hidden when one or several floors are ticked.
+
 ## 0.6.7
 
 - A light on an object now stands at the height you set (it used to hang near the ceiling), a bookshelf's inner shelves can have a material of their own (glass shelves in a wooden frame), glass no longer casts shadows in the 3D view, and LED strips no longer light through walls.

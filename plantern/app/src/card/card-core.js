@@ -77,8 +77,10 @@ export function cardLevels(model, cfg) {
   const all = (model?.levels || []).slice().sort((a, b) => (a.elevation || 0) - (b.elevation || 0));
   const wanted = new Set(cfg?.levels || []);
   const picked = all.filter(l => wanted.has(l.id));
-  const levels = picked.length ? picked : all;
-  const mode = cfg?.cycle > 0 && levels.length > 1 ? 'cycle' : picked.length > 1 ? 'together' : picked.length === 1 ? 'single' : 'select';
+  // every floor ticked is the same as none ticked: all floors, with the floor picker (not "together", which has no picker)
+  const everyFloor = picked.length === all.length;
+  const levels = picked.length && !everyFloor ? picked : all;
+  const mode = cfg?.cycle > 0 && levels.length > 1 ? 'cycle' : picked.length > 1 && !everyFloor ? 'together' : picked.length === 1 && !everyFloor ? 'single' : 'select';
   return { levels, mode };
 }
 
@@ -102,10 +104,12 @@ export function stepLevel(levels, current, dir) {
  * the browser) or undefined: then one floor is shown alone and several are pulled apart, as they always were.
  * With a choice, the floors stack as chosen; with several floors on show only those are kept.
  */
-export function cardStack(model, levels, choice) {
+// The 3D stack of the card. Several floors on show (ticked together) are pulled apart as the 2D plan shows them, and the stack
+// menu does not apply. Otherwise the stack choice (this, below, all) is taken within `allowed` (the floors the card may show), if given.
+export function cardStack(model, levels, choice, allowed) {
   const first = levels?.[0];
   if (!first) return [];
-  if (!choice) return levels.length > 1 ? levelStack(model, first, 'all', true).filter(st => levels.includes(st.level)) : levelStack(model, first, 'this', false);
-  const stack = levelStack(model, first, choice, choice !== 'this');
-  return levels.length > 1 ? stack.filter(st => levels.includes(st.level)) : stack;
+  if (levels.length > 1) return levelStack(model, first, 'all', true).filter(st => levels.includes(st.level));
+  const mode = choice || 'this', scope = allowed?.length ? allowed : null;   // no list: the building's floors, as before
+  return levelStack(model, first, mode, mode !== 'this').filter(st => !scope || scope.includes(st.level));
 }

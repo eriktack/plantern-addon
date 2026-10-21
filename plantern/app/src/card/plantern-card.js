@@ -46,7 +46,7 @@ const STYLE = `
   .seg { display: inline-flex; border: 1px solid var(--divider-color, #888); border-radius: 999px; overflow: hidden; }
   .seg button { font: inherit; border: 0; padding: 4px 14px; cursor: pointer; color: var(--primary-text-color); background: transparent; }
   .seg button.on { background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
-  .lv { display: flex; gap: 8px; padding: 10px 16px 0; overflow-x: auto; scrollbar-width: none; }
+  .lv { display: flex; flex: 0 0 auto; gap: 8px; padding: 10px 16px 0; overflow-x: auto; scrollbar-width: none; }   /* never squeezed by the stage: the floor pills keep their height (3D) */
   .lv button { font: inherit; font-weight: 500; flex: 0 0 auto; border: 1px solid var(--divider-color, #888); border-radius: 999px; padding: 7px 18px; cursor: pointer; color: var(--primary-text-color); background: transparent; transition: background .15s, color .15s; }
   .lv button:hover { background: var(--secondary-background-color, #0001); }
   .lv button.on { background: var(--primary-color, #03a9f4); border-color: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
@@ -199,7 +199,7 @@ class PlanternCard extends HTMLElement {
     const build3d = () => {
       const list = shown();
       // several floors at once are pulled apart, so the lower ones are not hidden under the upper ones; the header's stack switch (CD4) chooses otherwise
-      const levels = cardStack(model, list, stackChoice());
+      const levels = cardStack(model, list, stackChoice(), pool);
       view3d.build({ level: list[0], geo: list[0] && geos.get(list[0].id), levels: levels.map(st => ({ ...st, geo: geos.get(st.level.id) })), settings: resolveSettings(loc, list[0]), fixtureLabel, ...looks, doorStates: doorStates(model, bindings, getState) });
       view3d.setShadows(SHADOW_COUNT[shadowLevel(resolveSettings(loc, list[0]).render3d, deviceKind(), cfg.shadows)]);
     };
@@ -298,7 +298,7 @@ class PlanternCard extends HTMLElement {
       }
       this._mode = mode; mark(mode);
       plansEl.hidden = mode === '3d'; this._v3dEl.hidden = mode !== '3d';
-      stackEl.hidden = mode !== '3d'; markStack();
+      stackEl.hidden = mode !== '3d' || levelMode === 'together' || levelMode === 'single'; markStack();   // one or several floors ticked: no choice of floors to stack
       if (mode === '3d') view3d.render(); else requestAnimationFrame(() => this._plans.forEach(p => p.view.fit()));
     };
     for (const b of hd.querySelectorAll('.view button')) b.onclick = () => setMode(b.dataset.v);
