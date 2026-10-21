@@ -22,7 +22,7 @@ import { isShared, edgeOfRef, boundEdges } from '../geometry/bound.js';
 import { generateWalls, PAIR_ANGLE } from '../capture/walls.js';
 import { wallProfile } from '../geometry/walls.js';
 import { OPENING_TYPES, OPENING_DEFAULTS, checkOpening, openingAssumed, DOOR_OPENS, WINDOW_OPENS } from '../model/openings.js';
-import { FIXTURE_KINDS, FIXTURE_DEFAULTS, checkFixture, stripForm } from '../model/fixtures.js';
+import { FIXTURE_KINDS, FIXTURE_DEFAULTS, checkFixture, stripForm, lampOnObject } from '../model/fixtures.js';
 import { checkMaterials, materialUse } from '../model/materials.js';
 import { checkSolid } from '../model/solids.js';
 import { checkStairs } from '../model/stairs.js';
@@ -925,12 +925,13 @@ export function addFixture(model, levelId, spec = {}, options = {}) {
   const used = new Set(model.levels.flatMap(l => (l.fixtures || []).map(f => f.id)));
   let n = 1; while (used.has(`f_${kind}_${n}`)) n++;
   const fx = { id: `f_${kind}_${n}`, ...(spec.name ? { name: String(spec.name).trim() } : {}), kind };
-  const form = stripForm({ kind, attach: spec.attach });
-  if (form === 'object') fx.attach = { object: spec.attach.object, edge: spec.attach.edge ?? 0, at: spec.attach.at ?? 'bottom', ...(spec.attach.offset ? { offset: spec.attach.offset } : {}), ...(spec.attach.length !== undefined ? { length: spec.attach.length } : {}), ...(spec.attach.inset ? { inset: spec.attach.inset } : {}) };
+  const form = stripForm({ kind, attach: spec.attach }), onObject = lampOnObject({ kind, attach: spec.attach });
+  if (onObject) fx.attach = { object: spec.attach.object, ...(Array.isArray(spec.attach.offset) && (spec.attach.offset[0] || spec.attach.offset[1]) ? { offset: spec.attach.offset.map(Number) } : {}), ...(spec.attach.up ? { up: Number(spec.attach.up) } : {}) };
+  else if (form === 'object') fx.attach = { object: spec.attach.object, edge: spec.attach.edge ?? 0, at: spec.attach.at ?? 'bottom', ...(spec.attach.offset ? { offset: spec.attach.offset } : {}), ...(spec.attach.length !== undefined ? { length: spec.attach.length } : {}), ...(spec.attach.inset ? { inset: spec.attach.inset } : {}) };
   else if (form === 'opening') fx.attach = { opening: spec.attach.opening, side: spec.attach.side ?? 'right', at: spec.attach.at ?? 'sill' };
   else if (spec.attach) fx.attach = { side: 'right', ...spec.attach };
   else if (spec.pos) fx.pos = spec.pos.map(Number);
-  const derived = form === 'object' || form === 'opening';           // its height is the height of what it follows
+  const derived = form === 'object' || form === 'opening' || onObject;           // its height is the height of what it follows
   const zDefault = kind === 'strip' ? FIXTURE_DEFAULTS.strip.wallZ : kind === 'switch' ? FIXTURE_DEFAULTS.switch.z : spec.attach ? FIXTURE_DEFAULTS.wallLamp.z : (spec.pos ? roomCeiling(lv, roomAt(lv, spec.pos, pointInPolygon)) : lv.ceilingHeight ?? 2400);
   if (!derived) fx.z = Number(spec.z ?? zDefault);
   if (kind === 'lamp') fx.radius = Number(spec.radius ?? FIXTURE_DEFAULTS.lamp.radius);
@@ -999,7 +1000,7 @@ export function setObject(model, levelId, id, props, options = {}) {
 export function deleteObject(model, levelId, id, options = {}) {
   const lv = levelOf(model, levelId);
   if (!lv?.objects?.some(x => x.id === id)) return refuse(model, `no object "${id}" on level "${levelId}"`);
-  const held = (lv.fixtures || []).filter(x => x.kind === 'strip' && x.attach?.object === id).map(x => x.id);
+  const held = (lv.fixtures || []).filter(x => (x.kind === 'strip' || x.kind === 'lamp') && x.attach?.object === id).map(x => x.id);
   if (held.length) return refuse(model, `${id}: ${held.join(', ')} ${held.length > 1 ? 'are' : 'is'} attached to it; delete ${held.length > 1 ? 'them' : 'it'} first`);
   const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, objects: l.objects.filter(x => x.id !== id) });
   return finish({ ...model, levels }, levelId, {}, options);
@@ -1036,6 +1037,7 @@ export function setFixture(model, levelId, id, props, options = {}) {
   for (const k of keys) { if (props[k] === null) delete next[k]; else next[k] = props[k]; }
   if (props.pos) delete next.attach;
   if (props.attach) delete next.pos;
+  if (lampOnObject(next)) delete next.z;                       // its height is the object's bottom plus attach.up
   let zDefaulted = false;
   if (next.kind === 'strip') {                                    // on an object or an opening its height is theirs; on a wall it is its own
     const derived = stripForm(next) === 'object' || stripForm(next) === 'opening';

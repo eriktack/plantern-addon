@@ -2,7 +2,7 @@
 // A fixture is either free (`pos` [x, y], e.g. a ceiling lamp) or on a wall face (`attach` { wall,
 // side, offset, gap? }, e.g. a switch or a wall lamp); `z` is its height above the floor in mm.
 // An LED strip (`kind: "strip"`) is a run of light attached to a wall face, an object or a window (see stripForm()), so it follows it.
-// A lamp that stands in a window is `attach.opening` (the opening's id) beside wall/side/offset.
+// A lamp that stands in a window is `attach.opening` (the opening's id) beside wall/side/offset; a lamp that follows an object is `attach.object` (lampOnObject()).
 // Lamps carry `radius` (how far their light reaches in the plan). HA bindings live in location.json.
 
 import { wallProfile } from '../geometry/walls.js';
@@ -17,6 +17,13 @@ export const FIXTURE_DEFAULTS = { lamp: { radius: 3000 }, switch: { z: 1100 }, w
  * What an LED strip is attached to (decision 122): 'wall' ({ wall, side, offset, length }), 'object' ({ object, edge 0-3, at 'bottom' | 'top' }:
  * along one side of the object's footprint) or 'opening' ({ opening, side, at 'sill' | 'head' }: along the window or door); null for anything else.
  */
+/**
+ * A lamp that follows an object (decision 277): `attach: { object, offset?: [dx, dy], up? }`. It stands `offset` mm from the middle of the object's
+ * footprint, in the object's own axes (dx along its width, dy out from its back), and `up` mm above the object's bottom (default 0), so it
+ * moves with the object. It has no `z` of its own. A light in a shelf unit, on a cabinet, over a table.
+ */
+export const lampOnObject = fx => fx.kind === 'lamp' && fx.attach?.object !== undefined;
+
 export const stripForm = fx => (fx.kind !== 'strip' || !fx.attach ? null : fx.attach.object !== undefined ? 'object' : fx.attach.opening !== undefined && fx.attach.wall === undefined ? 'opening' : 'wall');
 
 /**
@@ -24,6 +31,10 @@ export const stripForm = fx => (fx.kind !== 'strip' || !fx.attach ? null : fx.at
  * bottom or top, the opening's sill or head), so it moves with it. null when that object or opening is missing.
  */
 export function fixtureHeight(fx, level) {
+  if (lampOnObject(fx)) {
+    const o = (level.objects || []).find(x => x.id === fx.attach.object);
+    return o ? (o.z ?? 0) + (fx.attach.up ?? 0) : null;
+  }
   const form = stripForm(fx);
   if (form === 'object') {
     const o = (level.objects || []).find(x => x.id === fx.attach.object);
@@ -40,7 +51,16 @@ export function fixtureHeight(fx, level) {
 export function checkFixture(fx, level) {
   const errors = [], warnings = [];
   if (!FIXTURE_KINDS.includes(fx.kind)) errors.push(`kind must be ${FIXTURE_KINDS.join(' or ')}`);
-  const strip = fx.kind === 'strip', form = stripForm(fx);
+  const strip = fx.kind === 'strip', form = stripForm(fx), onObject = lampOnObject(fx);
+  if (onObject) {
+    const ob = (level.objects || []).find(x => x.id === fx.attach.object);
+    if (!ob) errors.push(`attached to missing object "${fx.attach.object}"`);
+    const off = fx.attach.offset;
+    if (off !== undefined && !(Array.isArray(off) && off.length === 2 && off.every(Number.isFinite))) errors.push('attach.offset is [dx, dy] in mm from the middle of the object');
+    if (fx.attach.up !== undefined && !(Number.isFinite(fx.attach.up) && fx.attach.up >= 0)) errors.push('attach.up is mm above the bottom of the object, 0 or more');
+    if (ob?.size && Number.isFinite(fx.attach.up) && fx.attach.up > (ob.size[2] ?? Infinity) + 1) warnings.push(`is ${Math.round(fx.attach.up)} mm above the object, which is ${Math.round(ob.size[2])} mm tall`);
+    if (fx.pos) errors.push('a lamp on an object has no pos of its own');
+  }
   // a vertical strip (fixes list 48) runs up the wall from its z by its length: it must fit under the ceiling
   if (strip && form === 'wall' && fx.attach?.vertical !== undefined && typeof fx.attach.vertical !== 'boolean') errors.push('attach.vertical is true or left out');
   if (strip && form === 'wall' && fx.attach?.vertical === true && fx.z !== undefined && fx.attach.length > 0 && level.ceilingHeight && fx.z + fx.attach.length > level.ceilingHeight) warnings.push('the vertical strip runs above the ceiling');
@@ -68,7 +88,7 @@ export function checkFixture(fx, level) {
   } else {
     if (!fx.attach && !fx.pos) errors.push('needs a position (pos) or a wall it is on (attach)');
   }
-  const own = !strip || form === 'wall';                           // a strip on an object or a window takes its height from it
+  const own = (!strip || form === 'wall') && !onObject;                           // a strip on an object or a window takes its height from it
   if (fx.kind === 'switch' && !fx.attach) errors.push('a switch sits on a wall (attach)');
   if (own && !Number.isFinite(fx.z)) errors.push('z (height above the floor) must be a number of mm');
   let top = level.ceilingHeight ?? 2400;

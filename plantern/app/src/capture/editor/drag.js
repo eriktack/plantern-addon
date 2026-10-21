@@ -2,7 +2,7 @@
 
 import { attachNear as attachOnNearestWall, snapMove, moveCapture, dragCorner, moveWall, dragWallEnd, stripEndDrag, turnStairs, moveStairsStart, resizeObject, openingDrag, rotateObject, pullOff, wallSnap, boxPosForMiddle } from '../drag.js';
 import { hasBody, wallCut } from '../../geometry/walls.js';
-import { stripForm } from '../../model/fixtures.js';
+import { stripForm, lampOnObject } from '../../model/fixtures.js';
 import { isHosted } from '../../model/hosted.js';
 import { roundMovedTo } from '../round.js';
 import { nearestPoint } from '../../tools/measure-core.js';
@@ -75,7 +75,7 @@ export function dragStart(e) {
   if (!el) return;
   const kind = el.dataset.kind, id = el.dataset.id;
   if (Ed.editing && !(Ed.editing.kind === kind && Ed.editing.id === id)) return;
-  { const sx = kind === 'fixture' && level().fixtures?.find(f => f.id === id); if (sx?.kind === 'strip' && stripForm(sx) !== 'wall') return; }   // on an object or a window it follows that: move that
+  { const sx = kind === 'fixture' && level().fixtures?.find(f => f.id === id); if ((sx?.kind === 'strip' && stripForm(sx) !== 'wall') || (sx && lampOnObject(sx))) return; }   // on an object or a window it follows that: move that
   { const ho = kind === 'object' && level().objects?.find(o => o.id === id); if (ho && isHosted(ho)) { setStatus(`${id} stands in its opening and follows it: drag the opening, or change Placed in its panel`); return; } }
   Ed.pan = null;                                                    // this pointer moves the thing, not the plan
   // where the thing's middle is against the pointer, kept while dragging (the thing does not jump under the pointer)
@@ -292,8 +292,8 @@ export function dragMove(e) {
       if (o.attach?.wall) {
         // pulled well away from its wall it stands free, facing the same way (UX15); else it slides along the nearest wall
         const face = Ed.curGeo.resolveAttach({ ...o.attach, offset: o.attach.offset + o.size[0] / 2 });
-        const free = face && pullOff(o, p, face.p, face.dir);
-        if (free && !isHosted(o)) { props = { attach: null, ...free, z: o.z ?? 0 }; note = ': off the wall, standing free'; }
+        const free = face && pullOff(o, p, face.p, face.dir, { away: e.altKey ? -Infinity : 300 });   // Alt: off the wall at once, no snapping back to it
+        if (free && !isHosted(o)) { props = { attach: null, ...free, z: o.z ?? 0 }; note = e.altKey ? ': off the wall, standing free (Alt)' : ': off the wall, standing free'; }
         else { props = { attach: attachNear(p, o.attach, o.size[0]) }; if (o !== o0) { props = { ...props, pos: null, rotationDeg: null }; note = `: on ${props.attach.wall} (Alt keeps it free)`; } }
       } else {
         // a free box: pos is the corner it is measured from, so its middle goes on the pointer; near a wall face it hangs on it (UX15)

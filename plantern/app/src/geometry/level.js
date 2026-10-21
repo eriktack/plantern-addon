@@ -1,6 +1,6 @@
 import { add, mul } from './vec.js';
 import { polylineMid } from './strip.js';
-import { fixtureHeight, stripForm } from '../model/fixtures.js';
+import { fixtureHeight, stripForm, lampOnObject } from '../model/fixtures.js';
 import { isHosted, hostedPlacement } from '../model/hosted.js';
 import { openingSymbol } from './openings.js';
 import { isHingedDoor, doorOpen } from '../model/doors.js';
@@ -68,7 +68,15 @@ export function buildLevelGeometry(level) {
   // an object hosted by an opening is where the opening is (hosted.js); the strips on objects read the heights of the level as it is
   const levelZ = { ...level, objects: (level.objects || []).map(o => (isHosted(o) ? { ...o, z: objectZ(o) } : o)) };
   const fixtureZ = fx => fixtureHeight(fx, levelZ);
-  const fixturePos = fx => (fx.kind === 'strip' ? (fixtureLine(fx) && polylineMid(fixtureLine(fx))) : fx.attach ? resolveAttach(fx.attach)?.p : fx.pos) ?? null;
+  /** The plan point of a lamp that follows an object: the middle of its footprint plus attach.offset in the object's own axes (u along its width, v out from its back). */
+  function lampOnObjectPos(fx) {
+    const ob = (level.objects || []).find(x => x.id === fx.attach.object), fp = ob && objectFootprint(ob);
+    if (!fp) return null;
+    const unit = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / L, (b[1] - a[1]) / L]; };
+    const u = unit(fp[0], fp[1]), v = unit(fp[0], fp[3]), [dx, dy] = fx.attach.offset ?? [0, 0];
+    return [(fp[0][0] + fp[2][0]) / 2 + u[0] * dx + v[0] * dy, (fp[0][1] + fp[2][1]) / 2 + u[1] * dx + v[1] * dy];
+  }
+  const fixturePos = fx => (lampOnObject(fx) ? lampOnObjectPos(fx) : fx.kind === 'strip' ? (fixtureLine(fx) && polylineMid(fixtureLine(fx))) : fx.attach ? resolveAttach(fx.attach)?.p : fx.pos) ?? null;
 
   /** Footprint of an attached box object: width along the wall, depth away from the face. */
   function objectFootprint(o) {

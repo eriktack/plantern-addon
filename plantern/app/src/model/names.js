@@ -48,6 +48,7 @@ export function fallbackName(e, kind, { roomName = '', blueprintName = () => '' 
     if (e.kind === 'switch') return inRoom('Switch');
     if (e.kind === 'strip') return inRoom('LED strip');
     if (e.attach?.opening) return inRoom('Lamp in a window');
+    if (e.attach?.object !== undefined) return inRoom('Light');
     return inRoom(e.attach ? 'Wall lamp' : 'Ceiling lamp');
   }
   if (kind === 'opening') return `${prettyId(e.type)} ${e.width} mm`;

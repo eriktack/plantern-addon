@@ -203,7 +203,7 @@ async function init() {
   $('oApply').onclick = applyOpening;
   const placeFixture = async (spec, what) => {
     if (!(await mayLeave())) return;
-    if (!dropFresh([spec.attach?.wall, spec.attach?.opening])) return;
+    if (!dropFresh([spec.attach?.wall, spec.attach?.opening, spec.attach?.object])) return;
     const base = Ed.model, r = addFixture(Ed.model, Ed.levelId, spec, opts());
     if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
     commit(r.model); enterEdit('fixture', r.fixture.id, { ask: false }); startFresh('fixture', r.fixture.id, base, spec.kind === 'switch' ? 'switch' : spec.kind === 'strip' ? 'LED strip' : 'lamp');
@@ -301,6 +301,11 @@ async function init() {
     let edge = 0;
     if (a) { let far = -Infinity; fp.forEach((_, i) => { const d = (mid(i)[0] - a.p[0]) * a.dir[0] + (mid(i)[1] - a.p[1]) * a.dir[1]; if (d > far) { far = d; edge = i; } }); }
     placeFixture({ kind: 'strip', attach: { object: o.id, edge, at: 'bottom' } }, `under the ${a ? 'front' : 'first side'} of the object; choose the side and whether it is under or on top`);
+  };
+  $('obAddLight').onclick = () => {                                // a light in the middle of the object, half way up: set its place and height
+    const o = object();
+    if (!o) return;
+    placeFixture({ kind: 'lamp', attach: { object: o.id, up: Math.round((o.size?.[2] ?? 1000) / 2) }, radius: 1200 }, 'in the middle of the object, half way up; set where it stands and how high');
   };
   act.openingStrip = () => {                                // along the window (its sill) or door (its top), on the room side
     const o = opening(), w = o && level().walls.find(v => v.id === o.wall);

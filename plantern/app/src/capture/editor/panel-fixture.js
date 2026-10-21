@@ -1,7 +1,7 @@
 // Editor page: panel-fixture. Split from ui.js (ui-consistency plan, UX34): no behaviour change, only where the code lives.
 
 import { wallInfo, offsetFrom, openingInfo, offsetTo } from '../../edit/inspect.js';
-import { stripForm } from '../../model/fixtures.js';
+import { stripForm, lampOnObject } from '../../model/fixtures.js';
 import { wallName } from '../labels.js';
 import { displayName, nameChange } from '../../model/names.js';
 import { pointInPolygon } from '../../geometry/polygon.js';
@@ -29,14 +29,16 @@ export function showFixture() {
   const x = fixture();
   if (!x) { Ed.fixtureId = null; $('fixturePanel').hidden = true; return; }
   const lv = level(), w = x.attach && lv.walls.find(v => v.id === x.attach.wall), info = w && wallInfo(lv, w.id);
-  const form = stripForm(x), onObject = form === 'object' ? lv.objects?.find(o => o.id === x.attach.object) : null, onOpening = form === 'opening' ? lv.openings?.find(o => o.id === x.attach.opening) : null;
+  const lampObj = lampOnObject(x), form = stripForm(x), onObject = form === 'object' || lampObj ? lv.objects?.find(o => o.id === x.attach.object) : null, onOpening = form === 'opening' ? lv.openings?.find(o => o.id === x.attach.opening) : null;
   const nm = ids => ids.map(id => lv.rooms?.find(r => r.id === id)?.name || id).join(', ') || 'outside';
   $('xTitle').innerHTML = titleHtml(x);
-  $('xInfo').innerHTML = `${x.kind === 'switch' ? 'switch' : x.kind === 'strip' ? 'LED strip' : x.attach ? 'wall lamp' : 'lamp'}${w ? ` on <a href="#" id="xWall" title="${esc(w.id)}">${esc(refName(w.id))}</a>` : ''}${form === 'object' || form === 'opening' ? ` on <a href="#" id="xTargetLink" title="${esc(x.attach.object ?? x.attach.opening)}">${esc(refName(x.attach.object ?? x.attach.opening))}</a>` : ''}` + (x.assumed?.length ? ` · <b class="warn">still default: ${esc(x.assumed.join(', '))}</b>` : '');
+  $('xInfo').innerHTML = `${x.kind === 'switch' ? 'switch' : x.kind === 'strip' ? 'LED strip' : lampObj ? 'light' : x.attach ? 'wall lamp' : 'lamp'}${w ? ` on <a href="#" id="xWall" title="${esc(w.id)}">${esc(refName(w.id))}</a>` : ''}${form === 'object' || form === 'opening' || lampObj ? ` on <a href="#" id="xTargetLink" title="${esc(x.attach.object ?? x.attach.opening)}">${esc(refName(x.attach.object ?? x.attach.opening))}</a>` : ''}` + (x.assumed?.length ? ` · <b class="warn">still default: ${esc(x.assumed.join(', '))}</b>` : '');
   $('xWall')?.addEventListener('click', e => { e.preventDefault(); afterLeave(() => enterEdit('wall', w.id))(); });
-  $('xTargetLink')?.addEventListener('click', e => { e.preventDefault(); afterLeave(() => enterEdit(form, x.attach.object ?? x.attach.opening))(); });
-  for (const [id, show] of [['xRadiusRow', x.kind !== 'switch'], ['xOffsetRow', !!w], ['xLenRow', (!!w && x.kind === 'strip') || form === 'object'], ['xVertRow', !!w && x.kind === 'strip'], ['xStartRow', form === 'object'], ['xInsetRow', form === 'object'], ['xFromRow', !!w], ['xSideRow', !!w], ['xInRow', !!w && x.kind === 'lamp'], ['xXRow', !x.attach], ['xYRow', !x.attach], ['xTargetRow', !!onObject || !!onOpening || form === 'object' || form === 'opening'], ['xEdgeRow', form === 'object'], ['xAtRow', form === 'object' || form === 'opening']]) $(id).hidden = !show;
+  $('xTargetLink')?.addEventListener('click', e => { e.preventDefault(); afterLeave(() => enterEdit(lampObj ? 'object' : form, x.attach.object ?? x.attach.opening))(); });
+  for (const [id, show] of [['xRadiusRow', x.kind !== 'switch'], ['xOffsetRow', !!w], ['xLenRow', (!!w && x.kind === 'strip') || form === 'object'], ['xVertRow', !!w && x.kind === 'strip'], ['xStartRow', form === 'object'], ['xInsetRow', form === 'object'], ['xFromRow', !!w], ['xSideRow', !!w], ['xInRow', !!w && x.kind === 'lamp'], ['xXRow', !x.attach || lampObj], ['xYRow', !x.attach || lampObj], ['xTargetRow', !!onObject || !!onOpening || form === 'object' || form === 'opening' || lampObj], ['xEdgeRow', form === 'object'], ['xAtRow', form === 'object' || form === 'opening']]) $(id).hidden = !show;
   $('xSideRow').hidden = !(w || form === 'opening');
+  $('xXRow').querySelector('small').textContent = lampObj ? 'mm from the middle of the object, along its width' : 'mm, east';
+  $('xYRow').querySelector('small').textContent = lampObj ? 'mm from the middle, out from its back' : 'mm, north';
   $('xZ').closest('label').hidden = form === 'object' || form === 'opening';                       // its height is the height of what it follows
   if (w) {
     fillFrom('xFrom', w, x.id);
@@ -50,9 +52,16 @@ export function showFixture() {
     }
   }
   if (form === 'opening' && onOpening) { const oi = wallInfo(lv, onOpening.wall); if (oi) { $('xSide').options[0].textContent = nm(oi.sides.right); $('xSide').options[1].textContent = nm(oi.sides.left); } }
-  $('xZNote').textContent = `mm above the floor (ceiling ${lv.ceilingHeight ?? 2400})`;
+  $('xZNote').textContent = lampObj ? 'mm above the bottom of the object' : `mm above the floor (ceiling ${lv.ceilingHeight ?? 2400})`;
   if (Ed.fixtureFormFor !== x) {
-    $('xName').value = x.name ?? ''; $('xZ').value = x.z ?? ''; $('xRadius').value = x.radius ?? '';
+    $('xName').value = x.name ?? ''; $('xZ').value = lampObj ? x.attach.up ?? 0 : x.z ?? ''; $('xRadius').value = x.radius ?? '';
+    if (lampObj) {                                                  // the object it follows, and where it stands in it
+      $('xTarget').innerHTML = (lv.objects || []).map(o => `<option value="${esc(o.id)}">${esc(o.name || refName(o.id))}</option>`).join('');
+      if (!(lv.objects || []).some(o => o.id === x.attach.object)) $('xTarget').insertAdjacentHTML('beforeend', `<option value="${esc(x.attach.object)}">${esc(x.attach.object)} (missing)</option>`);
+      $('xTarget').value = x.attach.object;
+      $('xTargetNote').textContent = 'the object it follows (it moves with it)';
+      $('xX').value = x.attach.offset?.[0] ?? 0; $('xY').value = x.attach.offset?.[1] ?? 0;
+    }
     if (form === 'object' || form === 'opening') {                // what it follows, and which edge of it
       const list = form === 'object' ? lv.objects || [] : lv.openings || [];
       $('xTarget').innerHTML = list.map(o => `<option value="${esc(o.id)}">${esc(o.name || refName(o.id))}</option>`).join('');
@@ -252,9 +261,14 @@ export function applyFixture() {
   const changed = (id, v) => $(id).value.trim() !== String(v ?? '');
   const nm = nameChange(x.name, $('xName').value);
   if (nm !== undefined) props.name = nm;
-  for (const [id, k] of [['xZ', 'z'], ['xRadius', 'radius']]) if (!$(id).closest('label').hidden && changed(id, x[k])) props[k] = num(id);
+  for (const [id, k] of [['xZ', 'z'], ['xRadius', 'radius']]) if (!(lampOnObject(x) && k === 'z') && !$(id).closest('label').hidden && changed(id, x[k])) props[k] = num(id);
   const form = stripForm(x);
-  if (form === 'object') {
+  if (lampOnObject(x)) {
+    const dx = num('xX') || 0, dy = num('xY') || 0, up = num('xZ') || 0;
+    const [ox, oy] = x.attach.offset ?? [0, 0];
+    if ([dx, dy, up].some(v => !Number.isFinite(v))) { $('xErr').textContent = 'Values must be numbers of mm.'; return; }
+    if ($('xTarget').value !== x.attach.object || dx !== ox || dy !== oy || up !== (x.attach.up ?? 0)) props.attach = { object: $('xTarget').value, ...(dx || dy ? { offset: [dx, dy] } : {}), ...(up ? { up } : {}) };
+  } else if (form === 'object') {
     const opt = id => ($(id).value.trim() === '' ? undefined : num(id));
     const start = opt('xStart'), len = opt('xLen'), inset = opt('xInset');
     const next = { object: $('xTarget').value, edge: Number($('xEdge').value), at: $('xAt').value, ...(start ? { offset: start } : {}), ...(len !== undefined ? { length: len } : {}), ...(inset ? { inset } : {}) };
@@ -275,7 +289,7 @@ export function applyFixture() {
     }
   }
   if (x.pos && (changed('xX', x.pos[0]) || changed('xY', x.pos[1]))) props.pos = [num('xX'), num('xY')];
-  if (props.attach && [props.attach.offset, props.attach.length, props.attach.inset].some(v => v !== undefined && !Number.isFinite(v))) { $('xErr').textContent = 'Values must be numbers of mm.'; return; }
+  if (props.attach && [props.attach.offset, props.attach.length, props.attach.inset].some(v => v !== undefined && (Array.isArray(v) ? !v.every(Number.isFinite) : !Number.isFinite(v)))) { $('xErr').textContent = 'Values must be numbers of mm.'; return; }
   if (Object.entries(props).some(([k, v]) => k !== 'name' && k !== 'attach' && (Array.isArray(v) ? v.some(n => !Number.isFinite(n)) : typeof v === 'object' ? !Number.isFinite(v.offset) : !Number.isFinite(v)))) { $('xErr').textContent = 'Values must be numbers of mm.'; return; }
   if (!Object.keys(props).length && !bindingChanged) { $('xErr').textContent = 'Nothing changed.'; return; }
   const r = Object.keys(props).length ? setFixture(Ed.model, Ed.levelId, Ed.fixtureId, props, opts()) : { model: Ed.model, report: { errors: [] } };

@@ -202,7 +202,10 @@ export function duplicate(model, levelId, kind, id, options = {}) {
     if (!x) return no(`no fixture "${id}"`);
     const spec = { ...fixtureSpecFrom(x), ...named(x, lv.fixtures) };
     let r;
-    if (x.kind === 'strip' && x.attach.object !== undefined) {                          // another side of the same object (not on top of it)
+    if (x.kind === 'lamp' && x.attach?.object !== undefined) {                          // another light in the same object, 150 mm along its width
+      const [dx, dy] = x.attach.offset ?? [0, 0];
+      r = addFixture(model, levelId, { ...spec, attach: { ...x.attach, offset: [dx + 150, dy] } }, options);
+    } else if (x.kind === 'strip' && x.attach.object !== undefined) {                          // another side of the same object (not on top of it)
       r = addFixture(model, levelId, { ...spec, attach: { ...x.attach, edge: (x.attach.edge + 2) % 4 } }, options);
     } else if (x.kind === 'strip' && x.attach.opening !== undefined && x.attach.wall === undefined) {  // the other edge of the window
       r = addFixture(model, levelId, { ...spec, attach: { ...x.attach, at: x.attach.at === 'head' ? 'sill' : 'head' } }, options);

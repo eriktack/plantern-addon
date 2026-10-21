@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.6
+
+- Bookshelves take a height and optional feet (the shelf spacing follows from the height), objects can carry a light of their own (+ Light in the object panel), Alt now pulls an object off its wall at once while dragging, and beds get pillows.
+
 ## 0.6.5
 
 - A tall vertical LED strip on a short wall is no longer refused: its length is its height, not a run along the wall (for example the strips beside a shelf opening).

@@ -2,7 +2,8 @@ import { primitives, booleans, transforms, geometries } from '../lib/jscad.js';
 
 // ASSUMED: width is the overall width and the bays adapt to it: the clear bay width is the width minus one support more than there are bays, divided by the number of bays (the width is exact, as typed).
 // ASSUMED: A bay is at least 150 mm clear; when the width is too narrow for the columns asked for, fewer columns are used (the width wins).
-// ASSUMED: rows counts clear storage openings; shelfSpacing is the clear vertical opening; rows + 1 horizontal boards include bottom and top (usable compartments).
+// ASSUMED: height is the overall height of the unit (feet included; for the String variant the top of its wire panels). rows counts clear storage openings and rows + 1 horizontal boards include bottom and top; the clear opening of each row is worked out from the height: (height - feet - (rows + 1) boards) / rows, so no shelf spacing is typed (decision 276).
+// ASSUMED: feetHeight (open and glass_door only; 0 = none, the default) lifts the whole unit on four 40 mm square feet that high, 15 mm in from each corner; height includes them. The feet are part of the frame (one material).
 // ASSUMED: Cabinet sides, dividers and shelves are 18 mm thick; optional backs are 12 mm thick (timber cabinetry).
 // ASSUMED: Shelves and back panels enter their supporting panels by 5 mm (connected joints).
 // ASSUMED: The glass variants (glass_door, corner_glass_door) have closed, unframed 6 mm panes overlapping opening edges by 5 mm (simple glazed fronts); the other variants have no glass.
@@ -21,7 +22,6 @@ import { primitives, booleans, transforms, geometries } from '../lib/jscad.js';
 // ASSUMED: The String variant is String-style shelving standing on the floor: boards between wire ladder panels at every bay boundary, 10 mm wires with centre lines 5 mm inside the footprint, boards ending at the wire centre lines, panels from z = 0 to 80 mm above the top board, a rung through the middle of every board, one halfway to the next board and a last rung 10 mm below the panel top (same construction as the String wall shelf).
 // ASSUMED: String boards are 18 mm thick like the other variants and have no back panel or doors; the wires are their own part so they can have another material.
 // ASSUMED: Hinges, handles, fasteners, adjustable shelf holes and decorative plinths are omitted (simplified solid geometry).
-// UNSURE: Shelf spacing could mean vertical pitch; it is interpreted as clear opening height.
 // UNSURE: Glass thickness and door arrangement are unspecified; unframed closed panes are used.
 // UNSURE: Utility and String ignore backPanel because the items describe open shelving.
 // UNSURE: A String bookshelf is usually hung on a wall; here it stands on the floor, as the other bookshelves do (the wall version is the wall shelf's String variant).
@@ -39,7 +39,7 @@ export const meta = {
   summary: 'A bookshelf of a given width: open, glass-door, corner, String-style wire frame or utility shelving.',
   frontView: ['corner_unit', 'corner_glass_door'],
   description:
-    'A floor-standing bookshelf of a given overall width, with bays that adapt to it and optional closed glass doors, including an L-shaped corner unit, a String-style unit with boards between wire ladder panels, and open-post utility shelving. Assumed: width is the overall width and the bays adapt to it (clear bay = width minus one support more than there are bays, divided by the bays; fewer columns are used when a bay would be under 150 mm), rows counts clear openings, shelfSpacing is clear vertical height, and rows plus one boards include bottom and top; cabinet sides, dividers and shelves 18 mm thick and optional backs 12 mm thick; shelf and back joints overlap supporting panels by 5 mm; the glass variants have closed unframed 6 mm panes overlapping opening edges by 5 mm; panes sit 2 mm behind the front of the sides, glazed shelves start 4 mm behind the front plane for a 4 mm pane overlap, and the glass part defaults to the glass material; straight cabinets have one full-height pane per column leaving 8 mm of intermediate dividers visible; corner units have a front run of the given width with frontColumns bays and a side run with sideColumns bays, the side run extending forward from the right end, backed at +x and accessed from -x, sideWidth being the overall extent of the L along the side so the side run reaches sideWidth minus depth beyond the front, shared equally by its bays; corner junction has no transverse closing panel and shelf runs overlap 5 mm; corner units require 100 mm of exposed front; corner front glazing divides exposed width into equal leaves no wider than the clear bay width with 3 mm gaps, while the side run has one leaf per bay; the String variant has 10 mm wire ladder panels at every bay boundary with centre lines 5 mm inside the footprint, boards ending at the wire centre lines, panels from the floor to 80 mm above the top board, a rung through every board, one halfway to the next and a last one 10 mm below the top, and the wires as their own part; utility posts are 35 mm square at the front and rear of every bay boundary, with 5 mm shelf penetration and full-depth shelves, without backs or doors; hinges, handles, fasteners, shelf holes and plinths omitted.',
+    'A floor-standing bookshelf of a given overall width, with bays that adapt to it and optional closed glass doors, including an L-shaped corner unit, a String-style unit with boards between wire ladder panels, and open-post utility shelving. Assumed: width is the overall width and the bays adapt to it (clear bay = width minus one support more than there are bays, divided by the bays; fewer columns are used when a bay would be under 150 mm), height is the overall height and the clear opening of each row follows from it (height minus the feet minus the boards, divided by the rows), rows counts the openings and rows plus one boards include bottom and top, and open and glass-door units can stand on four 40 mm feet of feetHeight (included in the height); cabinet sides, dividers and shelves 18 mm thick and optional backs 12 mm thick; shelf and back joints overlap supporting panels by 5 mm; the glass variants have closed unframed 6 mm panes overlapping opening edges by 5 mm; panes sit 2 mm behind the front of the sides, glazed shelves start 4 mm behind the front plane for a 4 mm pane overlap, and the glass part defaults to the glass material; straight cabinets have one full-height pane per column leaving 8 mm of intermediate dividers visible; corner units have a front run of the given width with frontColumns bays and a side run with sideColumns bays, the side run extending forward from the right end, backed at +x and accessed from -x, sideWidth being the overall extent of the L along the side so the side run reaches sideWidth minus depth beyond the front, shared equally by its bays; corner junction has no transverse closing panel and shelf runs overlap 5 mm; corner units require 100 mm of exposed front; corner front glazing divides exposed width into equal leaves no wider than the clear bay width with 3 mm gaps, while the side run has one leaf per bay; the String variant has 10 mm wire ladder panels at every bay boundary with centre lines 5 mm inside the footprint, boards ending at the wire centre lines, panels from the floor to 80 mm above the top board, a rung through every board, one halfway to the next and a last one 10 mm below the top, and the wires as their own part; utility posts are 35 mm square at the front and rear of every bay boundary, with 5 mm shelf penetration and full-depth shelves, without backs or doors; hinges, handles, fasteners, shelf holes and plinths omitted.',
   params: [
     {
       key: 'variant',
@@ -113,13 +113,25 @@ export const meta = {
       max: 8,
     },
     {
-      key: 'shelfSpacing',
-      label: 'Shelf spacing',
+      key: 'height',
+      label: 'Height',
       unit: 'mm',
-      default: 300,
-      min: 250,
-      max: 400,
+      default: 1600,
+      min: 400,
+      max: 2400,
       step: 10,
+      hint: 'Overall height, feet included. The shelf spacing follows from it and the number of rows.',
+    },
+    {
+      key: 'feetHeight',
+      label: 'Feet height',
+      unit: 'mm',
+      default: 0,
+      min: 0,
+      max: 300,
+      step: 10,
+      appliesTo: ['open', 'glass_door'],
+      hint: 'Four feet this high under the unit; 0 = it stands on the floor.',
     },
     {
       key: 'depth',
@@ -152,16 +164,17 @@ export const meta = {
   sizeParams: {
     x: 'width',
     y: { default: 'depth', corner_unit: 'sideWidth', corner_glass_door: 'sideWidth' },
+    z: 'height',
   },
   variantDefaults: {
-    corner_unit: { width: 1200, rows: 6 },
-    corner_glass_door: { width: 1200, rows: 6 },
-    string: { width: 1200, columns: 2, rows: 4 },
+    corner_unit: { width: 1200, rows: 6, height: 1800 },
+    corner_glass_door: { width: 1200, rows: 6, height: 1800 },
+    string: { width: 1200, columns: 2, rows: 4, height: 1370 },
     utility: {
       width: 970,
       columns: 1,
       rows: 5,
-      shelfSpacing: 400,
+      height: 2108,
       depth: 400,
       material: 'pine',
     },
@@ -219,6 +232,14 @@ function resolve(p) {
         `${definition.label} must be between ${definition.min} mm and ${definition.max} mm.`
       );
     }
+  }
+
+  // the unit's own height: the feet and (String) the wire panel's 80 mm above the top board are not shelf space
+  q.feetHeight = q.feetHeight ?? 0;
+  q.carcassHeight = q.height - q.feetHeight - (variant === 'string' ? 80 : 0);
+  q.shelfSpacing = (q.carcassHeight - 18) / q.rows - 18;                 // the clear opening of each row
+  if (q.shelfSpacing < 50) {
+    throw new Error(`A ${q.height} mm unit with ${q.rows} rows leaves only ${Math.round(q.shelfSpacing)} mm for each shelf opening (feet ${q.feetHeight} mm, boards 18 mm). Raise the height or use fewer rows.`);
   }
 
   return q;
@@ -327,7 +348,7 @@ export function build(p = {}) {
   // The panes sit 2 mm behind the front of the sides and 4 mm in front of the shelves' fronts, so no two parts share a plane.
   const glassInset = 2;
   const levelPitch = q.shelfSpacing + board;
-  const totalHeight = q.rows * levelPitch + board;
+  const totalHeight = q.carcassHeight;                                  // = rows * pitch + board
   const carcass = [];
   const glass = [];
 
@@ -535,11 +556,20 @@ export function build(p = {}) {
     }
   }
 
+  // Feet (open and glass_door): four 40 mm posts 15 mm in from the corners, under the unit, which stands on them.
+  if (q.feetHeight > 0) {
+    for (const x of [15, totalWidth - 55]) {
+      for (const y of [15, q.depth - 55]) {
+        carcass.push(box(x, x + 40, y, y + 40, -q.feetHeight, overlap));
+      }
+    }
+  }
+
   // The corner footprint spans -returnLength to depth in local y.
   const shift = [
     -totalWidth / 2,
     (returnLength - q.depth) / 2,
-    0,
+    q.feetHeight,
   ];
 
   return {

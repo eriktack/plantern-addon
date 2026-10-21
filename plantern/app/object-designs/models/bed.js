@@ -23,6 +23,7 @@ import { primitives, booleans, transforms, geometries } from '../lib/jscad.js';
 // ASSUMED: Cot bars are 20 mm square with clear gaps no greater than 60 mm (recognisable barred enclosure, not a safety certification).
 // ASSUMED: Optional cot head and foot panels occupy the upper 150 mm or 300 mm of the enclosure (preserve specified total height).
 // ASSUMED: A daybed has a full-length back along +x rising 300 mm above its frame (settee-like side support).
+// ASSUMED: Pillows (every form but the cot) lie on each mattress at the head end: a bed 1200 mm wide or wider has two, a narrower one has one; a pillow is 380 mm deep and 110 mm high with 40 mm rounded edges, 20 mm in from the headboard, at most 600 mm wide (two share the mattress width with 40 mm gaps), 5 mm into the mattress (bedding).
 // UNSURE: Mattress dimensions versus frame dimensions are not specified; width and length are treated as overall frame dimensions.
 // UNSURE: Bunk and cot headboard options are interpreted as integrated end panels rather than extra overall height.
 // UNSURE: Drawers are shown closed using recessed outlines and pulls; internal drawer mechanisms are unspecified.
@@ -92,6 +93,14 @@ export const meta = {
       max: 4,
     },
     {
+      key: 'pillows',
+      label: 'Pillows',
+      type: 'boolean',
+      default: true,
+      appliesTo: ['standard', 'platform', 'storage_bed', 'bunk', 'daybed'],
+      hint: 'Two pillows on beds 1200 mm wide or wider, otherwise one, on each mattress.',
+    },
+    {
       key: 'material',
       label: 'Material (whole object)',
       type: 'material',
@@ -101,6 +110,7 @@ export const meta = {
   parts: [
     { key: 'frame', label: 'Frame' },
     { key: 'mattress', label: 'Mattress' },
+    { key: 'pillows', label: 'Pillows', appliesTo: ['standard', 'platform', 'storage_bed', 'bunk', 'daybed'], needs: 'pillows', defaultMaterial: 'fabric' },
   ],
   variantDefaults: {
     storage_bed: { drawers: 2, height: 450 },
@@ -146,6 +156,9 @@ function resolve(p) {
   if (!['none', 'low', 'tall'].includes(result.headboard)) {
     throw new Error('Headboard must be none, low or tall.');
   }
+  if (typeof result.pillows !== 'boolean') {
+    throw new Error('Pillows must be true or false.');
+  }
   if (typeof result.footboard !== 'boolean') {
     throw new Error('Footboard must be true or false.');
   }
@@ -190,6 +203,7 @@ export function build(p) {
   const overlap = 5;
   const frame = [];
   const mattresses = [];
+  const pillows = [];
 
   function deck(z) {
     // The deck enters the surrounding rails by 5 mm on each side.
@@ -200,6 +214,23 @@ export function build(p) {
   function mattress(z, thickness) {
     mattresses.push(box(x0 + t + 5, x1 - t - 5,
       y0 + t + 5, y1 - t - 5, z - overlap, z - overlap + thickness));
+    if (q.pillows && q.variant !== 'cot') pillowsOn(z - overlap + thickness);
+  }
+
+  // Pillows on a mattress whose top is at `top`: two on a bed 1200 mm wide or wider, else one, at the head end (+y).
+  function pillowsOn(top) {
+    const inner = w - 2 * t - 10, count = w >= 1200 ? 2 : 1, gap = 40;
+    const width = Math.min(600, (inner - (count + 1) * gap) / count), depth = 380, height = 110;
+    const yBack = y1 - t - 5 - 20, yFront = yBack - depth;
+    for (let i = 0; i < count; i += 1) {
+      const cx = (i - (count - 1) / 2) * (width + gap);
+      pillows.push(primitives.roundedCuboid({
+        size: [width, depth, height],
+        center: [cx, (yBack + yFront) / 2, top - 5 + height / 2],
+        roundRadius: 40,
+        segments: 16,
+      }));
+    }
   }
 
   function perimeter(z, railHeight) {
@@ -369,5 +400,6 @@ export function build(p) {
   return {
     frame: combine(frame),
     mattress: combine(mattresses),
+    pillows: combine(pillows),
   };
 }
