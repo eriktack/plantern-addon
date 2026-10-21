@@ -44,7 +44,7 @@ const labelOf = fx => fx.name || fx.id;
 
 const pv = () => Ed.pv;
 const msg = text => { $('pvMsg').textContent = text || ''; $('pvMsg').hidden = !text; };
-const note = text => { $('pvNote').textContent = text || ''; };
+const note = text => { $('pvNote').textContent = text || ''; $('pvNote').hidden = !text; };
 
 function setNote() {
   const p = pv();

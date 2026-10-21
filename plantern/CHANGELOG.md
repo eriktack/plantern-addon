@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+- 3D preview: Updating… and other messages now sit over the bottom-left of the view, so the view no longer jumps.
+
 ## 0.6.0
 
 - Editor 3D preview: see the thing you edit in 3D, in its room, before Apply. Colours, fabrics, options, windows, walls and materials show as you type; try lights on and off by day or night; the plan previews solids, materials and new things too.
