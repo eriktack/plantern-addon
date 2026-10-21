@@ -93,6 +93,7 @@ export function checkObject(o, level, blueprints) {
   }
   if (!Array.isArray(o.size) || o.size.length !== 3 || !o.size.every(v => Number.isFinite(v) && v > 0)) errors.push('size must be [width, depth, height] in mm, all more than 0');
   if (!isHosted(o) && (!Number.isFinite(o.z) || o.z < 0)) errors.push('z (the bottom above the floor) must be 0 or more');   // a hosted object's z is worked out from its opening
+  if (o.hangs !== undefined && (o.hangs !== 'ceiling' || !o.pos)) errors.push('hangs is "ceiling" and only for an object standing in a room (pos): its top is at the ceiling');
   if (o.color !== undefined && !HEX.test(o.color)) errors.push('color must look like #rrggbb');
   // a lit object's light (openings-and-lit-objects): the built light point and the reach of its glow
   if (o.light !== undefined && !(Array.isArray(o.light) && o.light.length === 3 && o.light.every(Number.isFinite))) errors.push('light must be [x, y, z] in mm (the built light point)');
@@ -168,4 +169,26 @@ function pruned(obj, keys) {
   const out = { ...obj };
   for (const k of drop) delete out[k];
   return Object.keys(out).length ? out : null;
+}
+
+/**
+ * Objects that hang from the ceiling (`hangs: "ceiling"`, a pendant lamp): their top is at the ceiling of the room they stand in (its own
+ * ceiling height, else the level's), so `z` is worked out here from the height whenever something changes, and a longer drop moves the
+ * bottom down instead of the top up through the ceiling. Returns the same model when nothing moves.
+ */
+export function seatCeilingObjects(model) {
+  let changed = false;
+  const levels = (model.levels || []).map(lv => {
+    if (!(lv.objects || []).some(o => o.hangs === 'ceiling' && o.pos)) return lv;
+    const objects = lv.objects.map(o => {
+      if (o.hangs !== 'ceiling' || !o.pos || !Number.isFinite(o.size?.[2])) return o;
+      const room = (lv.rooms || []).find(r => !r.exterior && r.polygon?.length >= 3 && pointInPolygon(o.pos, r.polygon));
+      const ceiling = room?.ceilingHeight ?? lv.ceilingHeight ?? 2400, z = Math.max(0, Math.round(ceiling - o.size[2]));
+      if (o.z === z) return o;
+      changed = true;
+      return { ...o, z };
+    });
+    return { ...lv, objects };
+  });
+  return changed ? { ...model, levels } : model;
 }

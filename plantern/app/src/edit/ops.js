@@ -26,7 +26,7 @@ import { FIXTURE_KINDS, FIXTURE_DEFAULTS, checkFixture, stripForm, lampOnObject 
 import { checkMaterials, materialUse } from '../model/materials.js';
 import { checkSolid } from '../model/solids.js';
 import { checkStairs } from '../model/stairs.js';
-import { checkObject, OBJECT_DEFAULTS } from '../model/objects.js';
+import { checkObject, OBJECT_DEFAULTS, seatCeilingObjects } from '../model/objects.js';
 import { roomCeiling, roomAt } from '../model/rooms.js';
 import { pointInPolygon } from '../geometry/polygon.js';
 export { SOLID_KINDS } from '../model/solids.js';
@@ -37,7 +37,8 @@ const levelOf = (model, levelId) => model.levels.find(l => l.id === levelId);
 const refuse = (model, ...errors) => ({ model, report: { errors, issues: [] } });
 
 function finish(model, levelId, change, options, extra = {}) {
-  const r = reconcile(model, levelId, change, options);
+  const r = reconcile(seatCeilingObjects(model), levelId, change, options);
+  r.model = seatCeilingObjects(r.model);                  // rooms may have moved or changed their ceiling
   // options.checkOnly (the overlap check, PF11): the level as reconcile makes it is all that is wanted: not the other levels that follow, not the validation
   if (options?.checkOnly) return { model: r.model, report: { ...extra, ...r.report, errors: [], issues: [] } };
   // rooms on other levels that hang on this level's points follow it (levels.js)
@@ -970,6 +971,7 @@ export function addObject(model, levelId, spec = {}, options = {}) {
   o.size = (spec.size ?? d.size).map(Number);
   const hosted = spec.attach?.opening !== undefined;   // hosted by an opening: its height is the opening's, nothing is stored (hosted.js)
   if (!hosted) o.z = Number(spec.z ?? d.z);
+  if (spec.hangs === 'ceiling' && spec.pos) o.hangs = 'ceiling';       // its top follows the ceiling (seatCeilingObjects)
   if (spec.color) o.color = spec.color;
   const assumed = Array.isArray(spec.assumed) ? spec.assumed : [...(spec.size ? [] : ['size']), ...(spec.z === undefined && wall && !hosted ? ['z'] : [])];
   if (assumed.length) o.assumed = assumed;
@@ -988,7 +990,14 @@ export function setObject(model, levelId, id, props, options = {}) {
   const next = { ...ob };
   for (const k of keys) { if (props[k] === null) delete next[k]; else next[k] = props[k]; }
   if (props.pos) { delete next.attach; next.rotationDeg ??= 0; }
-  if (props.attach) { delete next.pos; delete next.rotationDeg; }
+  if (props.attach) { delete next.pos; delete next.rotationDeg; delete next.hangs; }
+  // a hanging or lit object (a pendant, a lamp) is meant to stay where its light and cord are: when its footprint changes size its middle stays
+  // put, not the corner it is measured from (pos), which would slide the whole lamp sideways (and turn it about that corner)
+  if (props.size && next.pos && !props.pos && !next.attach && (next.hangs === 'ceiling' || next.light || ob.light) && Array.isArray(ob.size)) {
+    const mid = (o, w, d) => { const r = (o.rotationDeg || 0) * Math.PI / 180, c = Math.cos(r), s = Math.sin(r); return [o.pos[0] + (w / 2) * c - (d / 2) * s, o.pos[1] + (w / 2) * s + (d / 2) * c]; };
+    const [mx, my] = mid(ob, ob.size[0], ob.size[1]), [nx, ny] = mid(next, props.size[0], props.size[1]);
+    next.pos = [Math.round((next.pos[0] + mx - nx) * 10) / 10, Math.round((next.pos[1] + my - ny) * 10) / 10];
+  }
   const assumed = keys.includes('assumed') ? props.assumed || [] : (ob.assumed || []).filter(k => !keys.includes(k));   // a copy brings its source's
   if (assumed.length) next.assumed = assumed; else delete next.assumed;
   const { errors } = checkObject(next, lv);

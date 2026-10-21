@@ -450,6 +450,7 @@
         <label class="tight">When on, it looks like <small>for what Home Assistant does not tell: a smart outlet or relay driving an ordinary lamp, a light without dimming or colour; empty = full and warm white</small></label>
         <div class="grid2">
           <label>Brightness <small>%</small><input id="xLookBri" inputmode="numeric" placeholder="100" autocomplete="off"></label>
+          <label>Lamp rating <small>lm; 1000 = the default lamp, a window star about 100</small><input id="xLookLm" inputmode="numeric" placeholder="1000" autocomplete="off"></label>
           <label>Colour temperature <small>K, e.g. 2700 warm</small><input id="xLookK" inputmode="numeric" placeholder="2700" autocomplete="off"></label>
           <label class="inl"><input type="checkbox" id="xLookUseColor"> A colour instead</label>
           <label><input type="color" id="xLookColor" value="#ffd6aa"></label>
@@ -496,6 +497,7 @@
       <label>Depth <small>mm, out from the wall</small><input id="obD" inputmode="numeric" autocomplete="off"></label>
       <label>Height <small>mm</small><input id="obH" inputmode="numeric" autocomplete="off"></label>
       <label>Bottom <small>mm above the floor</small><input id="obZ" inputmode="numeric" autocomplete="off"></label>
+      <label class="inl" id="obHangsRow" title="Its top stays at the ceiling of the room (a pendant lamp): a longer drop moves the bottom down, and a different ceiling height moves it along"><input type="checkbox" id="obHangs"> Hangs from the ceiling</label>
       <label id="obOffsetRow">Position <small id="obOffsetNote">mm along the wall</small><input id="obOffset" inputmode="numeric" autocomplete="off"></label>
       <label id="obSideRow">On the side of <select id="obSide" data-seg><option value="right">right</option><option value="left">left</option></select></label>
       <label id="obGapRow">Gap from the wall <small>mm</small><input id="obGap" inputmode="numeric" placeholder="0" autocomplete="off"></label>
@@ -513,6 +515,7 @@
         <label class="tight">When on, it looks like <small>for what Home Assistant does not tell: a smart outlet or relay driving an ordinary lamp, a light without dimming or colour; empty = full and warm white</small></label>
         <div class="grid2">
           <label>Brightness <small>%</small><input id="obLookBri" inputmode="numeric" placeholder="100" autocomplete="off"></label>
+          <label>Lamp rating <small>lm; 1000 = the default lamp, a window star about 100</small><input id="obLookLm" inputmode="numeric" placeholder="1000" autocomplete="off"></label>
           <label>Colour temperature <small>K, e.g. 2700 warm</small><input id="obLookK" inputmode="numeric" placeholder="2700" autocomplete="off"></label>
           <label class="inl"><input type="checkbox" id="obLookUseColor"> A colour instead</label>
           <label><input type="color" id="obLookColor" value="#ffd6aa"></label>

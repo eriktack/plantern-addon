@@ -170,7 +170,7 @@ export function showObject() {
   if (w) { const start = cornerAt(lv, w.a); $('obOffsetNote').textContent = start ? `mm from corner ${start.index} of ${start.name}` : "mm from the wall's start"; }
   if (Ed.objectFormFor !== o) {
     $('obName').value = o.name ?? ''; $('obColor').value = o.color || '#888888'; $('obAsset').value = o.asset ?? '';
-    [$('obW').value, $('obD').value, $('obH').value] = o.size; $('obZ').value = isHosted(o) ? (geosFor(Ed.model).get(Ed.levelId)?.objectZ(o) ?? '') : (o.z ?? '');
+    [$('obW').value, $('obD').value, $('obH').value] = o.size; $('obHangs').checked = o.hangs === 'ceiling'; $('obZ').value = isHosted(o) ? (geosFor(Ed.model).get(Ed.levelId)?.objectZ(o) ?? '') : (o.z ?? '');
     if (o.attach) { $('obOffset').value = o.attach.offset ?? ''; $('obSide').value = o.attach.side ?? 'right'; $('obGap').value = (isHosted(o) ? o.attach.depth : o.attach.gap) ?? ''; $('obShift').value = isHosted(o) ? (o.attach.shift ?? '') : ''; }
     else { $('obX').value = o.pos[0]; $('obY').value = o.pos[1]; $('obRot').value = o.rotationDeg ?? ''; }
     refreshWallMeasure('ob');
@@ -208,8 +208,11 @@ function applyPlacedRows(o) {
   }
   $('obOpeningRow').hidden = to !== 'opening';
   $('obAtRow').hidden = to !== 'opening';
+  $('obHangsRow').hidden = to !== 'room';
+  const hangs = to === 'room' && $('obHangs').checked;
   $('obZ').readOnly = to === 'opening';
-  $('obZ').title = to === 'opening' ? 'the opening sets the height' : '';
+  $('obZ').disabled = hangs;                                        // worked out from the ceiling and the height
+  $('obZ').title = to === 'opening' ? 'the opening sets the height' : hangs ? 'it hangs from the ceiling: the bottom is the ceiling minus its height' : '';
 }
 /** The things in an opening (OB4): the objects hosted by it, its lamps and its LED strips, each selectable, each with a remove button. */
 export function showOpeningHosted(o) {
@@ -253,7 +256,9 @@ export async function applyObjectForm() {
   const switchingNow = !!Ed.placeDraft && Ed.placeDraft.to !== placedAs(o);
   const size = [num('obW'), num('obD'), num('obH')];
   if (size.some((v, i) => v !== o.size[i])) props.size = size;
-  if (!isHosted(o) && !switchingNow && num('obZ') !== o.z) props.z = num('obZ');   // a hosted object's height is its opening's
+  const hangsNow = $('obHangs').checked && !o.attach && !switchingNow;
+  if (hangsNow !== (o.hangs === 'ceiling')) props.hangs = hangsNow ? 'ceiling' : null;
+  if (!isHosted(o) && !switchingNow && !hangsNow && num('obZ') !== o.z) props.z = num('obZ');   // a hosted object's height is its opening's
   const name = $('obName').value.trim();
   if (name !== (o.name ?? '')) props.name = name || null;
   if (o.kind !== 'asset' && $('obColor').value !== (o.color || '#888888')) props.color = $('obColor').value;

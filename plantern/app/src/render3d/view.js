@@ -5,6 +5,7 @@ import { MM, toThree, dirToThree, prismGeometry, cylinderGeometry, barGeometry, 
 import { pointAlong, polylineLength } from '../geometry/strip.js';
 import { pickShadowLamps, SHADOW_COUNT } from '../model/shadows.js';
 import { lampReach } from '../geometry/leak.js';
+import { lumensScale } from '../ha/appearance.js';
 
 /** The faint ball round a lit object's light, clicked with the object (m, and its opacity off / on). */
 const LIT_HALO_RADIUS = 0.16, LIT_HALO_OFF = 0.1, LIT_HALO_ON = 0.2;
@@ -498,7 +499,7 @@ export function createView3d(container, hooks = {}) {
     f.state = a;
     const col = new THREE.Color(`rgb(${a.rgb.join(',')})`);
     if (f.kind === 'strip') {
-      for (const L of f.lights) { L.visible = steadyLights || a.on; L.color.copy(col); L.intensity = a.on || !steadyLights ? (settings.render3d?.lampIntensity ?? 80) * a.brightness * 0.5 : 0; }
+      for (const L of f.lights) { L.visible = steadyLights || a.on; L.color.copy(col); L.intensity = a.on || !steadyLights ? (settings.render3d?.lampIntensity ?? 80) * a.brightness * 0.5 * lumensScale(a.lumens) : 0; }
       for (const m of f.meshes) {
         m.material.color.set(a.available ? (a.on ? col : 0x555555) : 0x7a2a2a);
         m.material.emissive.copy(a.on ? col : new THREE.Color(0));
@@ -509,7 +510,7 @@ export function createView3d(container, hooks = {}) {
       if (a.on && !prev?.on) shadowDirty.add(id);                        // its shadow map is made when it goes on
       f.light.visible = steadyLights || a.on;
       f.light.color.copy(col);
-      f.light.intensity = a.on || !steadyLights ? (settings.render3d?.lampIntensity ?? 80) * a.brightness : 0;
+      f.light.intensity = a.on || !steadyLights ? (settings.render3d?.lampIntensity ?? 80) * a.brightness * lumensScale(a.lumens) : 0;
       if (f.halo) { f.halo.material.color.copy(a.on ? col : new THREE.Color(0xffd6aa)); f.halo.material.opacity = a.on ? LIT_HALO_ON : LIT_HALO_OFF; }
       f.bulb.material.color.set(a.available ? (a.on ? col : 0x555555) : 0x7a2a2a);
       f.bulb.material.emissive.copy(a.on ? col : new THREE.Color(0));

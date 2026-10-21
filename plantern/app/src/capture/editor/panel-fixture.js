@@ -118,7 +118,7 @@ async function showBinding(x) {
   $('xControlsRow').hidden = x.kind !== 'switch';
   $('xLookRow').hidden = x.kind === 'switch';
   const lk = b.look || {};
-  $('xLookBri').value = lk.brightness ?? ''; $('xLookK').value = lk.kelvin ?? ''; $('xLookUseColor').checked = !!lk.color; $('xLookColor').value = lk.color || '#ffd6aa';
+  $('xLookBri').value = lk.brightness ?? ''; $('xLookLm').value = lk.lumens ?? ''; $('xLookK').value = lk.kelvin ?? ''; $('xLookUseColor').checked = !!lk.color; $('xLookColor').value = lk.color || '#ffd6aa';
   const lamps = Ed.model.levels.flatMap(l => (l.fixtures || []).filter(f => f.kind !== 'switch').map(f => ({ f, l })));
   $('xControls').innerHTML = lamps.map(({ f, l }) => `<label class="inl"><input type="checkbox" value="${esc(f.id)}"${(b.controls || []).includes(f.id) ? ' checked' : ''}> ${esc(displayName(f))}${l.id !== lv.id ? ` <small>${esc(l.name || l.id)}</small>` : ''}</label>`).join('') || 'No lamps yet.';
   const xHint = 'type a name or id, the best matches come first; picking one links it when you Apply';
@@ -196,7 +196,7 @@ function bindingDraft(x) {
   const entity = $('xEntity').value.trim(), controls = [...$('xControls').querySelectorAll('input:checked')].map(i => i.value);
   if (entity && !/^[a-z_]+.[a-z0-9_]+$/.test(entity)) return { error: 'The Home Assistant entity looks like light.kitchen' };
   const num = id => ($(id).value.trim() === '' ? undefined : Number($(id).value));
-  const look = x.kind !== 'switch' ? { brightness: num('xLookBri'), kelvin: $('xLookUseColor').checked ? undefined : num('xLookK'), color: $('xLookUseColor').checked ? $('xLookColor').value : undefined } : undefined;
+  const look = x.kind !== 'switch' ? { brightness: num('xLookBri'), lumens: num('xLookLm'), kelvin: $('xLookUseColor').checked ? undefined : num('xLookK'), color: $('xLookUseColor').checked ? $('xLookColor').value : undefined } : undefined;
   const bad = look ? checkLook(Object.fromEntries(Object.entries(look).filter(([, v]) => v !== undefined))) : [];
   if (bad.length) return { error: bad.join('; ') };
   return { next: setBinding(Ed.loc, x.id, { entity, ...(x.kind === 'switch' ? { controls } : {}), ...(look ? { look } : {}) }) };
@@ -211,9 +211,9 @@ export function showObjectLight(o) {
   if (Ed.objectLightFilledFor !== o) {
     const b = Ed.loc.bindings?.[o.id] || {}, l = b.look || {};
     $('obEntity').value = b.entity || ''; $('obLightRadius').value = o.lightRadius ?? '';
-    $('obLookBri').value = l.brightness ?? ''; $('obLookK').value = l.kelvin ?? ''; $('obLookUseColor').checked = !!l.color; $('obLookColor').value = l.color || '#ffd6aa';
+    $('obLookBri').value = l.brightness ?? ''; $('obLookLm').value = l.lumens ?? ''; $('obLookK').value = l.kelvin ?? ''; $('obLookUseColor').checked = !!l.color; $('obLookColor').value = l.color || '#ffd6aa';
     Ed.objectLightFilledFor = o;
-    rebase('obEntity', 'obLightRadius', 'obLookBri', 'obLookK', 'obLookUseColor', 'obLookColor');   // filled from the house, not typed
+    rebase('obEntity', 'obLightRadius', 'obLookBri', 'obLookLm', 'obLookK', 'obLookUseColor', 'obLookColor');   // filled from the house, not typed
   }
   loadHaStates().then(states => {
     if (object() !== o) return;
@@ -227,7 +227,7 @@ export function objectBindingDraft(o) {
   if (entity && !/^[a-z_]+\.[a-z0-9_]+$/.test(entity)) return { error: 'The Home Assistant entity looks like light.kitchen' };
   const num = id => ($(id).value.trim() === '' ? undefined : Number($(id).value));
   const useColor = $('obLookUseColor').checked;
-  const look = Object.fromEntries(Object.entries({ brightness: num('obLookBri'), kelvin: useColor ? undefined : num('obLookK'), color: useColor ? $('obLookColor').value : undefined }).filter(([, v]) => v !== undefined));
+  const look = Object.fromEntries(Object.entries({ brightness: num('obLookBri'), lumens: num('obLookLm'), kelvin: useColor ? undefined : num('obLookK'), color: useColor ? $('obLookColor').value : undefined }).filter(([, v]) => v !== undefined));
   const bad = Object.keys(look).length ? checkLook(look) : [];
   if (bad.length) return { error: bad.join('; ') };
   return { next: setBinding(Ed.loc, o.id, { entity, look }) };

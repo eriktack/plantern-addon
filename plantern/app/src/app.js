@@ -14,7 +14,7 @@ import { createAssetCache } from './render3d/assets.js';
 import { coalesce } from './coalesce.js';
 import { createHaClient, resolveConnection, boundEntities } from './ha/client.js';
 import { appearance } from './ha/appearance.js';
-import { lampGroups } from './ha/lamp-list.js';
+import { lampGroups, isControllable, readOnlyStatus } from './ha/lamp-list.js';
 import { fixtureAppearance as fixtureAppearanceOf, toggleCalls, canPreview, previewLook } from './ha/fixture.js';
 import { doorStates, doorEntities } from './ha/door.js';
 import { exportSvg } from './export/svg.js';
@@ -320,22 +320,22 @@ async function main() {
     const box = document.createElement('details');
     box.className = 'lampgroup'; box.open = !openGroups[g.key];
     const title = g.level ? `${g.room?.name || 'No room'} · ${g.level.name || g.level.id}` : 'Other';
-    box.innerHTML = `<summary><span>${esc(title)}</span>${g.entities.length > 1 ? '<span class="all"><button type="button" data-all="on" title="Every light here on">All on</button><button type="button" data-all="off" title="Every light here off">All off</button></span>' : ''}</summary>`;
+    box.innerHTML = `<summary><span>${esc(title)}</span>${g.entities.filter(e => isControllable(e.id)).length > 1 ? '<span class="all"><button type="button" data-all="on" title="Every light here on">All on</button><button type="button" data-all="off" title="Every light here off">All off</button></span>' : ''}</summary>`;
     box.addEventListener('toggle', () => writePrefs({ lampGroupsClosed: { ...(readPrefs().lampGroupsClosed || {}), [g.key]: !box.open } }));
     box.querySelectorAll('[data-all]').forEach(b => (b.onclick = e => {
       e.preventDefault();
-      for (const { id } of g.entities) ha.callService(id.split('.')[0], b.dataset.all === 'on' ? 'turn_on' : 'turn_off', {}, { entity_id: id }).catch(err => status(`HA: ${err.message}`));
+      for (const { id } of g.entities.filter(e => isControllable(e.id))) ha.callService(id.split('.')[0], b.dataset.all === 'on' ? 'turn_on' : 'turn_off', {}, { entity_id: id }).catch(err => status(`HA: ${err.message}`));
     }));
     $('ents').appendChild(box);
     for (const { id, name } of g.entities) {
       const d = document.createElement('div');
       d.className = 'row';
-      d.innerHTML = `<div class="ent"><span class="nm">${esc(name)}</span><label class="sw"><input type="checkbox" role="switch" aria-label="${esc(name)}"><span class="knob"></span></label></div>${id.startsWith('light.') ? '<input type="range" min="1" max="255" aria-label="Brightness">' : ''}`;
+      d.innerHTML = `<div class="ent"><span class="nm">${esc(name)}</span>${isControllable(id) ? `<label class="sw"><input type="checkbox" role="switch" aria-label="${esc(name)}"><span class="knob"></span></label>` : '<span class="status" role="status"></span>'}</div>${id.startsWith('light.') ? '<input type="range" min="1" max="255" aria-label="Brightness">' : ''}`;
       box.appendChild(d);
       const [cb, rg] = d.querySelectorAll('input');
-      rows[id] = { d, cb, rg, nm: d.querySelector('.nm'), named: name !== id };
+      rows[id] = { d, cb, rg, nm: d.querySelector('.nm'), st: d.querySelector('.status'), named: name !== id };
       const domain = id.split('.')[0], call = (svc, data) => ha.callService(domain, svc, data, { entity_id: id }).catch(e => status(`HA: ${e.message}`));
-      cb.onchange = () => call(cb.checked ? 'turn_on' : 'turn_off', {});
+      if (cb) cb.onchange = () => call(cb.checked ? 'turn_on' : 'turn_off', {});
       if (rg) rg.onchange = () => call('turn_on', { brightness: +rg.value });
     }
   }
@@ -345,8 +345,14 @@ async function main() {
     if (!r) return;
     const s = ha.getState(id), a = appearance(s);
     r.d.classList.toggle('missing', !a.available);
-    if (!r.named && s?.attributes?.friendly_name) { r.nm.textContent = s.attributes.friendly_name; r.cb.setAttribute('aria-label', s.attributes.friendly_name); }
+    if (!r.named && s?.attributes?.friendly_name) { r.nm.textContent = s.attributes.friendly_name; r.cb?.setAttribute('aria-label', s.attributes.friendly_name); }
     r.nm.title = `${id} · ${s ? s.state : 'not found in HA'}`;
+    if (r.st) {                                                      // a sensor or a lock: its state in words, nothing to switch
+      const ro = readOnlyStatus(id, s, doorIds.has(id));
+      r.st.textContent = ro.text; r.st.className = `status ${ro.tone}`;
+      r.d.classList.toggle('missing', false);
+      return;
+    }
     r.cb.disabled = !a.available;
     r.cb.checked = a.on;
     if (r.rg) { r.rg.disabled = !a.on; r.rg.value = s?.attributes?.brightness ?? 255; }

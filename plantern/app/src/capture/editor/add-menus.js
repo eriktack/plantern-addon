@@ -101,8 +101,8 @@ async function placeBlueprint(id, where, at = 'sill') {
       what = spot ? 'where you clicked: drag it where it belongs' : 'in the middle of the room: drag it where it belongs';
     }
   }
-  const { z } = startPlacement(meta, built.size, level(), room, params);
-  const r = placeSpec({ blueprint: id, params, partMaterials: {}, size: built.size, z, place, light: built.light });
+  const { z, mount } = startPlacement(meta, built.size, level(), room, params);
+  const r = placeSpec({ blueprint: id, params, partMaterials: {}, size: built.size, z, place, light: built.light, hangs: mount === 'ceiling' ? 'ceiling' : undefined });
   if (r.error) { setStatus(r.error); return; }
   placeObject(r.spec, `a ${meta.name} ${what}`);
 }

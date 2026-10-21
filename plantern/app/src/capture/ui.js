@@ -23,6 +23,7 @@ import { wallInfo } from '../edit/inspect.js';
 import { createMenu } from '../menu.js';
 import { editorHelpText, pointerIsCoarse } from '../touch.js';
 import { assetEntries } from '../model/assets.js';
+import { seatCeilingObjects } from '../model/objects.js';
 import { pruneBindings } from '../ha/suggest.js';
 import { createEditorMeasure } from './editor-measure.js';
 import { fitTo, pinchView } from './map-view.js';
@@ -232,6 +233,14 @@ async function init() {
   };
   act.wallBox = () => { const w = wall(); placeObject({ attach: { wall: w.id, side: wallInfo(level(), w.id)?.sides?.right?.length ? 'right' : 'left', offset: wallSpot(w, 900) } }, 'on the wall: drag it along, or set its position'); };
   $('obApply').onclick = applyObjectForm;
+  $('obHangs').addEventListener('change', () => {
+    const o = object(); if (!o) return;
+    if ($('obHangs').checked) {          // show where it will hang: the ceiling of its room minus its height
+      const h = Number($('obH').value), seated = seatCeilingObjects({ levels: [{ ...level(), objects: [{ ...o, hangs: 'ceiling', size: [1, 1, Number.isFinite(h) && h > 0 ? h : o.size[2]] }] }] });
+      $('obZ').value = seated.levels[0].objects[0].z;
+    }
+    showPlacedChoice(o);
+  });
   $('obPlaced').addEventListener('change', () => { const o = object(); if (!o || !Ed.placeDraft) return; Ed.placeDraft.to = $('obPlaced').value; showPlacedChoice(o); });
   $('obOpening').addEventListener('change', () => { const o = object(); if (!o || !Ed.placeDraft) return; Ed.placeDraft.opening = $('obOpening').value; showPlacedChoice(o); });
   $('obAt').addEventListener('change', () => { const o = object(); if (!o || !Ed.placeDraft) return; Ed.placeDraft.at = $('obAt').value; showPlacedChoice(o); });

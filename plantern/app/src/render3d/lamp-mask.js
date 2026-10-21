@@ -11,6 +11,7 @@
 export const MASK_SIZE = 128;            // texels along one side of a lamp's mask
 export const MASK_COLS = 8;              // masks per row of the atlas
 export const MAX_MASKS = 64;             // lamps with a mask (8 rows of 8)
+export const NEAR_LIGHT = 0.4;           // metres: a point light is no brighter than it is this far away, so a lamp in a window does not blow out the frame beside it
 export const DECAY_STEP = 1e-4;          // a lamp's mask number is in its light's decay: 2 + (number + 1) * DECAY_STEP
 
 /**
@@ -87,6 +88,10 @@ float lampMaskAt( const in float decay, const in vec3 world ) {
 
 const LOOP_FROM = 'getPointLightInfo( pointLight, geometryPosition, directLight );';
 const LOOP_TO = `getPointLightInfo( pointLight, geometryPosition, directLight );
+		if ( directLight.visible ) {
+			vec3 toLamp = pointLight.position - geometryPosition;
+			directLight.color *= min( 1.0, dot( toLamp, toLamp ) / ${(NEAR_LIGHT * NEAR_LIGHT).toFixed(4)} );
+		}
 		if ( directLight.visible && uLampCount > 0 ) {
 			directLight.color *= lampMaskAt( pointLight.decay, transpose( mat3( viewMatrix ) ) * geometryPosition + cameraPosition );
 			directLight.visible = ( directLight.color != vec3( 0.0 ) );

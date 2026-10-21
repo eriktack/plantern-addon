@@ -45,15 +45,19 @@
       <button id="proj" title="Orthographic / perspective">Perspective</button>
       <button id="resetView">Reset view</button>
     </div>
-    <div id="stackRow" class="grid2" hidden>
+    <div id="stackRow" hidden>
       <label>Levels <select id="stackMode"><option value="this" data-icon="stackOne">this level</option><option value="below" data-icon="stackBelow">this and below</option><option value="all" data-icon="stackAll">all levels</option></select></label>
-      <label class="inl"><input type="checkbox" id="exploded"> Exploded</label>
-      <label class="inl" title="A ceiling over every room, for a view from inside (perspective). Rooms with their own lower ceiling always have theirs, see-through from above."><input type="checkbox" id="ceilings"> Ceilings</label>
+      <div class="checks2"><label class="inl"><input type="checkbox" id="exploded"> Exploded</label>
+      <label class="inl" title="A ceiling over every room, for a view from inside (perspective). Rooms with their own lower ceiling always have theirs, see-through from above."><input type="checkbox" id="ceilings"> Ceilings</label></div>
     </div>
-    <label title="Lamps that are on cast shadows, brightest first. Shadows are the heavy part of 3D: fewer is faster on phones and wall tablets. Remembered in this browser; the house's defaults are settings.render3d.shadows in location.json">Shadows <small id="shadowDev">on this computer</small>
-      <input type="range" id="shadowLvl" min="0" max="4" step="1"> <span id="shadowTxt"></span> <button type="button" id="shadowReset" title="Forget this browser's choice: the house's setting applies again">house default</button></label>
-    <label title="The light in the 3D view at night (daylight off), before the lamps are counted: 0 is pitch black, so only lamps that are on light the rooms. Remembered in this browser; the house's default is settings.render3d.nightLight in location.json">Night light
-      <input type="range" id="nightLvl" min="0" max="100" step="1"> <span id="nightTxt"></span> <button type="button" id="nightReset" title="Forget this browser's choice: the house's setting applies again">house default</button></label>
+    <div class="slrow" title="Lamps that are on cast shadows, brightest first. Shadows are the heavy part of 3D: fewer is faster on phones and wall tablets. Remembered in this browser; the house's defaults are settings.render3d.shadows in location.json">
+      <div class="slhead"><label for="shadowLvl">Shadows <small id="shadowDev">on this computer</small></label><span id="shadowTxt" class="slval"></span></div>
+      <div class="slbody"><input type="range" id="shadowLvl" min="0" max="4" step="1"><button type="button" id="shadowReset" title="Forget this browser's choice: the house's setting applies again">house default</button></div>
+    </div>
+    <div class="slrow" title="The light in the 3D view at night (daylight off), before the lamps are counted: 0 is pitch black, so only lamps that are on light the rooms. Remembered in this browser; the house's default is settings.render3d.nightLight in location.json">
+      <div class="slhead"><label for="nightLvl">Night light</label><span id="nightTxt" class="slval"></span></div>
+      <div class="slbody"><input type="range" id="nightLvl" min="0" max="100" step="1"><button type="button" id="nightReset" title="Forget this browser's choice: the house's setting applies again">house default</button></div>
+    </div>
     <p class="help">Drag: orbit · right-drag: pan · wheel: zoom · click lamp/switch: toggle</p>
   </section>
   <section id="panel2d">

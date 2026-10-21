@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.9
+
+- Lamps in windows no longer blow out the frame beside them, and a lamp can have a rating in lumens; door and other binary sensors show Open/Closed or On/Off (locks Locked/Unlocked) instead of a switch; a pendant can hang from the ceiling so a longer drop moves the bottom down; the wood stove's flue has a length and a rear outlet on every variant; tidier 3D panel
+
 ## 0.6.8
 
 - The Lovelace card: ticking every floor shows the floor picker, the same as ticking none. The 3D view follows the floors you ticked, and the floor pills keep their height. The stack menu is hidden when one or several floors are ticked.

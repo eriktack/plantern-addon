@@ -113,7 +113,7 @@ svg[hidden],#view3d[hidden],section[hidden]{display:none}
 #cap label{display:block;margin-bottom:8px;font-size:12px;color:var(--mut)}
 #cap label.inl{display:flex;gap:6px;align-items:center}
 #cap input:not([type=checkbox]),#cap textarea{display:block;width:100%;margin-top:3px;background:#14161a;color:var(--fg);border:1px solid #3a404b;border-radius:6px;padding:5px 8px;font:13px ui-monospace,Consolas,monospace}
-#cap input[readonly]{opacity:.6}
+#cap input[readonly],#cap input:disabled:not([type=checkbox]){opacity:.6}
 #cap textarea{resize:vertical}
 #cap label[hidden]{display:none}
 #cap select{display:block;width:100%;max-width:100%;margin-top:3px}
@@ -406,3 +406,24 @@ body.phone .key-blue{background:#6cb6ff}body.phone .key-green{background:#4cc38a
 /* phone: the level strip becomes a dropdown, so it does not cover the plan (it is two rows of 44 px buttons there) */
 #lvMenu{display:none}
 @media(max-width:760px){.lvstrip{display:none!important}#lvMenu:not([hidden]){display:inline-block}}
+
+/* a 3D setting: its name and value on one line, the slider and its reset below */
+.slrow { margin: 10px 0; }
+.slrow .slhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.slrow .slhead label { margin: 0; }
+.slrow .slval { font-variant-numeric: tabular-nums; }
+.slrow .slbody { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.slrow .slbody input[type=range] { flex: 1; min-width: 0; margin: 0; }
+.slrow .slbody button { flex: none; white-space: nowrap; }
+#stackRow[hidden]{display:none}
+.checks2{display:flex;gap:18px;margin:6px 0}
+
+/* a sensor or a lock in the entity list: its state in words, not a switch */
+.row .status{flex:none;font-size:12px;padding:2px 10px;border-radius:11px;background:#2a2f38;color:var(--mut);border:1px solid #3a404b;cursor:default}
+.row .status.on{background:rgba(255,184,77,.16);border-color:#b8812f;color:#ffcf85}
+.row .status.warn{background:rgba(224,160,48,.16);border-color:#b8812f;color:#ffcf85}
+.row .status.missing{color:var(--bad);border-style:dashed}
+
+/* "Hangs from the ceiling" sits to the right of Bottom, level with its box (not with its label or hint) */
+#cap #obHangsRow{margin-top:18px;height:27px;margin-bottom:0;display:flex;align-items:center;gap:8px}   /* the label line (15px) + the box's top margin (3px), and the box's own height (27px) */
+#cap #obHangsRow[hidden]{display:none}

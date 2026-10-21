@@ -71,7 +71,7 @@ const num = v => (typeof v === 'string' ? (v.trim() === '' ? NaN : Number(v)) : 
  * { kind: 'wall', wall, side, offset, gap } (on a wall face) or { kind: 'opening', opening, at: 'sill' | 'head', offset?, depth? } (hosted by an opening); `z` is the bottom above the floor, `size` the built size
  * [w, d, h] the server answered. Returns { spec } or { error } with a message for the form.
  */
-export function placeSpec({ blueprint, params, partMaterials, size, z, name, place, light }) {
+export function placeSpec({ blueprint, params, partMaterials, size, z, name, place, light, hangs }) {
   if (!blueprint) return { error: 'Pick a blueprint first.' };
   if (!Array.isArray(size) || size.length !== 3 || !size.every(v => Number.isFinite(v) && v > 0)) return { error: 'The size of the object is not known yet.' };
   const bottom = num(z ?? 0);
@@ -104,6 +104,7 @@ export function placeSpec({ blueprint, params, partMaterials, size, z, name, pla
   if (!Number.isFinite(x) || !Number.isFinite(y)) return { error: 'Enter where it stands: x and y in mm, or pick a room.' };
   if (!Number.isFinite(rotationDeg)) return { error: 'The turn must be a number of degrees.' };
   spec.pos = [Math.round(x), Math.round(y)];
+  if (hangs === 'ceiling') spec.hangs = 'ceiling';
   spec.rotationDeg = rotationDeg;
   return { spec };
 }

@@ -46,3 +46,26 @@ export function lampGroups(model, bindings, posOf = (lv, x) => x.pos ?? null, ob
   const rank = g => (g.level ? order.get(g.level.id) : 1e9);
   return [...groups.values()].sort((a, b) => rank(a) - rank(b) || String(a.room?.name ?? '~').localeCompare(String(b.room?.name ?? '~')));
 }
+
+const CONTROLLABLE = new Set(['light', 'switch', 'fan', 'input_boolean']);
+const OPENINGS = new Set(['door', 'window', 'opening', 'garage_door']);
+
+/** Whether the viewer can switch this entity (the services Plantern's server calls); sensors and locks are only shown. */
+export const isControllable = id => CONTROLLABLE.has(String(id).split('.')[0]);
+
+/**
+ * What a read-only entity (a sensor, a lock) shows instead of a switch: { text, tone } with tone `on`, `off`, `warn` or `missing`, or null when
+ * the entity can be switched. A binary sensor on a door (isDoor: the house binds it to a door opening, or its device class says door, window or
+ * opening) says Open (on) or Closed (off); any other binary sensor On or Off; a lock Locked or Unlocked.
+ */
+export function readOnlyStatus(id, state, isDoor = false) {
+  if (isControllable(id)) return null;
+  const domain = String(id).split('.')[0], s = state?.state;
+  if (!state || s === 'unavailable' || s === 'unknown') return { text: !state ? 'Not found' : s === 'unknown' ? 'Unknown' : 'Unavailable', tone: 'missing' };
+  if (domain === 'lock') return { text: { locked: 'Locked', unlocked: 'Unlocked', locking: 'Locking…', unlocking: 'Unlocking…', open: 'Open', jammed: 'Jammed' }[s] ?? s, tone: s === 'locked' ? 'off' : s === 'jammed' ? 'warn' : 'on' };
+  if (domain === 'binary_sensor') {
+    const opening = isDoor || OPENINGS.has(state.attributes?.device_class);
+    return s === 'on' ? { text: opening ? 'Open' : 'On', tone: 'on' } : { text: opening ? 'Closed' : 'Off', tone: 'off' };
+  }
+  return { text: [s, state.attributes?.unit_of_measurement].filter(Boolean).join(' '), tone: 'off' };       // any other sensor: its value
+}
