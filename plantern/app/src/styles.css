@@ -46,6 +46,8 @@ svg.measure .fix{cursor:crosshair}
 aside{width:380px;overflow-y:auto;overflow-x:hidden;flex:none;padding:12px;padding-top:calc(12px + env(safe-area-inset-top,0px));background:var(--panel);border-left:1px solid var(--line)}
 #resizer{flex:none;width:6px;cursor:col-resize;background:var(--line);touch-action:none}
 #resizer:hover,#resizer.drag{background:var(--acc)}
+#asideToggle{display:none}
+@media(max-width:760px){#asideToggle{display:flex;flex:none;align-items:center;justify-content:center;gap:8px;width:100%;min-height:36px;padding:0 12px;border:0;border-top:1px solid var(--line);border-radius:0;background:var(--panel);color:var(--mut);font:inherit;font-size:13px;cursor:pointer}#asideToggle .chev{width:8px;height:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translateY(-2px)}body.aside-min #asideToggle .chev{transform:rotate(-135deg) translateY(-2px)}body.aside-min aside{display:none}}
 @media(max-width:760px){body{flex-direction:column}main{min-height:0}aside{width:auto!important;max-height:var(--panel-h,46%);height:var(--panel-h,auto);border-left:0;border-top:1px solid var(--line)}#resizer{display:none}}
 /* phone: a grab bar between the plan and the panel (S2); hidden on a wide screen, where #resizer is on the panel's left edge */
 #vresizer{display:none}

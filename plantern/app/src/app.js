@@ -22,7 +22,7 @@ import { exportSvg } from './export/svg.js';
 const $ = id => document.getElementById(id);
 import { chooseLocation, chooseLevel, remember, linkPages } from './model/current.js';
 import { compassSvg } from './render2d/compass.js';
-import { wirePanelResize } from './panel-resize.js';
+import { wirePanelResize, wireAsideCollapse } from './panel-resize.js';
 import { foldOnPhone } from './fold-note.js';
 import { readPrefs, writePrefs, cameraKey } from './model/prefs.js';
 import { shadowLevel, SHADOW_LEVELS, SHADOW_LABEL, SHADOW_COUNT } from './model/shadows.js';
@@ -49,6 +49,7 @@ async function loadDesignLibrary() {
 
 async function main() {
   wirePanelResize($('resizer'), document.querySelector('aside'), 'plantern.viewer.aside', () => window.dispatchEvent(new Event('resize')));
+  wireAsideCollapse($('asideToggle'), 'plantern.viewer.aside.min', () => window.dispatchEvent(new Event('resize')));   // a phone: the controls fold away, the plan gets the screen
   // ---- location ----
   const index = await listHouses();
   const locId = chooseLocation(index, params.get('loc'));

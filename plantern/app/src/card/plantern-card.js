@@ -34,11 +34,16 @@ import { coalesce } from '../coalesce.js';
 import { materialTable, setDesignLibrary, setLibraryTextureBase } from '../model/materials.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const getJson = async url => {
+const getText = async url => {
   const r = await fetch(url, { cache: 'no-store' });
   if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
-  try { return await r.json(); } catch (e) { throw new Error(`${url}: malformed JSON (${e.message})`); }
+  return r.text();
 };
+const parseJson = (url, text) => { try { return JSON.parse(text); } catch (e) { throw new Error(`${url}: malformed JSON (${e.message})`); } };
+const getJson = async url => parseJson(url, await getText(url));
+
+// how often the card looks for a changed house (the add-on publishes within about a minute of a save)
+const WATCH_MS = 30 * 1000;
 
 const STYLE = `
   :host { display: block; height: 100%; }
@@ -104,12 +109,13 @@ class PlanternCard extends HTMLElement {
   getCardSize() { return Math.max(3, Math.round((this._cfg?.height || 420) / 50)); }
 
   connectedCallback() {
+    this._startWatch?.();
     this._ro ??= new ResizeObserver(() => { if (this._mode !== '3d') this._plans.forEach(p => p.view.fit()); });
     this._plans.forEach(p => this._ro.observe(p.svg));
     this._startCycle?.();
     this._startLight?.();
   }
-  disconnectedCallback() { this._ro?.disconnect(); this._stopCycle?.(); this._stopLight?.(); }
+  disconnectedCallback() { this._ro?.disconnect(); this._stopCycle?.(); this._stopLight?.(); this._stopWatch?.(); }
 
   static getConfigElement() { return document.createElement('plantern-card-editor'); }
   static async getStubConfig() {
@@ -135,15 +141,17 @@ class PlanternCard extends HTMLElement {
     const token = ++this._token, cfg = this._cfg;
     this._stopCycle?.(); this._startCycle = this._stopCycle = null;
     this._stopLight?.(); this._startLight = this._stopLight = null;
+    this._stopWatch?.(); this._startWatch = this._stopWatch = null;
+    this._view3d?.dispose?.();                                       // a reload gives back the old 3D view's renderer
     this._ro?.disconnect(); this._plans = [];
     this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card data-bg="${cfg.background || 'dark'}"><div class="hd"></div><div class="lv" hidden></div><div class="stage"><div class="plans"></div><div class="v3d" hidden></div></div><div class="msg"></div></ha-card>`;
     this._say('Loading…', false, true);
     this._v3dEl = this.shadowRoot.querySelector('.v3d');
     this._view3d = null; this._loading3d = null; this._mode = '2d';
     try {
-      const loc = await getJson(cfg.location);
+      const locText = await getText(cfg.location), loc = parseJson(cfg.location, locText);
       const { baseUrl, modelUrl } = houseUrls(cfg.location, loc);
-      const model = await getJson(modelUrl);
+      const modelText = await getText(modelUrl), model = parseJson(modelUrl, modelText);
       model.levels ??= []; model.checks ??= [];
       // the design library's materials, published next to the card (object-designs/ under the same root as the card)
       const root = cfg.location.replace(/locations\/.*$/, '');
@@ -151,9 +159,36 @@ class PlanternCard extends HTMLElement {
       setLibraryTextureBase(`${root}object-designs/textures/`);
       if (token !== this._token) return;
       this._show(cfg, loc, model, baseUrl);
+      this._watch(cfg, baseUrl, modelUrl, [locText, modelText, await getText(`${baseUrl}glb/index.json`).catch(() => '')]);
     } catch (e) {
       if (token === this._token) this._say(`Plantern: ${e.message}`, true, true);
     }
+  }
+
+  /**
+   * Looks for a changed house now and then (the add-on publishes a saved change within about a minute, and the card used to
+   * read it only when the dashboard loaded): when the house, its model or the published library models differ from what was
+   * drawn, the card loads again, on the same floor and in the same view.
+   */
+  _watch(cfg, baseUrl, modelUrl, drawn) {
+    const token = this._token;
+    let timer = null, busy = false;
+    const look = async () => {
+      if (busy || document.hidden || !this.isConnected || token !== this._token) return;
+      busy = true;
+      try {
+        const now = [await getText(cfg.location), await getText(modelUrl), await getText(`${baseUrl}glb/index.json`).catch(() => '')];
+        if (token === this._token && now.some((t, i) => t !== drawn[i])) {
+          this._keep = this._state?.() ?? null;
+          this._load();
+        }
+      } catch { /* the add-on is restarting or the network is away: look again next time */ }
+      busy = false;
+    };
+    const onVisible = () => { if (!document.hidden) look(); };
+    this._startWatch = () => { timer ??= setInterval(look, WATCH_MS); document.addEventListener('visibilitychange', onVisible); };
+    this._stopWatch = () => { clearInterval(timer); timer = null; document.removeEventListener('visibilitychange', onVisible); };
+    if (this.isConnected) this._startWatch();
   }
 
   _show(cfg, loc, model, baseUrl) {
@@ -163,7 +198,8 @@ class PlanternCard extends HTMLElement {
     const ha = new HassHA({ entities: boundEntities(loc) });
     const getState = id => ha.getState(id);
     const { levels: pool, mode: levelMode } = cardLevels(model, cfg);   // select | single | together | cycle
-    let current = pool.find(l => l.id === cfg.level) || (levelMode === 'select' ? chooseCardLevel(model, cfg.level) : pool[0]) || null;
+    const keep = this._keep; this._keep = null;                     // a reload after a change: the same floor and view as before
+    let current = pool.find(l => l.id === keep?.level) || pool.find(l => l.id === cfg.level) || (levelMode === 'select' ? chooseCardLevel(model, cfg.level) : pool[0]) || null;
     const shown = () => levelMode === 'together' ? pool : current ? [current] : [];
     const levelName = l => l.name || l.id;
 
@@ -317,7 +353,8 @@ class PlanternCard extends HTMLElement {
       if (mode === '3d') view3d.render(); else requestAnimationFrame(() => this._plans.forEach(p => p.view.fit()));
     };
     for (const b of hd.querySelectorAll('.view button')) b.onclick = () => setMode(b.dataset.v);
-    if (cfg.view === '3d') setMode('3d');
+    if ((keep?.mode ?? cfg.view) === '3d') setMode('3d');
+    this._state = () => ({ level: current?.id, mode: this._mode });
 
     // a door sensor changed (or its state arrived after the first drawing): the plans and the 3D view are drawn again with the leaf and the light
     // as they are now. The 3D camera stays where it was (a build frames the house again).

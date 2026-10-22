@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.12
+
+- Lovelace card reloads when the house changes (same floor and view); phone viewer: the controls fold away so the plan fills the screen
+
 ## 0.6.11
 
 - Publish: no automatic gc in the install-repo push

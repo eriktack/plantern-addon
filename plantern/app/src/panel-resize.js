@@ -53,3 +53,30 @@ export function wirePanelResizeVertical(bar, panel, key, onResize = () => {}) {
     onResize();
   });
 }
+
+// A phone's controls at the bottom can be put away so the plan has the whole screen: a bar between the plan and the controls
+// folds them and brings them back. The choice is remembered in this browser; on a wide screen the bar is hidden and nothing folds.
+/** The label and tooltip of the bar for a state (pure). */
+export function asideToggleText(collapsed) {
+  return collapsed ? { label: 'Show controls', title: 'Show the controls again' } : { label: 'Hide controls', title: 'Hide the controls so the plan fills the screen' };
+}
+
+export function wireAsideCollapse(button, key, onChange = () => {}, body = document.body) {
+  const apply = collapsed => {
+    body.classList.toggle('aside-min', collapsed);
+    button.setAttribute('aria-expanded', String(!collapsed));
+    const t = asideToggleText(collapsed);
+    button.title = t.title;
+    const lbl = button.querySelector('.lbl'); if (lbl) lbl.textContent = t.label;
+  };
+  let collapsed = false;
+  try { collapsed = localStorage.getItem(key) === '1'; } catch { /* no storage */ }
+  apply(collapsed);
+  button.addEventListener('click', () => {
+    collapsed = !collapsed;
+    apply(collapsed);
+    try { if (collapsed) localStorage.setItem(key, '1'); else localStorage.removeItem(key); } catch { /* no storage */ }
+    onChange(collapsed);
+  });
+  return () => collapsed;
+}
