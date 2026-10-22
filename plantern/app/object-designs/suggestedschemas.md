@@ -4530,3 +4530,196 @@ Per generator:
   ]
 }
 ```
+
+
+```json
+{
+  "category": "storage",
+  "generators": [
+    {
+      "id": "display_cabinet",
+      "parameters": [
+        {
+          "key": "variant",
+          "label": "Variant",
+          "type": "enum",
+          "options": [
+            "straight",
+            "corner"
+          ],
+          "default": "straight"
+        },
+        {
+          "key": "width",
+          "label": "Width",
+          "type": "number",
+          "unit": "mm",
+          "default": 1500,
+          "min": 700,
+          "max": 2400,
+          "step": 10
+        },
+        {
+          "key": "height",
+          "label": "Height",
+          "type": "number",
+          "unit": "mm",
+          "default": 1900,
+          "min": 1500,
+          "max": 2400,
+          "step": 10
+        },
+        {
+          "key": "depth",
+          "label": "Depth of the bottom part",
+          "type": "number",
+          "unit": "mm",
+          "default": 500,
+          "min": 300,
+          "max": 650,
+          "step": 10
+        },
+        {
+          "key": "topDepth",
+          "label": "Depth of the top part",
+          "type": "number",
+          "unit": "mm",
+          "default": 330,
+          "min": 200,
+          "max": 650,
+          "step": 10
+        },
+        {
+          "key": "endCut",
+          "label": "Broken-off ends",
+          "type": "number",
+          "unit": "mm",
+          "default": 30,
+          "min": 0,
+          "max": 100,
+          "step": 5
+        },
+        {
+          "key": "bottomHeight",
+          "label": "Height of the bottom part",
+          "type": "number",
+          "unit": "mm",
+          "default": 900,
+          "min": 700,
+          "max": 1100,
+          "step": 10
+        },
+        {
+          "key": "legHeight",
+          "label": "Leg height",
+          "type": "number",
+          "unit": "mm",
+          "default": 100,
+          "min": 30,
+          "max": 250,
+          "step": 5
+        },
+        {
+          "key": "legStyle",
+          "label": "Legs",
+          "type": "enum",
+          "options": [
+            "square",
+            "bun"
+          ],
+          "default": "bun"
+        },
+        {
+          "key": "doors",
+          "label": "Bottom doors",
+          "type": "integer",
+          "default": 3,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "key": "drawers",
+          "label": "Drawers",
+          "type": "integer",
+          "default": 3,
+          "min": 0,
+          "max": 4
+        },
+        {
+          "key": "glassDoors",
+          "label": "Glass doors on the top part",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "key": "topDoors",
+          "label": "Top doors",
+          "type": "integer",
+          "default": 2,
+          "min": 1,
+          "max": 4
+        },
+        {
+          "key": "muntins",
+          "label": "Muntins in the glass",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "key": "shelves",
+          "label": "Shelves in the top part",
+          "type": "integer",
+          "default": 2,
+          "min": 0,
+          "max": 5
+        },
+        {
+          "key": "material",
+          "label": "Material (whole object)",
+          "type": "material",
+          "default": "pine"
+        }
+      ],
+      "variant_defaults": {
+        "corner": {
+          "width": 800,
+          "height": 1900,
+          "topDepth": 330,
+          "doors": 1,
+          "drawers": 0,
+          "topDoors": 1,
+          "shelves": 3
+        }
+      },
+      "parts": [
+        [
+          "body",
+          "Cabinet"
+        ],
+        [
+          "legs",
+          "Legs"
+        ],
+        [
+          "doors",
+          "Doors and drawers"
+        ],
+        [
+          "glass",
+          "Glass"
+        ],
+        [
+          "handles",
+          "Knobs"
+        ]
+      ],
+      "placement": {
+        "mount": "floor"
+      },
+      "notes": [
+        "A vitrinskåp (hutch): legs, a bottom part (doors and a row of drawers under a worktop) and a top part (glass doors, shelves) that is never deeper than the bottom part. The corner variant is a triangle in plan with the doors on a diagonal front."
+      ]
+    }
+  ]
+}
+```

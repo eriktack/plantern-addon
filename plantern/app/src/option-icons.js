@@ -28,6 +28,7 @@ const DRAWN = {
   round: '<circle cx="12" cy="11" r="8"/>',
   oval: '<ellipse cx="12" cy="11" rx="9" ry="6"/>',
   square: '<rect x="5" y="5" width="14" height="14"/>',
+  bun: '<circle cx="12" cy="15" r="5"/><path d="M10 10h4M11 4h2v6h-2z"/>',
   pedestal: '<ellipse cx="12" cy="8" rx="8" ry="3"/><path d="M12 11v7M8 21h8"/>',
   trestle: '<rect x="3" y="7" width="18" height="3"/><path d="M6 10l-2 11M18 10l2 11"/>',
   nesting: '<circle cx="9" cy="12" r="5"/><circle cx="16" cy="12" r="3"/>',
@@ -87,7 +88,7 @@ const DRAWN = {
 const BY_NAME = {
   armchair: 'armchair', office: 'office', lounge: 'lounge', kitchen_sofa: 'sofa', two_seat: 'sofa', three_seat: 'sofaLong',
   corner_l: 'sofaL', corner_u: 'sofaU', sofa_bed: 'sofaBed',
-  rectangular: 'table', round: 'round', oval: 'oval', square: 'square', pedestal: 'pedestal', trestle: 'trestle',
+  bun: 'bun', rectangular: 'table', round: 'round', oval: 'oval', square: 'square', pedestal: 'pedestal', trestle: 'trestle',
   nesting_pair: 'nesting', l_shaped: 'lShape', standing: 'standing', dining: 'table',
   standard: 'bed', platform: 'lowBed', storage_bed: 'bed', bunk: 'bunk', daybed: 'lowBed', cot: 'lowBed',
   open: 'shelves', glass_door: 'glass', corner_unit: 'hinged', corner_glass_door: 'glass', string: 'shelves', hinged: 'hinged',
