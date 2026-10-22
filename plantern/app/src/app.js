@@ -26,7 +26,9 @@ import { wirePanelResize } from './panel-resize.js';
 import { foldOnPhone } from './fold-note.js';
 import { readPrefs, writePrefs, cameraKey } from './model/prefs.js';
 import { shadowLevel, SHADOW_LEVELS, SHADOW_LABEL, SHADOW_COUNT } from './model/shadows.js';
-import { nightLight } from './model/night.js';
+import { houseDaylight } from './geometry/sun.js';
+import { lightFor, lightPrefs, lightPercents, LIGHT_MODES, LIGHT_LABELS } from './model/light.js';
+import { createDualSlider } from './dual-slider.js';
 import { northAngleOf } from './model/orientation.js';
 
 // nicer dropdowns (ND2): every select on the page is drawn as the page menu
@@ -227,9 +229,8 @@ async function main() {
       build3d();
       // the 3D choices last made in this browser: daylight, projection, and the camera for this house and level
       const p = readPrefs();
-      if (p.daylight) $('daylight').classList.toggle('on', view3d.setDaylight(true));
       applyShadows();
-      applyNight();
+      applyLight();
       $('proj').classList.toggle('on', p.projection === 'persp');
       restoreCamera();
       refreshFixtures();
@@ -283,17 +284,32 @@ async function main() {
     applyShadows();
   };
   applyShadows();
-  // night light: the ambient light with daylight off, a slider remembered in this browser (night.js)
-  function applyNight() {
-    const pct = Math.round(nightLight(state().settings?.render3d, readPrefs().night) * 100);
-    $('nightLvl').value = pct; $('nightTxt').textContent = `${pct} %`;
-    view3d?.setNightLight(pct / 100);
+  // the 3D light (decision 283): a mode and the range of the ambient light with daylight off, remembered in this browser (light.js)
+  const lightRange = createDualSlider($('lightRange'), {
+    label: 'Light range',
+    onInput: (low, high) => {
+      writePrefs({ light: { ...lightPrefs(readPrefs()), min: low, max: high } });
+      applyLight();
+    },
+  });
+  function applyLight() {
+    const p = lightPrefs(readPrefs()), r3 = state().settings?.render3d;
+    const { min, max } = lightPercents(p, r3);
+    $('lightMode').value = p.mode ?? 'default';
+    lightRange.set(min, max);
+    $('lightTxt').textContent = `${min} – ${max} %`;
+    view3d?.setLight(lightFor({ mode: p.mode, min: p.min, max: p.max, sun: houseDaylight(model.site) }, r3));
   }
-  $('nightLvl').oninput = () => { writePrefs({ night: Number($('nightLvl').value) / 100 }); applyNight(); };
-  $('nightReset').onclick = () => { writePrefs({ night: null }); applyNight(); };
+  $('lightMode').onchange = () => {
+    const p = lightPrefs(readPrefs());
+    writePrefs({ light: { mode: $('lightMode').value, min: p.min, max: p.max } });
+    applyLight();
+  };
+  $('lightReset').onclick = () => { writePrefs({ light: null, daylight: null, night: null }); applyLight(); };
   $('shadowReset').onclick = () => { writePrefs({ shadows: { ...(readPrefs().shadows || {}), [device]: null } }); applyShadows(); };
-  applyNight();
-  $('daylight').onclick = () => { if (!view3d) return; const on = view3d.setDaylight(!view3d.isDaylight()); $('daylight').classList.toggle('on', on); writePrefs({ daylight: on }); };
+  applyLight();
+  // the sun moves: the light follows it every 5 minutes (sun.js); with no position there is no sun and the low end stays
+  setInterval(applyLight, 5 * 60 * 1000);
   $('proj').onclick = () => { if (!view3d) return; const p = $('proj').classList.toggle('on') ? 'persp' : 'ortho'; view3d.setProjection(p); keepCamera(view3d.getCamera()); };
   $('resetView').onclick = () => { if (!view3d) return; view3d.setProjection('ortho'); view3d.resetView(); $('proj').classList.remove('on'); keepCamera(view3d.getCamera()); };
   levelSel.onchange = () => {

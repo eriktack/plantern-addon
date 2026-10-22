@@ -9,6 +9,8 @@
 //   view: 2d | 3d             (optional, what it opens on; the header has a switch)
 //   background: dark | card | transparent   (optional: the plan's dark, the theme's card colour, or the dashboard behind; on a light theme the plan goes light)
 //   shadows: none | few | average | lots | all   (optional: how many lamps cast shadows in 3D; empty = the house's setting for this kind of device)
+//   light: default | daylight | set   (optional, 3D: default (day/night) follows the sun at the house, daylight keeps it on, set holds the light at the low end of the range)
+//   light_min: 0-100, light_max: 0-100   (optional: the low end (night, or the set light) and the high end (full sun), in percent; empty = the house's night light, and 100)
 //   height: <px>              (optional, the least height: the card fills the space its dashboard gives it)
 // Everything but the DOM lives in card-core.js, ../ha/fixture.js and the same geometry and plan modules the viewer uses.
 
@@ -16,6 +18,9 @@ import { cardConfig, houseUrls, housesFromIndex, chooseCardLevel, cardLevels, ne
 import { paletteFor, backgroundColour } from '../render2d/palette.js';
 import { readPrefs, writePrefs } from '../model/prefs.js';
 import { shadowLevel, SHADOW_COUNT, SHADOW_LEVELS, SHADOW_LABEL } from '../model/shadows.js';
+import { lightFor, lightPercents, LIGHT_MODES, LIGHT_LABELS } from '../model/light.js';
+import { houseDaylight } from '../geometry/sun.js';
+import { createDualSlider } from '../dual-slider.js';
 import { buildModelGeometry } from '../geometry/level.js';
 import { addLitLamps } from '../model/lit.js';
 import { resolveSettings } from '../model/settings.js';
@@ -102,8 +107,9 @@ class PlanternCard extends HTMLElement {
     this._ro ??= new ResizeObserver(() => { if (this._mode !== '3d') this._plans.forEach(p => p.view.fit()); });
     this._plans.forEach(p => this._ro.observe(p.svg));
     this._startCycle?.();
+    this._startLight?.();
   }
-  disconnectedCallback() { this._ro?.disconnect(); this._stopCycle?.(); }
+  disconnectedCallback() { this._ro?.disconnect(); this._stopCycle?.(); this._stopLight?.(); }
 
   static getConfigElement() { return document.createElement('plantern-card-editor'); }
   static async getStubConfig() {
@@ -128,6 +134,7 @@ class PlanternCard extends HTMLElement {
   async _load() {
     const token = ++this._token, cfg = this._cfg;
     this._stopCycle?.(); this._startCycle = this._stopCycle = null;
+    this._stopLight?.(); this._startLight = this._stopLight = null;
     this._ro?.disconnect(); this._plans = [];
     this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card data-bg="${cfg.background || 'dark'}"><div class="hd"></div><div class="lv" hidden></div><div class="stage"><div class="plans"></div><div class="v3d" hidden></div></div><div class="msg"></div></ha-card>`;
     this._say('Loading…', false, true);
@@ -203,6 +210,13 @@ class PlanternCard extends HTMLElement {
       view3d.build({ level: list[0], geo: list[0] && geos.get(list[0].id), levels: levels.map(st => ({ ...st, geo: geos.get(st.level.id) })), settings: resolveSettings(loc, list[0]), fixtureLabel, ...looks, doorStates: doorStates(model, bindings, getState) });
       view3d.setShadows(SHADOW_COUNT[shadowLevel(resolveSettings(loc, list[0]).render3d, deviceKind(), cfg.shadows)]);
     };
+
+    // the 3D light (decision 283): the card's mode and range, with the sun at the house; the sun moves, so it is worked out again
+    // every 5 minutes while the card is on the page
+    const applyLight = () => view3d?.setLight(lightFor({ mode: this._cfg.light, min: this._cfg.light_min, max: this._cfg.light_max, sun: houseDaylight(model.site) }, resolveSettings(loc, shown()[0]).render3d));
+    let lightTimer = null;
+    this._startLight = () => { lightTimer ??= setInterval(applyLight, 5 * 60 * 1000); };
+    this._stopLight = () => { clearInterval(lightTimer); lightTimer = null; };
 
     // ---- the floors on show ----
     const renderPlans = ({ with3d = true } = {}) => {
@@ -285,6 +299,7 @@ class PlanternCard extends HTMLElement {
       view3d.setProjection('persp');                                // the card opens in perspective (issue #3)
       view3d.setBackground(cfg.background && cfg.background !== 'dark' ? 'transparent' : 'dark');
       build3d(); refresh();
+      applyLight(); this._startLight?.();
       return view3d;
     }).catch(e => { this._loading3d = null; throw e; });
     const mark = mode => { for (const b of hd.querySelectorAll('.view button')) b.classList.toggle('on', b.dataset.v === mode); };
@@ -332,6 +347,7 @@ class PlanternCardEditor extends HTMLElement {
     if (!(url in this._levelCache)) {
       try {
         const loc = await getJson(url), model = await getJson(houseUrls(url, loc).modelUrl);
+        (this._houseNight ??= {})[url] = loc.settings?.render3d?.nightLight;   // the house's night light: the low end of the light by default
         this._levelCache[url] = (model.levels || []).slice().sort((a, b) => a.elevation - b.elevation).map(l => ({ id: l.id, name: l.name || l.id }));
       } catch { this._levelCache[url] = []; }
     }
@@ -359,8 +375,18 @@ class PlanternCardEditor extends HTMLElement {
         <label>Opens in<br><select id="view"><option value="2d"${c.view === '3d' ? '' : ' selected'}>2D plan</option><option value="3d"${c.view === '3d' ? ' selected' : ''}>3D view</option></select></label>
         <label>Background<br><select id="background">${[['dark', "Dark (the plan's own)"], ['card', 'Card colour (follows the theme)'], ['transparent', 'Transparent (the dashboard shows through)']].map(([v, n]) => `<option value="${v}"${(c.background || 'dark') === v ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
         <label>Shadows in 3D (empty: the house's setting for this kind of device)<br><select id="shadows">${['', ...SHADOW_LEVELS].map(v => `<option value="${v}"${(c.shadows || '') === v ? ' selected' : ''}>${v ? esc(SHADOW_LABEL[v]) : 'House setting'}</option>`).join('')}</select></label>
+        <label>Light in 3D<br><select id="light">${LIGHT_MODES.map(m => `<option value="${m}"${(c.light || 'default') === m ? ' selected' : ''}>${esc(LIGHT_LABELS[m])}</option>`).join('')}</select></label>
+        <div><div style="opacity:.7;font-size:.9em">Range of the light, in percent: the low end at night (or the whole light with Set), the high end at full sun.</div><div id="lightRange"></div></div>
         <label>Least height in pixels (optional; the card fills the space it is given)<br><input id="height" type="number" min="120" max="2000" value="${esc(c.height ?? '')}"></label>
       </div>`;
+    // the light range: the house's night light and full sun until someone moves it; moving it writes it
+    const houseNight = this._houseNight?.[c.location];
+    const start = lightPercents({ min: c.light_min, max: c.light_max }, { nightLight: houseNight });
+    let rangeMoved = false;
+    const range = createDualSlider(this.querySelector('#lightRange'), {
+      label: 'Light range', low: start.min, high: start.max,
+      onInput: () => { rangeMoved = true; changed(); },
+    });
     const changed = ev => {
       const next = { ...this._config, location: (this.querySelector('#house') || this.querySelector('#loc'))?.value || '' };
       if (ev?.target?.id === 'house') { delete next.levels; delete next.level; delete next.cycle; }   // another house has other floors
@@ -378,6 +404,12 @@ class PlanternCardEditor extends HTMLElement {
       }
       const shadows = this.querySelector('#shadows')?.value;
       if (shadows) next.shadows = shadows; else delete next.shadows;
+      const light = this.querySelector('#light').value;
+      if (light && light !== 'default') next.light = light; else delete next.light;
+      if (rangeMoved || c.light_min !== undefined || c.light_max !== undefined) {
+        const [lo, hi] = range.get();
+        next.light_min = lo; next.light_max = hi;
+      } else { delete next.light_min; delete next.light_max; }
       this._config = next;
       this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: next }, bubbles: true, composed: true }));
       if (ev?.target?.id === 'house') this._render();

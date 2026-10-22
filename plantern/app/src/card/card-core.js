@@ -3,6 +3,7 @@
 
 import { levelStack, STACK_MODES } from '../geometry/stack.js';
 import { SHADOW_LEVELS } from '../model/shadows.js';
+import { LIGHT_MODES, cleanLightMode, configPercent } from '../model/light.js';
 
 export const STACK_CHOICES = STACK_MODES;
 
@@ -31,8 +32,15 @@ export function cardConfig(config) {
   if (cycle !== undefined && !(cycle >= 2 && cycle <= 3600)) throw new Error('cycle is the seconds each floor stays on show, between 2 and 3600.');
   const shadows = config.shadows === undefined || config.shadows === '' ? undefined : String(config.shadows).toLowerCase();
   if (shadows !== undefined && !SHADOW_LEVELS.includes(shadows)) throw new Error(`shadows is one of ${SHADOW_LEVELS.join(', ')}, not "${config.shadows}".`);
+  const light = config.light === undefined || config.light === '' ? undefined : cleanLightMode(config.light);
+  if (config.light !== undefined && config.light !== '' && light === undefined) throw new Error(`light is one of ${LIGHT_MODES.join(', ')}, not "${config.light}".`);
+  const lightMin = configPercent(config.light_min, 'light_min'), lightMax = configPercent(config.light_max, 'light_max');
+  if (lightMin !== undefined && lightMax !== undefined && lightMin > lightMax) throw new Error('light_min is above light_max: the low end of the light is at most the high end.');
   return {
     ...(shadows ? { shadows } : {}),
+    ...(light && light !== 'default' ? { light } : {}),
+    ...(lightMin !== undefined ? { light_min: lightMin } : {}),
+    ...(lightMax !== undefined ? { light_max: lightMax } : {}),
     location,
     ...(levels.length ? { levels } : {}),
     ...(cycle !== undefined ? { cycle } : {}),

@@ -8,7 +8,7 @@ import { openingSymbol, arcPathSvg } from '../../geometry/openings.js';
 import { openingAssumed } from '../../model/openings.js';
 import { resolveSettings } from '../../model/settings.js';
 import { assetKey } from '../../model/assets.js';
-import { resizeHandles } from '../drag.js';
+import { resizeHandles, resizeCursor } from '../drag.js';
 import { isHosted } from '../../model/hosted.js';
 import { sizeFields } from '../../blueprints/size.js';
 import { stripForm } from '../../model/fixtures.js';
@@ -144,10 +144,16 @@ export function objectSvg(o, lv, geo, fs) {
   if (sel && !(Ed.editing && !(Ed.editing.kind === 'object' && Ed.editing.id === o.id))) {
     const axes = resizableAxes(o), w = o.attach?.wall && lv.walls?.find(x => x.id === o.attach.wall), f = w && geo.frames.get(w.id);
     const H = axes.length ? resizeHandles(o, f ? { a: w.a, frame: f } : null) : {};
+    // the arrow follows the side's own direction in the plan (the width of a turned box is not a horizontal line)
+    const sideDir = side => {
+      if (f) { const sg = o.attach.side === 'left' ? 1 : -1; return side[0] === 'x' ? f.u : [f.n[0] * sg, f.n[1] * sg]; }
+      const r = (o.rotationDeg || 0) * Math.PI / 180;
+      return side[0] === 'x' ? [Math.cos(r), Math.sin(r)] : [-Math.sin(r), Math.cos(r)];
+    };
     for (const [side, q] of Object.entries(H)) {
       if (!axes.includes(side[0])) continue;
       const [x, y] = toSvg(q);
-      handles += `<rect x="${x - fs * 0.3}" y="${y - fs * 0.3}" width="${fs * 0.6}" height="${fs * 0.6}" fill="#fff" fill-opacity=".85" stroke="#ffb454" stroke-width="${fs / 8}" pointer-events="none"/><circle data-oside="${side}" data-id="${esc(o.id)}" cx="${x}" cy="${y}" r="${fs * 0.7}" fill="transparent" style="cursor:${side[0] === 'x' ? 'ew-resize' : 'ns-resize'}"><title>Drag to change its ${side[0] === 'x' ? 'width' : 'depth'} (the other side stays; whole centimetres, Alt: exact)</title></circle>`;
+      handles += `<rect x="${x - fs * 0.3}" y="${y - fs * 0.3}" width="${fs * 0.6}" height="${fs * 0.6}" fill="#fff" fill-opacity=".85" stroke="#ffb454" stroke-width="${fs / 8}" pointer-events="none"/><circle data-oside="${side}" data-id="${esc(o.id)}" cx="${x}" cy="${y}" r="${fs * 0.7}" fill="transparent" style="cursor:${resizeCursor(sideDir(side))}"><title>Drag to change its ${side[0] === 'x' ? 'width' : 'depth'} (the other side stays; whole centimetres, Alt: exact)</title></circle>`;
     }
   }
   return { body, handles: handles && `<g data-handles="${esc(o.id)}">${handles}</g>` };

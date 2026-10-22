@@ -55,7 +55,9 @@ export function createView3d(container, hooks = {}) {
   const leakOf = new Map();                  // lamp id → mm² of its reach that walls hide (geometry/leak.js), set by build
   const maskInput = [];                      // the lamps a mask is made for: { id, reach, group, level }, set by build (lamp-mask.js)
   const maskUniforms = installLampMask(THREE);   // null when this three.js is not the one the shader patch is for: the lights stay as they are
-  let nightLight = DEFAULT_NIGHT_LIGHT;      // the ambient light with daylight off (setNightLight)
+  let nightLight = DEFAULT_NIGHT_LIGHT;      // the ambient light with daylight off (setNightLight): the floor the sun adds to
+  let sunlight = 0;                          // how much daylight the house has now, 0 to 1 (setSunlight, geometry/sun.js)
+  let ambientMax = 1;                        // the ambient light at full sun with daylight off (setLight)
   let buildGen = 0;
   let disposed = false;                      // dispose(): nothing is drawn after it, a callback that is still queued does nothing
 
@@ -524,19 +526,45 @@ export function createView3d(container, hooks = {}) {
     requestRender();
   }
 
-  /** The light the house has at night (daylight off), 0 to 1 (night.js): the slider in the viewer. */
+  // The light with daylight off (decision 283): the ambient light runs from nightLight (the low end, night.js) to ambientMax (at
+  // full sun), by how much daylight the house has now (sunlight, geometry/sun.js). With daylight on it is the daylight ambient
+  // and the sun's own light.
+  const DAY_AMBIENT = 1.1;
+  const clamp01 = v => Math.min(1, Math.max(0, v));
+  const ambientNow = () => nightLight + (ambientMax - nightLight) * sunlight;
+
+  function applyLight() {
+    hemi.intensity = daylight ? DAY_AMBIENT : ambientNow();
+    sun.intensity = daylight ? 2.2 : 0;
+    scene.background = transparent ? null : new THREE.Color(daylight ? 0xb9cde0 : 0x14161a);
+    requestRender();
+  }
+
+  /** The low end of the ambient light with daylight off, 0 to 1 (night.js): the slider in the viewer. */
   function setNightLight(v) {
     nightLight = v;
-    if (!daylight) hemi.intensity = v;
-    requestRender();
+    applyLight();
+  }
+
+  /** How much daylight the house has now, 0 to 1 (geometry/sun.js). Only the ambient light follows it, and only with daylight off. */
+  function setSunlight(v) {
+    sunlight = clamp01(v);
+    applyLight();
+  }
+
+  /** The whole light at once (model/light.js lightFor): daylight on or off, the daylight now, and the ambient range, 0 to 1. */
+  function setLight({ daylight: on, sunlight: now, min, max }) {
+    daylight = on;
+    sunlight = clamp01(now);
+    nightLight = min;
+    ambientMax = max;
+    applyLight();
+    return daylight;
   }
 
   function setDaylight(on) {
     daylight = on;
-    hemi.intensity = on ? 1.1 : nightLight;
-    sun.intensity = on ? 2.2 : 0;
-    scene.background = transparent ? null : new THREE.Color(on ? 0xb9cde0 : 0x14161a);
-    requestRender();
+    applyLight();
     return daylight;
   }
 
@@ -607,5 +635,5 @@ export function createView3d(container, hooks = {}) {
   }
 
   setDaylight(false);
-  return { build, setFixture, setShadows, setNightLight, setDaylight, setBackground, setProjection, resetView, frame, getCamera, setCamera, render, dispose, root, isDaylight: () => daylight };
+  return { build, setFixture, setShadows, setNightLight, setSunlight, setLight, setDaylight, setBackground, setProjection, resetView, frame, getCamera, setCamera, render, dispose, root, isDaylight: () => daylight };
 }

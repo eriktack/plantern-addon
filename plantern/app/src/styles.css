@@ -415,6 +415,8 @@ body.phone .key-blue{background:#6cb6ff}body.phone .key-green{background:#4cc38a
 .slrow .slbody { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
 .slrow .slbody input[type=range] { flex: 1; min-width: 0; margin: 0; }
 .slrow .slbody button { flex: none; white-space: nowrap; }
+.slrow .slbody.grow .ddsel { flex: 1; min-width: 0; }
+.slrow .slbody.grow .ddsel .menubtn, .slrow .slbody.grow select { width: 100%; box-sizing: border-box; }
 #stackRow[hidden]{display:none}
 .checks2{display:flex;gap:18px;margin:6px 0}
 

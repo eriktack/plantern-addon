@@ -255,6 +255,18 @@ export function resizeHandles(o, wall = null) {
 }
 
 /**
+ * The cursor for dragging an object's side along the plan direction `dir` (a unit vector in plan axes). The plan flips y on the screen,
+ * so a box turned 90° has its width running up and down: the arrow must follow the screen direction, not the side's name.
+ */
+export function resizeCursor(dir) {
+  const a = ((Math.atan2(-dir[1], dir[0]) % Math.PI) + Math.PI) % Math.PI;   // a line through the handle: 0 to π
+  if (a < Math.PI / 8 || a >= 7 * Math.PI / 8) return 'ew-resize';
+  if (a < 3 * Math.PI / 8) return 'nwse-resize';
+  if (a < 5 * Math.PI / 8) return 'ns-resize';
+  return 'nesw-resize';
+}
+
+/**
  * An object's side `side` dragged to plan point p (UX13): its new { size, pos } (free) or { size, attach } (on a wall). The
  * opposite side stays where it is; whole centimetres unless `exact`; at least `min` mm. `wall` as for resizeHandles().
  */

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.11
+
+- Publish: no automatic gc in the install-repo push
+
+## 0.6.10
+
+- 3D light: modes and range with the sun at the house (viewer and Lovelace card), Revert beside the dropdown and shadows slider, light range handles no longer stick
+
 ## 0.6.9
 
 - Lamps in windows no longer blow out the frame beside them, and a lamp can have a rating in lumens; door and other binary sensors show Open/Closed or On/Off (locks Locked/Unlocked) instead of a switch; a pendant can hang from the ceiling so a longer drop moves the bottom down; the wood stove's flue has a length and a rear outlet on every variant; tidier 3D panel

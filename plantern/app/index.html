@@ -41,7 +41,6 @@
   <section id="panel3d" hidden>
     <h2>3D view</h2>
     <div class="row btns">
-      <button id="daylight" title="Toggle daylight">Daylight</button>
       <button id="proj" title="Orthographic / perspective">Perspective</button>
       <button id="resetView">Reset view</button>
     </div>
@@ -52,11 +51,12 @@
     </div>
     <div class="slrow" title="Lamps that are on cast shadows, brightest first. Shadows are the heavy part of 3D: fewer is faster on phones and wall tablets. Remembered in this browser; the house's defaults are settings.render3d.shadows in location.json">
       <div class="slhead"><label for="shadowLvl">Shadows <small id="shadowDev">on this computer</small></label><span id="shadowTxt" class="slval"></span></div>
-      <div class="slbody"><input type="range" id="shadowLvl" min="0" max="4" step="1"><button type="button" id="shadowReset" title="Forget this browser's choice: the house's setting applies again">house default</button></div>
+      <div class="slbody"><input type="range" id="shadowLvl" min="0" max="4" step="1"><button type="button" id="shadowReset" title="Forget this browser's choice: the house's setting applies again">Revert</button></div>
     </div>
-    <div class="slrow" title="The light in the 3D view at night (daylight off), before the lamps are counted: 0 is pitch black, so only lamps that are on light the rooms. Remembered in this browser; the house's default is settings.render3d.nightLight in location.json">
-      <div class="slhead"><label for="nightLvl">Night light</label><span id="nightTxt" class="slval"></span></div>
-      <div class="slbody"><input type="range" id="nightLvl" min="0" max="100" step="1"><button type="button" id="nightReset" title="Forget this browser's choice: the house's setting applies again">house default</button></div>
+    <div class="slrow" title="The light of the 3D view. Day/night (the default) follows the sun at the house, from the low end at night to the high end at full sun; Daylight is the sun on all the time; Set holds the light at the low end. The range is the lowest and highest light, before the lamps are counted: 0 is pitch black, so only lamps that are on light the rooms. Remembered in this browser; the house's night light is settings.render3d.nightLight in location.json">
+      <div class="slhead"><label for="lightMode">Light</label><span id="lightTxt" class="slval"></span></div>
+      <div class="slbody grow"><select id="lightMode"><option value="default">Day/night (default)</option><option value="daylight">Daylight</option><option value="set">Set (the low end of the range)</option></select><button type="button" id="lightReset" title="Forget this browser's choice: the house's setting applies again">Revert</button></div>
+      <div id="lightRange" title="Low end: the light at night. High end: the light at full sun."></div>
     </div>
     <p class="help">Drag: orbit · right-drag: pan · wheel: zoom · click lamp/switch: toggle</p>
   </section>
