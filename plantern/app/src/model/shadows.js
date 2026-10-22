@@ -38,3 +38,10 @@ export function pickShadowLamps(lamps, count) {
     .sort((a, b) => score(b) - score(a) || (b.brightness ?? 1) - (a.brightness ?? 1) || a.i - b.i)
     .slice(0, Math.max(0, count)).map(l => l.id));
 }
+
+/** What a lamp's shadow is worth when it sits inside an object (a light in a cabinet, on a shelf): its light would shine through the object's solid
+ * walls without a shadow, so these lamps come before any lamp whose only wall is the house's. Everything else keeps the plan's own number. */
+export const OBJECT_LIGHT_LEAK = 1e9;
+export function leakOfLamp(fixture, planLeak) {
+  return fixture?.attach?.object ? OBJECT_LIGHT_LEAK : planLeak;
+}

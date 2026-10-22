@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { levelPrisms } from '../geometry/prisms.js';
 import { MM, toThree, dirToThree, prismGeometry, cylinderGeometry, barGeometry, ballGeometry } from './coords.js';
 import { pointAlong, polylineLength } from '../geometry/strip.js';
-import { pickShadowLamps, SHADOW_COUNT } from '../model/shadows.js';
+import { pickShadowLamps, SHADOW_COUNT, leakOfLamp } from '../model/shadows.js';
 import { lampReach } from '../geometry/leak.js';
 import { lumensScale } from '../ha/appearance.js';
 
@@ -300,8 +300,9 @@ export function createView3d(container, hooks = {}) {
 
     // the shadows go to the lamps whose light the walls would otherwise let through (a shadowless lamp lights through walls)
     const reachOptions = { cutPlane: settings?.cutPlane ?? 1200, doorStates };
-    for (const [id, reach] of lampReach(geo, (level.fixtures || []).filter(f => f.kind === 'lamp'), reachOptions)) {
-      leakOf.set(id, reach.leak);
+    const lampFixtures = (level.fixtures || []).filter(f => f.kind === 'lamp');
+    for (const [id, reach] of lampReach(geo, lampFixtures, reachOptions)) {
+      leakOf.set(id, leakOfLamp(lampFixtures.find(f => f.id === id), reach.leak));   // a light in an object first: its walls must stop it
       maskInput.push({ id, reach, group: g, level });
     }
     // an LED strip's three lights reach 1.8 times its radius (addStrip): each gets the mask of where its place sees (a vertical strip is one place, one mask)

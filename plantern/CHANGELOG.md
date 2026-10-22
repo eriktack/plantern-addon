@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.14
+
+- 3D: a light inside an object gets its shadow first, so the object's solid walls stop it
+
 ## 0.6.13
 
 - New library model: display cabinet (vitrinskåp), straight or corner with broken-off ends
