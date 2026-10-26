@@ -1,7 +1,7 @@
 name: Plantern
 # The version below is a placeholder: the real one is "version" in package.json, written in when the add-on is published
 # (tools/publish-addon.js, tools/release.js). Never edit it.
-version: "0.6.14"
+version: "0.6.15"
 slug: plantern
 description: A floor plan of your house that glows with your Home Assistant lights
 url: https://github.com/eriktack/plantern-addon

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.15
+
+- Library work list: gaps seen in the BBV28 Kök and Matrum
+
 ## 0.6.14
 
 - 3D: a light inside an object gets its shadow first, so the object's solid walls stop it
