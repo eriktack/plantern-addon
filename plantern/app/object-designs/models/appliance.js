@@ -19,6 +19,7 @@ import { primitives, booleans, transforms, geometries } from '../lib/jscad.js';
 // ASSUMED: Vent groups have eight slots, each 2% of appliance width wide and 8% of the available front height high, recessed 5 mm (ventilation detailing).
 // ASSUMED: Cooker and hob surface assemblies are min(40 mm, 25% of total height) high (integrated cooking deck).
 // ASSUMED: Built-in hob housings are inset 20 mm on all four sides; freestanding hob housings use the full footprint (installation distinction).
+// ASSUMED: A built-in hob's hole in a worktop is its housing plus 2 mm on every side, and it rests on the worktop by the underside of its deck.
 // ASSUMED: Every cooking surface has four zones at x = plus/minus 25% of width and y = plus/minus 20% of depth (standard layout).
 // ASSUMED: Burner radius is min(7.5% of width, 11% of depth) (realistic cooking zones).
 // ASSUMED: Induction markings are 2 mm wide annular recesses, 1.5 mm deep (flush zone outlines).
@@ -172,7 +173,8 @@ export const meta = {
   placement: {
     mount: 'floor',
     variants: {
-      hob: { mount: 'floor', z: 860 },
+      // a hob is set into a worktop (a surface, decision 284) or stands on a counter
+      hob: { mount: 'floor', z: 860, hosts: ['room', 'surface'] },
       microwave: { mount: 'floor', z: 910 },
       range_hood: { mount: 'wall', z: 1550 },
     },
@@ -260,6 +262,27 @@ function combine(shapes) {
   if (shapes.length === 0) return geometries.geom3.create();
   if (shapes.length === 1) return shapes[0];
   return booleans.union(...shapes);
+}
+
+const HOB_INSET = 20;        // mm: a built-in hob's housing is set in this far from its deck on every side
+const HOB_CLEARANCE = 2;    // mm: the worktop's hole is this much larger than the housing on every side
+
+/**
+ * The hole a built-in hob needs in a worktop (decision 284, AGENT_INSTRUCTIONS §3.4): its housing and 2 mm round it. None for a
+ * hob that stands on a counter, or for any other appliance.
+ */
+export function cutout(p = {}) {
+  const q = resolve(p);
+  if (q.variant !== 'hob' || !q.builtIn) return [];
+  const side = 2 * (HOB_INSET - HOB_CLEARANCE);
+  return [{ x: 0, y: 0, width: q.width - side, depth: q.depth - side, radius: 0 }];
+}
+
+/** The height of a built-in hob above its bottom that rests on the worktop: the underside of its deck. 0 for anything else. */
+export function rest(p = {}) {
+  const q = resolve(p);
+  if (q.variant !== 'hob' || !q.builtIn) return 0;
+  return q.height - Math.min(40, 0.25 * q.height);
 }
 
 export function build(p = {}) {
@@ -370,7 +393,7 @@ export function build(p = {}) {
 
   if (q.variant === 'hob') {
     const surfaceBottom = cookingSurface();
-    const inset = q.builtIn ? 20 : 0;
+    const inset = q.builtIn ? HOB_INSET : 0;
 
     body.push(
       box(

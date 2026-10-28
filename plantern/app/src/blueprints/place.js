@@ -71,7 +71,7 @@ const num = v => (typeof v === 'string' ? (v.trim() === '' ? NaN : Number(v)) : 
  * { kind: 'wall', wall, side, offset, gap } (on a wall face) or { kind: 'opening', opening, at: 'sill' | 'head', offset?, depth? } (hosted by an opening); `z` is the bottom above the floor, `size` the built size
  * [w, d, h] the server answered. Returns { spec } or { error } with a message for the form.
  */
-export function placeSpec({ blueprint, params, partMaterials, size, z, name, place, light, hangs }) {
+export function placeSpec({ blueprint, params, partMaterials, size, z, name, place, light, cutout, rest, niches, hangs }) {
   if (!blueprint) return { error: 'Pick a blueprint first.' };
   if (!Array.isArray(size) || size.length !== 3 || !size.every(v => Number.isFinite(v) && v > 0)) return { error: 'The size of the object is not known yet.' };
   const bottom = num(z ?? 0);
@@ -80,6 +80,9 @@ export function placeSpec({ blueprint, params, partMaterials, size, z, name, pla
   const spec = { blueprint, params: { ...params }, partMaterials: { ...partMaterials }, size, z: bottom, assumed: ['size'] };
   if (name && String(name).trim()) spec.name = String(name).trim();
   if (Array.isArray(light) && light.length === 3 && light.every(Number.isFinite)) spec.light = light;   // the built light point (LA2)
+  if (Array.isArray(cutout) && cutout.length) spec.cutout = cutout;   // the holes it needs in a worktop (decision 284)
+  if (Number.isFinite(rest)) spec.rest = rest;                          // and the height of it that rests on the worktop
+  if (Array.isArray(niches) && niches.length) spec.niches = niches;     // the niches it has for appliances (an oven housing)
   if (place?.kind === 'opening') {
     // hosted by an opening (hosted.js): on its sill or hanging from its head; its place and height come from the opening, so no z is stored
     if (!place.opening) return { error: 'Pick the opening.' };

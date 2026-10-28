@@ -1,6 +1,7 @@
 // Editor page: drag. Split from ui.js (ui-consistency plan, UX34): no behaviour change, only where the code lives.
 
 import { attachNear as attachOnNearestWall, snapMove, moveCapture, dragCorner, moveWall, dragWallEnd, stripEndDrag, turnStairs, moveStairsStart, resizeObject, openingDrag, rotateObject, pullOff, wallSnap, boxPosForMiddle } from '../drag.js';
+import { builtFields } from '../../model/assets.js';
 import { hasBody, wallCut } from '../../geometry/walls.js';
 import { stripForm, lampOnObject } from '../../model/fixtures.js';
 import { isHosted } from '../../model/hosted.js';
@@ -298,7 +299,7 @@ export function dragMove(e) {
       } else {
         // a free box: pos is the corner it is measured from, so its middle goes on the pointer; near a wall face it hangs on it (UX15)
         const cutPlane = resolveSettings(Ed.loc, lv).cutPlane, standing = w => hasBody(w) && wallCut(w, lv, cutPlane) !== 'above';   // not a lintel overhead
-        const snap = !e.altKey && !isHosted(o) && wallSnap(p, o.size[0], o.size[1], lv.walls, Ed.curGeo.frames, { hasBody: standing });
+        const snap = !e.altKey && !isHosted(o) && !o.on && wallSnap(p, o.size[0], o.size[1], lv.walls, Ed.curGeo.frames, { hasBody: standing });
         if (snap) { props = { attach: snap, pos: null, rotationDeg: null }; note = `: on ${snap.wall} (Alt keeps it free)`; }
         else props = { pos: boxPosForMiddle(o, p) };
       }
@@ -418,7 +419,7 @@ async function endBlueprintResize(d, o, props) {
   let built;
   try { built = await assetCache().rebuild({ ...o, params: edit.params }); }
   catch (err) { draw(); setStatus(`The build with the new size failed: ${err.message}`); return; }
-  const r = setObject(Ed.model, Ed.levelId, o.id, { ...props, params: edit.params, size: built.size, light: built.light ?? null }, opts());
+  const r = setObject(Ed.model, Ed.levelId, o.id, { ...props, params: edit.params, size: built.size, ...builtFields(built) }, opts());
   if (r.report.errors.length) { draw(); setStatus(`Not resized: ${r.report.errors.join('; ')}`); return; }
   commit(r.model, d.key);
   setStatus(`${o.id}: ${edit.changed.map(c => `${c.label} ${c.to}`).join(', ')} (built again; not saved yet)`);

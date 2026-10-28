@@ -175,6 +175,39 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
     catch { return null; }
   }
 
+  /**
+   * The holes a model needs in what it is set into (decision 284, AGENT_INSTRUCTIONS §3.4): its cutout() for the resolved
+   * params, [{ x, y, width, depth, radius }] in mm in its own frame, rounded to 0.1 mm. null for a model that has none, or
+   * when it fails. Cheap and pure, so it is worked out on every answer, never kept in the cache note.
+   */
+  function cutoutOf(found, resolved) {
+    if (typeof found.model?.cutout !== 'function') return null;
+    const r1 = v => Math.round(v * 10) / 10;
+    try {
+      const list = found.model.cutout(resolved);
+      if (!Array.isArray(list)) return null;
+      const holes = list.filter(h => ['x', 'y', 'width', 'depth'].every(k => Number.isFinite(h?.[k])) && h.width > 0 && h.depth > 0);
+      // none is null, so an object that needs no hole (a fridge of a model with a hob) stores nothing
+      return holes.length ? holes.map(h => ({ x: r1(h.x), y: r1(h.y), width: r1(h.width), depth: r1(h.depth), radius: r1(Number.isFinite(h.radius) ? h.radius : 0) })) : null;
+    } catch { return null; }
+  }
+
+  /** The height of a model above its bottom that rests on what it is set into (its rest()), rounded to 0.1 mm; null when it has none. */
+  function restOf(found, resolved) {
+    if (typeof found.model?.rest !== 'function') return null;
+    try { const v = found.model.rest(resolved); return Number.isFinite(v) && v > 0 ? Math.round(v * 10) / 10 : null; } catch { return null; }
+  }
+
+  /** The niches a model has for appliances (its niches()), each { kind, x, y, z, width, depth, height, front } rounded to 0.1 mm; null when none. */
+  function nichesOf(found, resolved) {
+    if (typeof found.model?.niches !== 'function') return null;
+    const r1 = v => Math.round(v * 10) / 10;
+    try {
+      const list = (found.model.niches(resolved) || []).filter(n => ['x', 'y', 'z', 'width', 'depth', 'height', 'front'].every(k => Number.isFinite(n?.[k])));
+      return list.length ? list.map(n => ({ kind: String(n.kind ?? ''), ...Object.fromEntries(['x', 'y', 'z', 'width', 'depth', 'height', 'front'].map(k => [k, r1(n[k])])) })) : null;
+    } catch { return null; }
+  }
+
   async function build(r, blueprint) {
     const { hash } = r;
     const built = await buildOnly(r);
@@ -191,7 +224,7 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
     await fs.writeFile(noteTmp, JSON.stringify({ blueprint, size, light, colour, built: new Date().toISOString() }) + '\n');
     await renameRetry(noteTmp, path.join(dir, `${hash}.json`));
     await prune(hash).catch(() => { /* a failed clean-up must not fail the build that succeeded */ });
-    return { hash, size, light, colour };
+    return { hash, size, light, colour, cutout: cutoutOf(r.found, r.resolved), rest: restOf(r.found, r.resolved), niches: nichesOf(r.found, r.resolved) };
   }
 
   /**
@@ -271,7 +304,7 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
         const note = JSON.parse(await fs.readFile(path.join(dir, `${r.hash}.json`), 'utf8'));
         await fs.access(path.join(dir, `${r.hash}.glb`));
         // an entry from before the light point or the main colour was kept lacks that field: it is built again once, which writes it
-        if (HASH.test(r.hash) && Array.isArray(note.size) && 'light' in note && 'colour' in note) return { hash: r.hash, size: note.size, light: note.light, colour: note.colour };
+        if (HASH.test(r.hash) && Array.isArray(note.size) && 'light' in note && 'colour' in note) return { hash: r.hash, size: note.size, light: note.light, colour: note.colour, cutout: cutoutOf(r.found, r.resolved), rest: restOf(r.found, r.resolved), niches: nichesOf(r.found, r.resolved) };
       } catch { /* not cached */ }
       if (!building.has(r.hash)) building.set(r.hash, build(r, request.blueprint).finally(() => building.delete(r.hash)));
       return building.get(r.hash);

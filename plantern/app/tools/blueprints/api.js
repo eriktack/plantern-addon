@@ -1,5 +1,7 @@
 // The GLB routes of the local server (docs/archive/2026-10-14-object-templates.md, T4 and T5; decision 185).
-//   POST   /api/glb          { house?, blueprint, params?, partMaterials? } → { hash, size, light, colour }   (builds the GLB when it is not cached)
+//   POST   /api/glb          { house?, blueprint, params?, partMaterials? } → { hash, size, light, colour, cutout, rest }   (builds the GLB when it is not cached;
+//            cutout and rest: the holes a model needs in what it is set into and the height of it that rests there, niches: the niches it
+//            has for appliances, each null when it has none; decisions 284, 285)
 //            { house?, batch: [{ blueprint, params?, partMaterials? }, …] } → { results: [{ hash, size, light, colour } | { error, status }, …] }:
 //            many objects in one request, answered in the same order (the Editor asks for a whole house at once, PF15)
 //   GET    /api/glb/<hash>   → the GLB (model/gltf-binary); it never changes for a hash, so it is cached for a year
@@ -78,8 +80,8 @@ export async function glbApi(cache, registry, req, res, url) {
         }
         return json(res, 200, { results }), true;
       }
-      const { hash, size, light, colour } = await cache.ensure({ houseDir, blueprint: body.blueprint, params: body.params, partMaterials: body.partMaterials });
-      return json(res, 200, { hash, size, light, colour }), true;
+      const { hash, size, light, colour, cutout, rest, niches } = await cache.ensure({ houseDir, blueprint: body.blueprint, params: body.params, partMaterials: body.partMaterials });
+      return json(res, 200, { hash, size, light, colour, cutout, rest, niches }), true;
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'method not allowed' }), true;
     const hash = decodeURIComponent(p.slice('/api/glb/'.length));

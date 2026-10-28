@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0
+
+- Kitchens: the sink has a mixer tap and a drainer; a worktop in one piece over a run of cabinets, with the sink and a built-in hob set into it; sink cabinets; an appliance housing with a built-in oven (and microwave) in its niches
+
 ## 0.6.15
 
 - Library work list: gaps seen in the BBV28 Kök and Matrum

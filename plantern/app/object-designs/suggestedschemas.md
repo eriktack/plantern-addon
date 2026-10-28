@@ -4723,3 +4723,116 @@ Per generator:
   ]
 }
 ```
+
+```json
+{
+  "category": "kitchen",
+  "generators": [
+    {
+      "id": "worktop",
+      "parameters": [
+        {
+          "key": "length",
+          "label": "Length",
+          "type": "number",
+          "unit": "mm",
+          "default": 1800,
+          "min": 300,
+          "max": 4200,
+          "step": 10
+        },
+        {
+          "key": "depth",
+          "label": "Depth",
+          "type": "number",
+          "unit": "mm",
+          "default": 620,
+          "min": 300,
+          "max": 1200,
+          "step": 10
+        },
+        {
+          "key": "thickness",
+          "label": "Thickness",
+          "type": "number",
+          "unit": "mm",
+          "default": 30,
+          "min": 12,
+          "max": 60,
+          "step": 2
+        },
+        {
+          "key": "upstand",
+          "label": "Upstand",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "key": "upstandHeight",
+          "label": "Upstand height",
+          "type": "number",
+          "unit": "mm",
+          "default": 50,
+          "min": 20,
+          "max": 150,
+          "step": 5
+        },
+        {
+          "key": "material",
+          "label": "Material (whole object)",
+          "type": "material",
+          "default": "laminate"
+        }
+      ],
+      "parts": [
+        [
+          "top",
+          "Worktop"
+        ],
+        [
+          "upstand",
+          "Upstand"
+        ]
+      ],
+      "placement": {
+        "mount": "floor",
+        "z": 880
+      },
+      "notes": [
+        "A straight kitchen worktop in one piece over a run of base cabinets without their own tops (docs/archive/2026-10-28-kitchen.md K2), with an optional upstand along the back. Length and depth are the whole slab, the front overhang included."
+      ]
+    }
+  ]
+}
+```
+
+```json
+{
+  "category": "kitchen",
+  "generators": [
+    {
+      "id": "appliance_housing",
+      "parameters": [
+        { "key": "variant", "label": "Variant", "type": "enum", "options": ["base", "tall"], "labels": { "base": "Base: oven under the worktop", "tall": "Tall: oven at eye level" }, "default": "base" },
+        { "key": "width", "label": "Width", "type": "number", "unit": "mm", "default": 600, "min": 450, "max": 900, "step": 10 },
+        { "key": "depth", "label": "Depth", "type": "number", "unit": "mm", "default": 600, "min": 500, "max": 700, "step": 10 },
+        { "key": "height", "label": "Height", "type": "number", "unit": "mm", "default": 880, "min": 820, "max": 2600, "step": 10 },
+        { "key": "plinth", "label": "Plinth", "type": "number", "unit": "mm", "default": 100, "min": 0, "max": 150, "step": 5 },
+        { "key": "nicheHeight", "label": "Oven niche height", "type": "number", "unit": "mm", "default": 600, "min": 450, "max": 620, "step": 5 },
+        { "key": "nicheBottom", "label": "Oven niche at", "type": "number", "unit": "mm", "default": 800, "min": 300, "max": 1400, "step": 10 },
+        { "key": "microwave", "label": "Microwave niche", "type": "boolean", "default": true },
+        { "key": "microwaveHeight", "label": "Microwave niche height", "type": "number", "unit": "mm", "default": 380, "min": 300, "max": 460, "step": 5 },
+        { "key": "worktop", "label": "Worktop", "type": "boolean", "default": true },
+        { "key": "worktopThickness", "label": "Worktop thickness", "type": "number", "unit": "mm", "default": 30, "min": 12, "max": 60, "step": 2 },
+        { "key": "material", "label": "Material (whole object)", "type": "material", "default": "white-paint" }
+      ],
+      "variant_defaults": { "tall": { "height": 2200 } },
+      "parts": [["carcass", "Carcass"], ["doors", "Doors and drawer"], ["top", "Top (worktop on the base housing)"]],
+      "placement": { "mount": "floor" },
+      "notes": [
+        "A kitchen housing cabinet with open niches for built-in appliances (docs/archive/2026-10-28-kitchen.md K5): base with an oven niche under the worktop and a drawer below, tall with an oven at eye level and an optional microwave niche above. The appliances are separate objects put in its niches."
+      ]
+    }
+  ]
+}
+```

@@ -17,6 +17,7 @@ import { checkSolid } from './solids.js';
 import { checkAnchors } from './anchors.js';
 import { checkRoomOptions } from './rooms.js';
 import { checkObject } from './objects.js';
+import { bowlClashes } from './on-object.js';
 import { isHosted } from './hosted.js';
 import { checkName } from './names.js';
 import { checkMaterials, checkPalette } from './materials.js';
@@ -258,6 +259,8 @@ export function validateLevel(level, geo, below = true, checks = [], blueprints)
     for (const m of errors) out.push({ severity: 'error', id: o.id, msg: m });
     for (const m of warnings) out.push({ severity: 'warn', id: o.id, msg: m });
   }
+  // a sink set into a worktop over a cabinet that still has its top (on-object.js)
+  for (const c of bowlClashes(level, geo, blueprints, (a, b) => polygonsOverlap(a, b, 5))) out.push({ severity: 'warn', ...c });
   // Overlapping wall volumes (z-fighting): pieces of different walls that intersect in plan and in height.
   const solid = (level.walls || []).filter(hasBody);
   const roomsById = new Map((level.rooms || []).filter(r => r.polygon?.length >= 3).map(r => [r.id, r]));

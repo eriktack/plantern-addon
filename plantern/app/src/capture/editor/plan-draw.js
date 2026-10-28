@@ -1,6 +1,7 @@
 // Editor page: plan-draw. Split from ui.js (ui-consistency plan, UX34): no behaviour change, only where the code lives.
 
 import { toSvg } from '../../render2d/coords.js';
+import { holeOutlines } from '../../model/assets.js';
 import { wallCut, sideStrips } from '../../geometry/walls.js';
 import { wallLookPieces } from '../../geometry/paint.js';
 import { resolveSide, materialTable } from '../../model/materials.js';
@@ -132,8 +133,9 @@ export function objectSvg(o, lv, geo, fs) {
   const col = sel ? '#ffb454' : missing ? '#b00020' : o.assumed?.length ? '#e5a93a' : (o.color || (o.kind === 'asset' && assetCache().mainColour(assetKey(o))) || '#888');
   const made = o.blueprint ? `blueprint "${o.blueprint}"` : `model "${o.asset}"`;
   const what = o.kind === 'asset' ? (missing ? ` · ${made} is missing` : ` · ${made}`) : '';
-  body += `<g data-kind="object" data-id="${esc(o.id)}" style="cursor:grab"><title>${esc(o.name || o.id)} (${esc(o.id)})${esc(what)}</title>${poly(fp, `fill="${col}" fill-opacity="0.25" stroke="${col}" stroke-width="${fs / (sel ? 5 : 9)}"${above || missing ? ` stroke-dasharray="${fs / 2} ${fs / 3}"` : ''}`)}</g>`;
-  if (sel && !o.attach && o.pos) {
+  body += `<g data-kind="object" data-id="${esc(o.id)}" style="cursor:grab"><title>${esc(o.name || o.id)} (${esc(o.id)})${esc(what)}</title>${poly(fp, `fill="${col}" fill-opacity="0.25" stroke="${col}" stroke-width="${fs / (sel ? 5 : 9)}"${above || missing ? ` stroke-dasharray="${fs / 2} ${fs / 3}"` : ''}`)}${holeOutlines(o, fp).map(h => poly(h, `fill="none" stroke="${col}" stroke-width="${fs / 12}" stroke-dasharray="${fs / 4} ${fs / 4}" pointer-events="none"`)).join('')}</g>`;
+  // a free object has a turning handle; one set into another (a sink in a worktop) turns with its host, so it has none
+  if (sel && !o.attach && o.pos && !o.on) {
     // a handle in front of it: drag it round to turn the object about its middle (15° steps snap; Alt: free)
     const a = (o.rotationDeg || 0) * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a), hw = o.size[0] / 2, hd = o.size[1] / 2;
     const mid = [o.pos[0] + hw * c - hd * sn, o.pos[1] + hw * sn + hd * c], f = [-sn, c], front = [mid[0] + f[0] * hd, mid[1] + f[1] * hd], h = [front[0] + f[0] * fs * 2, front[1] + f[1] * fs * 2];

@@ -1,12 +1,15 @@
 // Editor page: panel-object. Split from ui.js (ui-consistency plan, UX34): no behaviour change, only where the code lives.
 
 import { addObject, setObject } from '../../edit/ops.js';
+import { cabinetRun, worktopOverRun } from '../../edit/worktop.js';
+import { isOnObject, hostFrame, offsetFor } from '../../model/on-object.js';
+import { pointInPolygon } from '../../geometry/polygon.js';
 import { createAssetCache, listAssetNames } from '../../render3d/assets.js';
 import { coalesce } from '../../coalesce.js';
 import { blueprintMap } from '../../blueprints/place.js';
 import { createParamForm } from '../../param-form.js';
 import { optionsChanged, sizeFields, sizeEdit } from '../../blueprints/size.js';
-import { assetKey, builtSizeStatus, ASSET_NAME } from '../../model/assets.js';
+import { assetKey, builtSizeStatus, builtFields, ASSET_NAME } from '../../model/assets.js';
 import { isHosted, hostedWhere } from '../../model/hosted.js';
 import { cornerAt } from '../../edit/inspect.js';
 import { hostsOf, appliesTo } from '../../../object-designs/lib/params.js';
@@ -140,11 +143,36 @@ export function showBlueprintNote(o) {
     const range = p => (p.max === undefined ? `from ${p.min}` : `${p.min}–${p.max}`);
     html += `<div class="help">Typing a size changes the option that sets it, and the object is built again. ${fields.map(f => `${f.name}: ${f.param ? `${esc(f.param.label)} (${range(f.param)} ${esc(f.param.unit)})` : 'the build (read-only)'}`).join(' · ')}.</div>`;
   }
-  html += '<div class="btns">' + (b?.state === 'ok' && builtSizeStatus(o, b.size)?.matches === false ? '<button type="button" id="obUseBuilt">Use the built size</button>' : '') + '<button type="button" id="obRebuild">Check the build</button></div>';
+  // a base cabinet can carry a worktop in one piece over the run it stands in (docs/archive/2026-10-28-kitchen.md K2)
+  const run = o.blueprint === 'kitchen-cabinet' && Ed.blueprints ? cabinetRun(Ed.model, Ed.levelId, o.id, Ed.blueprints) : null;
+  html += '<div class="btns">' + (b?.state === 'ok' && builtSizeStatus(o, b.size)?.matches === false ? '<button type="button" id="obUseBuilt">Use the built size</button>' : '') + '<button type="button" id="obRebuild">Check the build</button>'
+    + (run?.run ? `<button type="button" id="obWorktopRun" title="One worktop over ${run.run.length === 1 ? 'this cabinet' : `the ${run.run.length} cabinets in a row with this one`}; their own worktops are turned off">Worktop over this run</button>` : '')
+    + (takesHoles(o) ? setIntoChoices().map((c, i) => `<button type="button" class="obSetNew" data-i="${i}" title="A new ${esc(c.label.toLowerCase())} set into this worktop, in its middle; the worktop gets its hole">Set ${esc(c.article)} ${esc(c.label.toLowerCase())} into it</button>`).join('') : '')
+    + nicheChoices(o).map(c => `<button type="button" class="obNiche" data-niche="${c.niche}" title="A built-in ${esc(c.kind)} sized to the niche (${esc(c.size)} mm), its front flush with the doors">${esc(c.label)}</button>`).join('')
+    + (isOnObject(o) ? `<button type="button" id="obLiftOut" title="It stays where it stands, as a free object, and the hole goes">Lift out of ${esc(nameOf(o.on.object))}</button>` : '')
+    + (cuts(o) && !isOnObject(o) && hostUnder(o) ? `<button type="button" id="obSetInto" title="It is set into it where it stands; moving the worktop then moves it">Set into ${esc(nameOf(hostUnder(o).id))}</button>` : '')
+    + '</div>';
   box.innerHTML = html;
+  box.querySelectorAll('.obSetNew').forEach(b => b.addEventListener('click', () => setNewInto(o, setIntoChoices()[Number(b.dataset.i)])));
+  $('obSetInto')?.addEventListener('click', () => setInto(o, hostUnder(o)));
+  box.querySelectorAll('.obNiche').forEach(b => b.addEventListener('click', () => putInNiche(o, Number(b.dataset.niche))));
+  $('obLiftOut')?.addEventListener('click', () => {
+    const r = setObject(Ed.model, Ed.levelId, o.id, { on: null }, opts());
+    if (r.report.errors.length) { $('obErr').textContent = r.report.errors.join('; '); return; }
+    commit(r.model);
+    setStatus(`${o.id} stands free now; its hole is gone (not saved yet)`);
+  });
+  $('obWorktopRun')?.addEventListener('click', async () => {
+    if (!(await mayLeave())) return;
+    const r = worktopOverRun(Ed.model, Ed.levelId, o.id, opts());
+    if (r.report.errors.length) { $('obErr').textContent = r.report.errors.join('; '); return; }
+    commit(r.model);
+    enterEdit('object', r.worktop.id, { ask: false });
+    setStatus(`${r.worktop.id}: one worktop over ${r.cabinets.join(', ')}, ${r.worktop.size[0]} mm long; their own worktops are off (not saved yet)`);
+  });
   $('obUseBuilt')?.addEventListener('click', () => {
     const size = [...b.size];
-    const r = setObject(Ed.model, Ed.levelId, o.id, { size, light: b.light ?? null }, opts());
+    const r = setObject(Ed.model, Ed.levelId, o.id, { size, ...builtFields(b) }, opts());
     if (r.report.errors.length) { $('obErr').textContent = r.report.errors.join('; '); return; }
     commit(r.model);
     setStatus(`${o.id}: size is now the built ${size.join(' × ')} mm (not saved yet)`);
@@ -152,12 +180,88 @@ export function showBlueprintNote(o) {
   $('obRebuild').addEventListener('click', () => checkBuild(o, { force: true }));
 }
 
+// ---- objects set into a worktop (docs/archive/2026-10-28-kitchen.md K4): a sink stands in its hole, and the worktop is cut for it ----
+/** Whether a blueprint object takes holes from what is set into it (a worktop: meta.cutouts). */
+const takesHoles = o => !!(o?.blueprint && Ed.blueprints?.get(o.blueprint)?.cutouts) && !isOnObject(o);
+/** Whether a blueprint object may be set into another object's top (its placement hosts list `surface`). */
+const cuts = o => !!hostsOfObject(o)?.includes('surface');
+/**
+ * The models (and variants) that may be set into a surface, for the worktop's buttons: [{ blueprint, params, label, article }].
+ * A model whose variants differ gets one button per variant that may (the appliance's hob); otherwise one for its default.
+ */
+function setIntoChoices() {
+  const out = [];
+  for (const b of Ed.blueprintList || []) {
+    const variant = b.meta.params.find(d => d.key === 'variant');
+    const names = variant ? variant.options : [undefined];
+    const fit = names.filter(v => hostsOf(b.meta, v).includes('surface'));
+    const one = variant && fit.length === 1 && fit[0] !== variant.default;      // only some variants: name the variant
+    for (const v of variant && !one && fit.includes(variant.default) ? [variant.default] : fit) {
+      const label = one ? (variant.labels?.[v] ?? v) : b.meta.name;
+      out.push({ blueprint: b.id, params: v !== undefined && v !== variant?.default ? { variant: v } : {}, label, article: /^[aeiou]/i.test(label) ? 'an' : 'a' });
+    }
+  }
+  return out;
+}
+const hostOf = o => level().objects?.find(x => x.id === o.on?.object) ?? null;
+/** The object that takes holes and that this free object stands over (its middle inside the host's footprint), or null. */
+function hostUnder(o) {
+  if (o.attach || !o.pos) return null;
+  const geo = geosFor(Ed.model).get(Ed.levelId), fp = geo?.objectFootprint(o);
+  if (!fp) return null;
+  const mid = [(fp[0][0] + fp[2][0]) / 2, (fp[0][1] + fp[2][1]) / 2];
+  return (level().objects || []).find(h => h.id !== o.id && takesHoles(h) && (() => { const hf = geo.objectFootprint(h); return hf && pointInPolygon(mid, hf); })()) ?? null;
+}
+/** Sets an object into a host where it stands: its hole comes from the server's build. */
+async function setInto(o, host) {
+  if (!host || !(await mayLeave())) return;
+  let { cutout, rest } = o;
+  if (!cutout) {
+    try { ({ cutout = null, rest = null } = await assetCache().rebuild(o)); }
+    catch (e) { $('obErr').textContent = `Plantern's server cannot build ${o.id} now (${e.message}), so its hole is not known.`; return; }
+  }
+  const geo = geosFor(Ed.model).get(Ed.levelId), frame = hostFrame(host, geo.objectFootprint(host));
+  const r = setObject(Ed.model, Ed.levelId, o.id, { on: { object: host.id, offset: offsetFor(o, o.pos, frame) }, cutout, rest }, opts());
+  if (r.report.errors.length) { $('obErr').textContent = r.report.errors.join('; '); return; }
+  commit(r.model);
+  setStatus(`${o.id} is set into ${host.id}, which gets its hole (not saved yet)`);
+}
+/** The empty niches of an appliance housing (its stored `niches`), each with the button's words: [{ niche, kind, label, size }]. */
+function nicheChoices(o) {
+  if (!Array.isArray(o?.niches) || isOnObject(o) || !Ed.blueprints?.get('appliance')) return [];
+  const taken = new Set((level().objects || []).filter(g => g.on?.object === o.id && g.on.niche !== undefined).map(g => g.on.niche));
+  return o.niches.map((n, i) => ({ niche: i, kind: n.kind || 'appliance', size: `${n.width} × ${n.depth} × ${n.height}` }))
+    .filter(c => !taken.has(c.niche))
+    .map(c => ({ ...c, label: `Put ${/^[aeiou]/i.test(c.kind) ? 'an' : 'a'} ${c.kind} in ${o.niches.length > 1 ? `niche ${c.niche + 1}` : 'it'}` }));
+}
+/** A built-in appliance of the niche's kind, sized to fit it (rounded down to 10 mm, within the appliance's ranges), put in that niche. */
+async function putInNiche(host, i) {
+  const n = host.niches?.[i], meta = Ed.blueprints?.get('appliance');
+  if (!n || !meta) return;
+  const range = key => meta.params.find(d => d.key === key);
+  const fit = (key, v) => { const d = range(key); return Math.max(d.min, Math.min(d.max, Math.floor(v / 10) * 10)); };
+  const kind = meta.params[0].options.includes(n.kind) ? n.kind : 'oven';
+  const params = { variant: kind, builtIn: true, width: fit('width', n.width - 4), depth: fit('depth', n.depth), height: fit('height', n.height - 5) };
+  let built;
+  try { built = await assetCache().rebuild({ blueprint: 'appliance', params, partMaterials: {} }); }
+  catch (e) { $('obErr').textContent = `Plantern's server cannot build the ${kind} now: ${e.message}`; return; }
+  await placeObject({ blueprint: 'appliance', params, size: built.size, ...builtFields(built), assumed: ['size'], on: { object: host.id, niche: i } }, `in niche ${i + 1} of ${host.id}`);
+}
+/** A new object of a model that is set into a surface (a sink, a hob), with its default options, in the middle of this worktop. */
+async function setNewInto(host, choice) {
+  if (!choice) return;
+  let built;
+  try { built = await assetCache().rebuild({ blueprint: choice.blueprint, params: choice.params, partMaterials: {} }); }
+  catch (e) { $('obErr').textContent = `Plantern's server cannot build ${choice.article} ${choice.label.toLowerCase()} now: ${e.message}`; return; }
+  await placeObject({ blueprint: choice.blueprint, params: choice.params, size: built.size, ...builtFields(built), assumed: ['size'], on: { object: host.id, offset: [0, 0] } }, `set into ${host.id}`);
+}
+
 export function showObject() {
   const o = object();
   if (!o) { Ed.objectId = null; $('objectPanel').hidden = true; return; }
   const lv = level(), w = o.attach && lv.walls.find(v => v.id === o.attach.wall);
   $('obTitle').innerHTML = titleHtml(o);
-  $('obInfo').innerHTML = `${isHosted(o) ? `in ${esc(o.attach.opening)}, ${o.attach.at === 'head' ? 'hanging from its head' : o.attach.at === 'frame' ? 'on the inner sill, in its frame' : 'on its sill'}` : o.attach ? `on wall <a href="#" id="obWall">${esc(o.attach.wall)}</a>` : 'standing in the plan'}${o.assumed?.length ? ` · <b class="warn">still default: ${esc(o.assumed.join(', '))}</b>` : ''}`;
+  $('obInfo').innerHTML = `${isHosted(o) ? `in ${esc(o.attach.opening)}, ${o.attach.at === 'head' ? 'hanging from its head' : o.attach.at === 'frame' ? 'on the inner sill, in its frame' : 'on its sill'}` : o.attach ? `on wall <a href="#" id="obWall">${esc(o.attach.wall)}</a>` : isOnObject(o) ? (o.on.niche !== undefined ? `in niche ${o.on.niche + 1} of ${esc(o.on.object)}` : `set into ${esc(o.on.object)}, turned with it`) : 'standing in the plan'}${o.assumed?.length ? ` · <b class="warn">still default: ${esc(o.assumed.join(', '))}</b>` : ''}`;
   $('obWall')?.addEventListener('click', e => { e.preventDefault(); afterLeave(() => enterEdit('wall', o.attach.wall))(); });
   showBlueprintNote(o);
   showOptions(o);
@@ -323,7 +427,7 @@ export async function applyObjectForm() {
     props.params = optionsEdit.params;
     props.partMaterials = Object.keys(optionsEdit.partMaterials).length ? optionsEdit.partMaterials : null;
     props.size = built.size;
-    props.light = built.light ?? null;
+    Object.assign(props, builtFields(built));                // its light, holes, rest and niches (decision 285)
   }
   // a dry run (the live preview) keeps the typed options on the draft object, so the 3D preview finds its model by them; the size and the light stay as stored until the server's answer
   else if (optionsEdit) {
@@ -344,7 +448,7 @@ export async function applyObjectForm() {
     if (object()?.id !== o.id) return;                       // another object was picked meanwhile
     props.params = edit.params;
     props.size = built.size;                                  // setObject then counts the size as measured (no longer "assumed")
-    props.light = built.light ?? null;
+    Object.assign(props, builtFields(built));
   }
   if (switching) {
     // the switch works from the object as it is now, with the size the change gives it (OB1b): the place it takes is the switch's

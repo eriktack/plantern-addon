@@ -154,6 +154,11 @@ Object.assign(DRAWN, {
   wallBar: '<rect x="3" y="9" width="18" height="2"/><path d="M6 11v3M18 11v3"/>',
   sconceDrawn: '<path d="M3 12h4"/><path d="M6 8h8l2 8H6z"/>',
   hatShelf: '<path d="M3 8h18"/><path d="M6 8c0-3 12-3 12 0"/>',
+  // the sink's taps (docs/archive/2026-10-28-kitchen.md K1), seen from the side with the spout to the left, and where the tap stands on the rim
+  tapLever: '<path d="M3 21h10M10 21V8M10 11H4v3M10 8l5-3"/>',
+  tapGooseneck: '<path d="M3 21h10M10 21V9a5 5 0 0 0-10 0v3"/><path d="M10 15h4"/>',
+  tapBridge: '<path d="M2 21h20M6 21v-6M18 21v-6M6 15h12M4 13h4M16 13h4M12 15V9a4 4 0 0 0-8 0v2"/>',
+  tapBehind: '<rect x="3" y="5" width="18" height="15" rx="2"/><rect x="6" y="10" width="12" height="7" rx="1"/><circle cx="12" cy="7.5" r="1.2"/>',
 });
 const MORE = {
   tension_pole: 'catPole', blanket_chest: 'chestFlat', trunk: 'chestArch', toy_box: 'toyBox', induction: 'hob', electric: 'hob', gas: 'hob', alcove: 'alcoveBath', freestanding: 'tub',
@@ -166,6 +171,7 @@ const MORE = {
   rolled: 'rolledArm', bar: 'barStool', counter: 'stoolDrawn', step: 'stepStool', classic: 'tableLamp', sill: 'lampSill',
   ceramic: 'vase', baluster: 'vase', pole: 'pole', sphere: 'sphereStem', ladder: 'ladder', wall_bar: 'wallBar',
   single: 'sconceDrawn', hat_shelf: 'hatShelf', narrow: 'hinged', rounded: 'quarterRound', pedal: 'pedalBin', pouf: 'poufDrawn', multi: 'multiLamp', grille: 'grilleDrawn', slats: 'slatsDrawn', cane: 'caneDrawn',
+  lever: 'tapLever', high_spout: 'tapGooseneck', bridge: 'tapBridge', behind: 'tapBehind',
 };
 Object.assign(BY_NAME, MORE);
 for (const [name, family] of Object.entries(BY_NAME)) ICONS[`opt:${name}`] = svg(DRAWN[family]);

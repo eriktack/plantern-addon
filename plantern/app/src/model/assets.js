@@ -31,6 +31,23 @@ export function assetPlacement(o, footprint, z = o.z ?? 0) {
   return { centre: [cx, cy], z, heading: Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) + (turnedToWall(o, footprint) ? Math.PI : 0) };
 }
 
+// ---- a host's frame and holes (on-object.js, decision 285): here, so the plans and the card need nothing from the library ----
+/** The host's frame: its middle, heading (radians, counter-clockwise from east) and unit axes u (its width, model +x) and b (toward its back, model +y). */
+export function hostFrame(host, footprint) {
+  const { centre, heading } = assetPlacement(host, footprint);
+  const u = [Math.cos(heading), Math.sin(heading)], b = [-u[1], u[0]];
+  return { centre, heading, u, b, z: host.z ?? 0 };
+}
+
+/** The outlines of a host's holes (its `params.cutouts`) in plan mm, for the plans: one rectangle of 4 corners per hole. */
+export function holeOutlines(host, footprint) {
+  const holes = host?.params?.cutouts;
+  if (!Array.isArray(holes) || !holes.length || !footprint) return [];
+  const { centre: c, u, b } = hostFrame(host, footprint);
+  const at = (x, y) => [c[0] + u[0] * x + b[0] * y, c[1] + u[1] * x + b[1] * y];
+  return holes.map(h => [at(h.x - h.width / 2, h.y - h.depth / 2), at(h.x + h.width / 2, h.y - h.depth / 2), at(h.x + h.width / 2, h.y + h.depth / 2), at(h.x - h.width / 2, h.y + h.depth / 2)]);
+}
+
 /**
  * True when a model standing on a wall face must be turned half a turn from the heading of its footprint's first edge. The model's +y (its back)
  * is to the left of its width axis. On the right side of a wall the footprint runs clockwise, so the depth (into the room) is on the model's -y
@@ -73,6 +90,13 @@ export const SIZE_TOLERANCE = 0.5;
 
 const canonical = v => Array.isArray(v) ? `[${v.map(canonical).join(',')}]`
   : v && typeof v === 'object' ? `{${Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}` : JSON.stringify(v);
+
+/**
+ * What an object keeps of the server's build besides its size (decisions 249, 284, 285): its light point, the holes it needs in what it
+ * is set into and the height it rests by, and the niches it has for appliances; null removes a field (setObject), so an object
+ * whose model has none of them stores nothing.
+ */
+export const builtFields = a => ({ light: a?.light ?? null, cutout: a?.cutout ?? null, rest: a?.rest ?? null, niches: a?.niches ?? null });
 
 /** What the server needs to build a blueprint object: { blueprint, params, partMaterials }. */
 export const blueprintRequest = o => ({ blueprint: o.blueprint, params: o.params ?? {}, partMaterials: o.partMaterials ?? {} });

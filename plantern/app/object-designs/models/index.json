@@ -1,5 +1,6 @@
 {
   "models": [
+    "appliance-housing.js",
     "appliance.js",
     "bathtub.js",
     "bed.js",
@@ -45,6 +46,7 @@
     "waste-bin.js",
     "water-heater.js",
     "wood-stove.js",
-    "workbench.js"
+    "workbench.js",
+    "worktop.js"
   ]
 }

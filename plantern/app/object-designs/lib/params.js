@@ -19,6 +19,12 @@
 // floor, or hanging from the ceiling (no z: it hangs from the room's ceiling). It is only a start; the house decides
 // (decision 226), so it is not a parameter and never reaches build(). Without it: on the floor. A variant can start
 // elsewhere: placement.variants = { <variant>: { mount, z? } }.
+//
+// Holes (decision 284, docs/archive/2026-10-28-kitchen.md K3): a model that other objects can be set into (a worktop) declares
+// meta.cutouts = { max } and takes the input `cutouts`: a list of at most `max` holes { x, y, width, depth, radius? } in mm in
+// its own axes (the middle of the hole, its size along x and y, its corner radius). Like partMaterials it is not a form
+// parameter: the house works it out from what stands on the object, so the forms, the catalog and the checker never show it.
+// meta.surface names the number parameter that is the height of the top surface others stand on, from the model's bottom.
 
 const MOUNTS = new Set(['floor', 'wall', 'ceiling']);
 const MAX_Z = 3000;
@@ -183,12 +189,13 @@ function checkMount(pl, where, problems) {
 
 // meta.placement = { mount, z?, variants?: { <variant>: { mount, z? } } }: a variant that starts elsewhere (an upper
 // kitchen cabinet on the wall, the base cabinets on the floor) has its own entry
-// placement.hosts (openings-and-lit-objects OB1b): where the model may stand, a non-empty list of room, wall, sill, head.
-// Absent: derived from the mount (hostsOf). A sill is never derived, only declared.
+// placement.hosts (openings-and-lit-objects OB1b): where the model may stand, a non-empty list of room, wall, sill, head and
+// surface (set into another object's top, such as a sink in a worktop: decision 284). Absent: derived from the mount (hostsOf).
+// A sill and a surface are never derived, only declared.
 function checkHosts(p, where, problems) {
   if (p.hosts === undefined) return;
-  if (!Array.isArray(p.hosts) || !p.hosts.length) { problems.push(`${where}.hosts must be a non-empty list of room, wall, sill, head`); return; }
-  for (const h of p.hosts) if (!HOST_NAMES.includes(h)) problems.push(`${where}.hosts: "${h}" is not room, wall, sill or head`);
+  if (!Array.isArray(p.hosts) || !p.hosts.length) { problems.push(`${where}.hosts must be a non-empty list of room, wall, sill, head, surface`); return; }
+  for (const h of p.hosts) if (!HOST_NAMES.includes(h)) problems.push(`${where}.hosts: "${h}" is not room, wall, sill, head or surface`);
   if (new Set(p.hosts).size !== p.hosts.length) problems.push(`${where}.hosts lists a place twice`);
 }
 
@@ -217,7 +224,7 @@ function checkPlacement(pl, problems, meta) {
  * entry, else the model's. Assumes a meta checkMeta accepts.
  */
 /** The places an object of this model may stand, for its variant: room, wall, sill, head (openings-and-lit-objects OB1b). */
-export const HOST_NAMES = ['room', 'wall', 'sill', 'head'];
+export const HOST_NAMES = ['room', 'wall', 'sill', 'head', 'surface'];
 
 /**
  * The hosts of a model's variant: `placement.hosts` when declared; else derived from `mount` (floor → room, wall;
@@ -306,6 +313,11 @@ export function checkMeta(meta) {
   checkVariantDefaults(meta, problems);
   checkPlacement(meta.placement, problems, meta);
   checkSizeParams(meta, problems);
+  if (meta.cutouts !== undefined && (!meta.cutouts || !Number.isInteger(meta.cutouts.max) || meta.cutouts.max < 1)) problems.push('meta.cutouts must be { max: a whole number of 1 or more }');
+  if (meta.surface !== undefined) {
+    const d = (meta.params || []).find(x => x?.key === meta.surface);
+    if (!d || !['number', 'integer'].includes(typeOf(d))) problems.push('meta.surface must be the key of a number parameter');
+  }
 
   const partKeys = new Set();
   for (const p of meta.parts || []) {
@@ -321,6 +333,22 @@ export function checkMeta(meta) {
     problems.push('meta.params needs one material parameter (type: "material") for the whole object');
   }
   return problems;
+}
+
+/** Checks a list of holes against meta.cutouts; returns an error text, or null when it is valid. */
+function checkCutouts(meta, list) {
+  if (!Array.isArray(list)) return 'cutouts must be a list of holes';
+  if (list.length > meta.cutouts.max) return `at most ${meta.cutouts.max} holes (cutouts), not ${list.length}`;
+  for (const [i, h] of list.entries()) {
+    const where = `hole ${i + 1}`;
+    if (!h || typeof h !== 'object' || Array.isArray(h)) return `${where} must be { x, y, width, depth, radius? }`;
+    for (const k of Object.keys(h)) if (!['x', 'y', 'width', 'depth', 'radius'].includes(k)) return `${where}: unknown field "${k}"`;
+    for (const k of ['x', 'y', 'width', 'depth']) if (typeof h[k] !== 'number' || !Number.isFinite(h[k])) return `${where}: ${k} must be a number of mm`;
+    if (!(h.width > 0) || !(h.depth > 0)) return `${where}: width and depth must be above 0 mm`;
+    const r = h.radius ?? 0;
+    if (typeof r !== 'number' || !(r >= 0) || r > Math.min(h.width, h.depth) / 2) return `${where}: radius must be 0 to half the smaller side (${Math.min(h.width, h.depth) / 2} mm)`;
+  }
+  return null;
 }
 
 /**
@@ -351,7 +379,7 @@ export function resolveParams(meta, input = {}) {
   const out = {};
   const declared = new Set(meta.params.map(d => d.key));
   for (const key of Object.keys(input)) {
-    if (key === 'partMaterials') continue;
+    if (key === 'partMaterials' || (key === 'cutouts' && meta.cutouts)) continue;
     if (!declared.has(key)) errors.push(`unknown parameter "${key}"`);
   }
 
@@ -387,6 +415,12 @@ export function resolveParams(meta, input = {}) {
     }
   }
   out.partMaterials = partMaterials;
+  if (meta.cutouts) {
+    const list = input.cutouts ?? [];
+    const err = checkCutouts(meta, list);
+    if (err) errors.push(err);
+    else out.cutouts = list.map(h => ({ x: h.x, y: h.y, width: h.width, depth: h.depth, radius: h.radius ?? 0 }));
+  }
 
   if (errors.length) throw new Error(errors.join('; '));
   return out;

@@ -1,4 +1,5 @@
 import { toSvg, fromSvg, svgPoints } from './coords.js';
+import { holeOutlines } from '../model/assets.js';
 import { DARK_PALETTE } from './palette.js';
 import { occluders, labelObstacles } from '../geometry/level.js';
 import { visibility } from '../geometry/visibility.js';
@@ -166,6 +167,8 @@ export function createPlanView(svg, hooks = {}) {
       // a model's footprint takes the colour of its main part (the largest), grey until it has loaded
       const colour = missing ? palette.missing : o.color || (o.kind === 'asset' && assetColour(assetKey(o))) || palette.objectDefault;
       const shape = el('polygon', { points: svgPoints(fp), fill: colour, 'fill-opacity': missing ? 0.2 : 0.25, stroke: colour, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': above || missing ? '6 4' : '' }, gObj);
+      // the holes of a worktop (what is set into it, on-object.js): dashed outlines inside its footprint
+      for (const h of holeOutlines(o, fp)) el('polygon', { points: svgPoints(h), fill: 'none', stroke: colour, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': '3 3', 'pointer-events': 'none' }, gObj);
       if (o.kind === 'asset') {
         const what = o.blueprint ? `blueprint "${o.blueprint}"` : `model "${o.asset}"`;
         el('title', {}, shape).textContent = missing ? `${o.name || o.id}: ${what} is missing` : `${o.name || o.id}: ${what}`;

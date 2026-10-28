@@ -15,6 +15,7 @@ import { primitives, booleans, geometries } from '../lib/jscad.js';
 // ASSUMED: Door pulls are recessed slots 12 mm wide, 100 mm high and 6 mm deep, centred 20 mm from the latch edge (fits glass-door stiles).
 // ASSUMED: Base cabinets have up to one shelf, upper cabinets two and tall pantries four, reduced to maintain at least 150 mm shelf pitch (usable compartments).
 // ASSUMED: Shelves stop 20 mm behind the front panels and overlap the side and back panels by 5 mm (clearance and connected shelving).
+// ASSUMED: A base cabinet without a worktop or a top panel (a sink cabinet) has two 80 mm rails across its top, front and back.
 // ASSUMED: Worktops have no side or rear overhang and include an inset locating tongue extending 5 mm below the nominal slab and 5 mm into it (preserves specified top height and overlapping joint).
 // ASSUMED: Doors and drawers are modelled closed; drawer runners, trays and hinges are omitted (front-focused geometry).
 // ASSUMED: A cabinet with no doors and no drawers gets one blank fixed front over the whole opening, a base cabinet without a worktop gets its 18 mm top panel as the top part; a wall or tall cabinet has no separate top (its carcass is closed), so its top part is empty and not built.
@@ -105,6 +106,14 @@ export const meta = {
       default: true,
     },
     {
+      key: 'topPanel',
+      appliesTo: ['base', 'base_drawer'],
+      label: 'Top panel',
+      type: 'boolean',
+      default: true,
+      hint: 'Without its own worktop: off for a sink cabinet, which has a rail at the front and the back so the bowl drops in.',
+    },
+    {
       key: 'worktopThickness',
       appliesTo: ['base', 'base_drawer'],
       label: 'Worktop thickness',
@@ -152,6 +161,8 @@ export const meta = {
     variants: { upper: { mount: 'wall', z: 1450 } },
   },
 };
+
+const SINK_RAIL = 80;   // mm: the depth of the front and back rails of a sink cabinet (no top panel)
 
 function resolve(p) {
   const variant = p.variant ?? 'base';
@@ -432,6 +443,12 @@ export function build(p = {}) {
   let worktop;
   if (!q.worktop && !ownTop) {
     worktop = geometries.geom3.create();   // no separate top: the carcass has it
+  } else if (!q.worktop && !q.topPanel) {
+    // a sink cabinet: two rails across the top, front and back, so a sink's bowl drops in between (decision 284)
+    worktop = booleans.union(
+      box(x0 + panel - overlap, x1 - panel + overlap, bodyFront, bodyFront + SINK_RAIL, q.height - panel, q.height),
+      box(x0 + panel - overlap, x1 - panel + overlap, back - SINK_RAIL, back, q.height - panel, q.height)
+    );
   } else if (!q.worktop) {
     worktop = box(x0, x1, bodyFront, back, q.height - panel, q.height);
   } else {

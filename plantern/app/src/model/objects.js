@@ -15,6 +15,7 @@
 import { pointInPolygon } from '../geometry/polygon.js';
 import { isHosted, hostedPlacement } from './hosted.js';
 import { ASSET_NAME } from './assets.js';
+import { checkOnObject } from './on-object.js';
 import { resolveParams, appliesTo } from '../../object-designs/lib/params.js';
 import { materialOptions, materialAllowed } from '../blueprints/options.js';
 
@@ -98,6 +99,8 @@ export function checkObject(o, level, blueprints) {
   // a lit object's light (openings-and-lit-objects): the built light point and the reach of its glow
   if (o.light !== undefined && !(Array.isArray(o.light) && o.light.length === 3 && o.light.every(Number.isFinite))) errors.push('light must be [x, y, z] in mm (the built light point)');
   if (o.lightRadius !== undefined && !(Number.isFinite(o.lightRadius) && o.lightRadius > 0)) errors.push('lightRadius must be more than 0 mm');
+  // set into or onto another object (on-object.js): a sink in a worktop
+  { const on = checkOnObject(o, level); errors.push(...on.errors); warnings.push(...on.warnings); }
   if (!o.attach && !o.pos) errors.push('needs a position (pos) or a wall it is on (attach)');
   if (o.attach && o.pos) errors.push('either attach or pos, not both');
   if (isHosted(o)) {

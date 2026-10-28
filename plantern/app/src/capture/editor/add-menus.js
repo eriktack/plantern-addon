@@ -15,7 +15,7 @@ import { readPrefs, writePrefs } from '../../model/prefs.js';
 import { openDialog } from '../dialog.js';
 import { usedColors } from '../../model/materials.js';
 import { nameColor } from '../../edit/ops.js';
-import { ASSET_NAME, assetKey } from '../../model/assets.js';
+import { ASSET_NAME, assetKey, builtFields } from '../../model/assets.js';
 import { $, commit, esc, level, object, opening, room, wall } from './core.js';
 import { setStatus } from './session.js';
 import { assetCache, optionLibrary, placeObject, showBlueprintNote } from './panel-object.js';
@@ -102,7 +102,7 @@ async function placeBlueprint(id, where, at = 'sill') {
     }
   }
   const { z, mount } = startPlacement(meta, built.size, level(), room, params);
-  const r = placeSpec({ blueprint: id, params, partMaterials: {}, size: built.size, z, place, light: built.light, hangs: mount === 'ceiling' ? 'ceiling' : undefined });
+  const r = placeSpec({ blueprint: id, params, partMaterials: {}, size: built.size, z, place, ...builtFields(built), hangs: mount === 'ceiling' ? 'ceiling' : undefined });
   if (r.error) { setStatus(r.error); return; }
   placeObject(r.spec, `a ${meta.name} ${what}`);
 }
@@ -305,8 +305,8 @@ export async function checkBuild(o, { force = false } = {}) {
   if (!force && before) return;
   builds.set(key, { state: 'checking' });
   try {
-    const { size, light } = await assetCache().rebuild(o);
-    builds.set(key, { state: 'ok', size, light: light ?? null, checked: true, changedFrom: before?.state === 'ok' && before.size.join() !== size.join() ? before.size : null });
+    const answer = await assetCache().rebuild(o), { size } = answer;
+    builds.set(key, { state: 'ok', size, ...builtFields(answer), checked: true, changedFrom: before?.state === 'ok' && before.size.join() !== size.join() ? before.size : null });
   } catch (e) {
     builds.set(key, { state: 'error', error: e.message });
   }
