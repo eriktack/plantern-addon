@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1
+
+- Home Assistant: the add-on's connection no longer stays on connecting (it retries after 20 s and the log says why); objects are built on their own thread, so building them never holds up the plan or the lights
+
 ## 0.7.0
 
 - Kitchens: the sink has a mixer tap and a drainer; a worktop in one piece over a run of cabinets, with the sink and a built-in hob set into it; sink cabinets; an appliance housing with a built-in oven (and microwave) in its niches

@@ -9,7 +9,7 @@ import { HaClientBase } from './base.js';
  * `WebSocketImpl` can be a test double.
  */
 export class WsHA extends HaClientBase {
-  constructor({ url, token, WebSocketImpl = globalThis.WebSocket }) {
+  constructor({ url, token, WebSocketImpl = globalThis.WebSocket, handshakeMs = 20000 }) {
     super();
     if (!url || !token) throw new Error('ws connection needs "url" and "token"');
     this.wsUrl = /^wss?:/.test(url) ? url : url.replace(/^http/, 'ws').replace(/\/+$/, '') + '/api/websocket';
@@ -19,46 +19,75 @@ export class WsHA extends HaClientBase {
     this.pending = new Map();
     this.backoff = 1000;
     this.stopped = false;
+    this.handshakeMs = handshakeMs;
     this._ready = new Promise(r => (this._resolveReady = r));
   }
 
   /** Open the connection (once; a second call only waits for the same one). */
   connect() { if (!this._started) { this._started = true; this._open(); } return this._ready; }
 
-  close() { this.stopped = true; clearTimeout(this._timer); this.ws?.close(); }
+  close() { this.stopped = true; clearTimeout(this._timer); clearTimeout(this._handshake); this.ws?.close(); }
 
   _open() {
     this._setStatus('connecting');
     let ws;
     try { ws = this.ws = new this.WS(this.wsUrl); }
     catch (e) { this._setStatus('error', e.message); return this._retry(); }
+    // Not connected (states loaded) within handshakeMs: drop this socket and try again, so a socket that never opens,
+    // or a proxy that stops answering halfway (the add-on's Supervisor proxy), cannot leave the client 'connecting' for good.
+    clearTimeout(this._handshake);
+    this._handshake = setTimeout(() => this._drop(ws, `no answer from Home Assistant within ${Math.round(this.handshakeMs / 1000)} s`), this.handshakeMs);
+    this._handshake?.unref?.();
     ws.onmessage = ev => {
-      let m;
-      try { m = JSON.parse(ev.data); } catch { return; }
-      switch (m.type) {
-        case 'auth_required': ws.send(JSON.stringify({ type: 'auth', access_token: this.token })); break;
-        case 'auth_ok': this.haVersion = m.ha_version; this.backoff = 1000; this._afterAuth().catch(e => this._setStatus('error', e.message)); break;
-        case 'auth_invalid': this.stopped = true; this._setStatus('auth_invalid', m.message); ws.close(); break;
-        case 'result': {
-          const p = this.pending.get(m.id);
-          if (!p) break;
-          this.pending.delete(m.id);
-          m.success ? p.resolve(m.result) : p.reject(new Error(m.error?.message || 'HA error'));
-          break;
-        }
-        case 'event': {
-          const e = m.event;
-          if (e?.event_type === 'state_changed') e.data.new_state ? this._set(e.data.new_state) : this._remove(e.data.entity_id);
-          break;
-        }
-      }
+      // a frame may come as a Blob or bytes rather than text (Node's WebSocket hands binary frames over as a Blob)
+      if (typeof ev.data === 'string') return this._message(ws, ev.data);
+      if (typeof ev.data?.text === 'function') return ev.data.text().then(t => this._message(ws, t), () => {});
+      if (ev.data) this._message(ws, new TextDecoder().decode(ev.data));
     };
     ws.onclose = () => {
+      if (ws !== this.ws) return;               // a socket already dropped
+      clearTimeout(this._handshake);
       for (const p of this.pending.values()) p.reject(new Error('connection closed'));
       this.pending.clear();
       if (this.status !== 'auth_invalid') this._setStatus('disconnected');
       this._retry();
     };
+  }
+
+  /** Give up on socket `ws` (stuck or failed after auth): reject what waits on it, say why, and open a new one later. */
+  _drop(ws, reason) {
+    if (ws !== this.ws || this.stopped) return;
+    clearTimeout(this._handshake);
+    this.ws = null;
+    ws.onmessage = ws.onclose = null;
+    try { ws.close(); } catch { /* already closed */ }
+    for (const p of this.pending.values()) p.reject(new Error(reason));
+    this.pending.clear();
+    this._setStatus('error', reason);
+    this._retry();
+  }
+
+  _message(ws, text) {
+    if (ws !== this.ws) return;
+    let m;
+    try { m = JSON.parse(text); } catch { return; }
+    switch (m.type) {
+      case 'auth_required': ws.send(JSON.stringify({ type: 'auth', access_token: this.token })); break;
+      case 'auth_ok': this.haVersion = m.ha_version; this._afterAuth().catch(e => this._drop(ws, `Home Assistant accepted the token, then: ${e.message}`)); break;
+      case 'auth_invalid': this.stopped = true; clearTimeout(this._handshake); this._setStatus('auth_invalid', m.message); ws.close(); break;
+      case 'result': {
+        const p = this.pending.get(m.id);
+        if (!p) break;
+        this.pending.delete(m.id);
+        m.success ? p.resolve(m.result) : p.reject(new Error(m.error?.message || 'HA error'));
+        break;
+      }
+      case 'event': {
+        const e = m.event;
+        if (e?.event_type === 'state_changed') e.data.new_state ? this._set(e.data.new_state) : this._remove(e.data.entity_id);
+        break;
+      }
+    }
   }
 
   _retry() {
@@ -72,6 +101,8 @@ export class WsHA extends HaClientBase {
     await this._send({ type: 'subscribe_events', event_type: 'state_changed' });
     const states = await this._send({ type: 'get_states' });
     for (const s of states) this._set(s);
+    clearTimeout(this._handshake);
+    this.backoff = 1000;                        // reset only once fully connected, so a proxy that accepts the token and then fails still backs off
     this._setStatus('connected');
     this._resolveReady();
   }

@@ -11,15 +11,12 @@
 // Errors are GlbError with the HTTP status to answer: 400 for a bad blueprint or bad params (the reason is the message),
 // 404 for a blueprint that does not exist, 503 when the code that builds changed since the server started.
 
-import { mainColourOfBuild } from '../../src/blueprints/colour.js';
 import { createHash } from 'node:crypto';
+import { Worker } from 'node:worker_threads';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { buildModel } from '../../object-designs/lib/build.js';
 import { resolveParams } from '../../object-designs/lib/params.js';
-import { meshBounds } from '../../object-designs/lib/geom.js';
-import { assetMeta } from '../../object-designs/lib/asset-meta.js';
 import { parseHouseBlueprint, loadBlueprints } from '../../src/blueprints/load.js';
 import { blueprintModule } from '../../src/blueprints/build.js';
 import { renameRetry } from '../store/settings.js';
@@ -29,7 +26,6 @@ const DESIGNS_DIR = path.resolve(HERE, '../../object-designs');
 const SRC_DIR = path.resolve(HERE, '../../src');
 const BLUEPRINT_ID = /^[a-z][a-z0-9-]*$/;
 const HASH = /^[0-9a-f]{64}$/;
-const round1 = v => Math.round(v * 10) / 10;
 const sha = data => createHash('sha256').update(data).digest('hex');
 
 export class GlbError extends Error {
@@ -68,7 +64,45 @@ export async function readCacheLimit(dataDir) {
   return Number.isFinite(mb) && mb > 0 ? mb * 1024 * 1024 : null;
 }
 
-export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR, limitBytes = async () => null } = {}) {
+/**
+ * The thread that builds (build-worker.js, decision 287): one at a time, in the order asked. Started on the first build,
+ * it keeps the process alive only while it has work, and a crashed one is replaced on the next build.
+ * run(job, textures) → { glb, size, colour, meta? }; a failed build rejects with its message.
+ */
+export function createBuilder() {
+  let worker = null, nextId = 1;
+  const waiting = new Map();             // id → { resolve, reject }
+  function start() {
+    worker = new Worker(new URL('./build-worker.js', import.meta.url));
+    worker.unref();
+    worker.on('message', m => {
+      const w = waiting.get(m.id);
+      if (!w) return;
+      waiting.delete(m.id);
+      if (!waiting.size) worker?.unref();
+      m.error !== undefined ? w.reject(new Error(m.error)) : w.resolve({ glb: Buffer.from(m.glb.buffer, m.glb.byteOffset, m.glb.byteLength), size: m.size, colour: m.colour, meta: m.meta });
+    });
+    const fail = e => {
+      const gone = worker; worker = null;
+      for (const w of waiting.values()) w.reject(new Error(`the build stopped: ${e?.message || e}`));
+      waiting.clear();
+      gone?.terminate().catch(() => {});
+    };
+    worker.on('error', fail);
+    worker.on('exit', code => { if (worker) fail(`its thread ended (${code})`); });
+  }
+  return {
+    run(job) {
+      if (!worker) start();
+      const id = nextId++;
+      worker.ref();
+      return new Promise((resolve, reject) => { waiting.set(id, { resolve, reject }); worker.postMessage({ ...job, id }); });
+    },
+    async close() { const w = worker; worker = null; await w?.terminate(); },
+  };
+}
+
+export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR, limitBytes = async () => null, builder = createBuilder() } = {}) {
   if (!dir) throw new Error('createGlbCache needs a folder');
   const building = new Map();            // hash → promise, so two requests for one object build it once
   const digests = new Map();             // a digest of a set of files, kept while their size and times do not change
@@ -134,13 +168,13 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
     if (builtIn !== null) {
       // one module per version of the file, so an edited model is read again without restarting the server
       const model = await import(`${pathToFileURL(modelFile).href}?v=${sha(builtIn).slice(0, 16)}`).catch(e => { throw new GlbError(400, `the model "${id}" cannot be loaded: ${e.message}`); });
-      return { kind: 'built-in', text: builtIn, model, extraMaterials: {} };
+      return { kind: 'built-in', text: builtIn, model, extraMaterials: {}, source: { kind: 'built-in', file: modelFile, version: sha(builtIn).slice(0, 16) } };
     }
     const text = houseDir ? await fs.readFile(path.join(houseDir, 'blueprints', `${id}.json`), 'utf8').catch(() => null) : null;
     if (text === null) throw new GlbError(404, `there is no blueprint "${id}"`);
     const parsed = parseHouseBlueprint(text, { file: `${id}.json`, libraryNames: new Set(Object.keys(library)) });
     if (!parsed.ok) throw new GlbError(400, `the blueprint "${id}" is not valid: ${parsed.problems.join('; ')}`);
-    return { kind: 'house', text, model: blueprintModule(parsed.json), extraMaterials: parsed.json.materials ?? {} };
+    return { kind: 'house', text, model: blueprintModule(parsed.json), extraMaterials: parsed.json.materials ?? {}, source: { kind: 'house', text, file: `${id}.json` } };
   }
 
   /** Resolve a request and its hash (decision 186) without building. */
@@ -156,12 +190,13 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
     return { hash, found, resolved, library };
   }
 
-  /** The built model (GLB, parts, params) for a resolved request; nothing is written. */
-  async function buildOnly({ found, resolved, library }) {
+  /** The built model for a resolved request, on the builder thread: { glb, size, colour, meta? }; nothing is written. */
+  async function buildOnly({ found, resolved, library }, { op = 'build', source } = {}) {
     if ((await started) !== (await codeDigest())) {
       throw new GlbError(503, 'the code that builds objects (object-designs/lib, the vendored jscad or src/blueprints/load.js and build.js) changed since the server started: restart Plantern');
     }
-    try { return buildModel(found.model, resolved, { ...library, ...found.extraMaterials }, { textures: await loadTextures(library) }); }
+    const textures = [...await loadTextures(library)];
+    try { return await builder.run({ op, model: found.source, resolved, library, extraMaterials: found.extraMaterials, textures, source }); }
     catch (e) { throw new GlbError(400, e.message); }
   }
 
@@ -210,14 +245,11 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
 
   async function build(r, blueprint) {
     const { hash } = r;
-    const built = await buildOnly(r);
-    const bounds = meshBounds({ pos: built.parts.flatMap(p => p.mesh.pos), nrm: [], idx: [] });
-    const size = bounds ? [0, 1, 2].map(k => round1(bounds.max[k] - bounds.min[k])) : [0, 0, 0];
+    const { glb, size, colour } = await buildOnly(r);                      // colour: the footprint's colour in the Editor's plan (PF14)
     const light = lightOf(r.found, r.resolved);
-    const colour = mainColourOfBuild(built.parts, built.resolved);        // the footprint's colour in the Editor's plan (PF14)
     await fs.mkdir(dir, { recursive: true });
     const tmp = path.join(dir, `${hash}.glb.tmp-${process.pid}`);
-    await fs.writeFile(tmp, built.glb);
+    await fs.writeFile(tmp, glb);
     await renameRetry(tmp, path.join(dir, `${hash}.glb`));
     // the entry is complete once its note exists, so a half-written one is never answered
     const noteTmp = path.join(dir, `${hash}.json.tmp-${process.pid}`);
@@ -291,9 +323,8 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
      */
     async exportAsset(request) {
       const r = await resolve(request);
-      const built = await buildOnly(r);
-      const meta = assetMeta(r.found.model, built, { source: `${r.found.kind}: ${request.blueprint}` });
-      return { glb: built.glb, meta, size: meta.size };
+      const { glb, meta } = await buildOnly(r, { op: 'export', source: `${r.found.kind}: ${request.blueprint}` });
+      return { glb, meta, size: meta.size };
     },
 
     /** The hash and size of the request's GLB, built (and cached) when it is not there yet. */
@@ -309,6 +340,9 @@ export function createGlbCache({ dir, designsDir = DESIGNS_DIR, srcDir = SRC_DIR
       if (!building.has(r.hash)) building.set(r.hash, build(r, request.blueprint).finally(() => building.delete(r.hash)));
       return building.get(r.hash);
     },
+
+    /** Stops the builder thread (a server that closes; tests). */
+    close() { return builder.close(); },
 
     /** The GLB bytes for a hash, or null. */
     async read(hash) {

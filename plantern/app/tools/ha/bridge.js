@@ -11,9 +11,9 @@ import { WsHA } from '../../src/ha/ws.js';
  * the background with backoff when HA is away); close() stops it. Same interface as the page clients
  * (getState, subscribe, onStatus, callService) plus request(msg), haVersion and states (a Map).
  */
-export function createHaBridge({ url, token }, { WebSocketImpl = globalThis.WebSocket } = {}) {
+export function createHaBridge({ url, token }, { WebSocketImpl = globalThis.WebSocket, handshakeMs } = {}) {
   if (typeof WebSocketImpl !== 'function') throw new Error('this Node has no WebSocket (Node 22 or newer is needed)');
-  return new WsHA({ url, token, WebSocketImpl });
+  return new WsHA({ url, token, WebSocketImpl, ...(handshakeMs ? { handshakeMs } : {}) });
 }
 
 /** connect(), but give up waiting after `ms` (the bridge keeps trying): resolves true when connected. */

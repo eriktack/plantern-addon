@@ -44,7 +44,7 @@ export function supervisorFromEnv(env = process.env, { options = {}, log } = {})
 }
 
 /** The connections and their bridges; emits 'state' { connection, entity, state } and 'status' { connection, status }. */
-export function createHaHub({ dataDir, WebSocketImpl = globalThis.WebSocket, testTimeout = 8000, supervisor = null } = {}) {
+export function createHaHub({ dataDir, WebSocketImpl = globalThis.WebSocket, testTimeout = 8000, supervisor = null, handshakeMs, log = () => {} } = {}) {
   const builtin = supervisor ? (supervisor.name || BUILTIN) : null;       // the built-in connection's name
   const hub = new EventEmitter(), bridges = new Map(), file = path.join(dataDir, 'ha.json');
   const read = async () => { try { return JSON.parse(await fs.readFile(file, 'utf8')); } catch (e) { if (e.code === 'ENOENT') return { connections: {} }; throw e; } };
@@ -113,9 +113,15 @@ export function createHaHub({ dataDir, WebSocketImpl = globalThis.WebSocket, tes
       url = c?.url; token = (await loadSecrets(dataDir))[key(name)]?.token;
     }
     if (!url || !token) return null;
-    const b = createHaBridge({ url, token }, { WebSocketImpl });
+    const b = createHaBridge({ url, token }, { WebSocketImpl, handshakeMs });
     bridges.set(name, b);
-    b.onStatus(status => hub.emit('status', { connection: name, status }));
+    let said;
+    b.onStatus((status, detail) => {
+      hub.emit('status', { connection: name, status });
+      // in the log (the add-on's Log tab), so a connection that does not come up says why; the token never goes in
+      const line = `Home Assistant connection "${name}": ${status}${detail ? ` (${redact(String(detail), { t: { token } })})` : ''}`;
+      if (status && line !== said) { said = line; log(line); }
+    });
     b.subscribe((entity, state) => hub.emit('state', { connection: name, entity, state }));
     b.connect().catch(() => {});
     return b;

@@ -108,7 +108,7 @@ export function createPlanternServer(root, { env = process.env, dataDir = defaul
   const registry = new Registry({ appRoot: root, dataDir, watch });
   // as an add-on, the built-in connection is named by the add-on's configuration (connection_name in /data/options.json, default home_assistant)
   const supervisor = supervisorFromEnv(env, { options: env.SUPERVISOR_TOKEN ? readAddonOptions(env.PLANTERN_OPTIONS || path.join(dataDir, 'options.json')) : {}, log: m => console.log(m) });
-  const ha = createHaHub({ dataDir, supervisor, ...(WebSocketImpl ? { WebSocketImpl } : {}) });       // Home Assistant connections (tools/ha/)
+  const ha = createHaHub({ dataDir, supervisor, log: m => console.log(m), ...(WebSocketImpl ? { WebSocketImpl } : {}) });       // Home Assistant connections (tools/ha/)
   const glb = createGlbCache({ dir: path.join(dataDir, 'glb-cache'), limitBytes: () => readCacheLimit(dataDir) });   // built GLBs of placed objects, in the settings folder; limit in settings.json
   registry.ready.catch(e => console.error(`Plantern settings (${dataDir}): ${e.message}`));
   const server = http.createServer(async (req, res) => {
