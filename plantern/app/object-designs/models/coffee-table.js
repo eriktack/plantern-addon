@@ -34,8 +34,8 @@ export const meta = {
       label: 'Length',
       unit: 'mm',
       default: 1100,
-      min: 600,
-      max: 1400,
+      min: 500,
+      max: 1600,
       step: 10,
     },
     {
@@ -43,8 +43,8 @@ export const meta = {
       label: 'Width',
       unit: 'mm',
       default: 600,
-      min: 400,
-      max: 800,
+      min: 350,
+      max: 1000,
       step: 10,
     },
     {
@@ -52,8 +52,8 @@ export const meta = {
       label: 'Height',
       unit: 'mm',
       default: 450,
-      min: 350,
-      max: 500,
+      min: 300,
+      max: 650,
       step: 10,
     },
     {

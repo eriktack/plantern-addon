@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.2
+
+- Library: sofas can be shallower (from 600 mm deep overall) and coffee tables larger and taller
+
 ## 0.7.1
 
 - Home Assistant: the add-on's connection no longer stays on connecting (it retries after 20 s and the log says why); objects are built on their own thread, so building them never holds up the plan or the lights

@@ -56,8 +56,8 @@ export const meta = {
       default: 'two_seat',
     },
     { key: 'width', label: 'Width', unit: 'mm', default: 2100, min: 1000, max: 3200, step: 10 },
-    { key: 'depth', label: 'Depth', unit: 'mm', default: 950, min: 850, max: 1050, step: 10 },
-    { key: 'height', label: 'Height', unit: 'mm', default: 850, min: 750, max: 950, step: 10 },
+    { key: 'depth', label: 'Depth', unit: 'mm', default: 950, min: 500, max: 1200, step: 10 },
+    { key: 'height', label: 'Height', unit: 'mm', default: 850, min: 650, max: 1050, step: 10 },
     { key: 'seatHeight', label: 'Seat height', unit: 'mm', default: 450, min: 400, max: 500, step: 10 },
     {
       key: 'armStyle', label: 'Arm style', type: 'enum',
