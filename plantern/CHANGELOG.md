@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.0
+
+- A floor switch on the plan (buttons, or a dropdown on small screens) in the viewer and the card; the 3D view opens in perspective
+
 ## 0.7.2
 
 - Library: sofas can be shallower (from 600 mm deep overall) and coffee tables larger and taller

@@ -33,6 +33,7 @@ import { northAngleOf } from './model/orientation.js';
 
 // nicer dropdowns (ND2): every select on the page is drawn as the page menu
 import { enhanceAll } from './select.js';
+import { createFloorSwitch, showFloorSwitch } from './floor-switch.js';
 enhanceAll();
 
 const params = new URLSearchParams(location.search);
@@ -114,6 +115,18 @@ async function main() {
   levelSel.innerHTML = model.levels.map(l => `<option value="${esc(l.id)}">${esc(l.name || l.id)}</option>`).join('');
   levelSel.hidden = model.levels.length < 2;
   if (level) levelSel.value = level.id;
+  // the floor switch on the map (in addition to the select above): buttons where they fit beside the 2D / 3D bar, else a dropdown;
+  // only while the view shows one floor (2D, or 3D with only this level in its stack)
+  const floorSwitch = createFloorSwitch(document.querySelector('main'), {
+    onPick: id => { levelSel.value = id; levelSel.onchange(); },
+    reserve: () => $('viewbar').offsetWidth + 10,
+  });
+  const floorsUp = model.levels.slice().sort((a, b) => (a.elevation || 0) - (b.elevation || 0));
+  let viewMode = '2d';
+  const updateFloorSwitch = () => {
+    floorSwitch.set(floorsUp, level?.id);
+    floorSwitch.show(!!level && showFloorSwitch(model.levels.length, viewMode === '3d' ? shownLevels().length : 1));
+  };
   const state = () => ({
     geo: level && geos.get(level.id),
     snaps: level ? allSnaps.filter(s => s.level === level.id) : [],
@@ -218,6 +231,7 @@ async function main() {
     restoreCamera();
     refreshFixtures();
     measure.reset();
+    updateFloorSwitch();
   }
 
   // ---- 2D / 3D ----
@@ -232,7 +246,7 @@ async function main() {
       const p = readPrefs();
       applyShadows();
       applyLight();
-      $('proj').classList.toggle('on', p.projection === 'persp');
+      $('proj').classList.toggle('on', projection() === 'persp');
       restoreCamera();
       refreshFixtures();
       return view3d;
@@ -246,6 +260,8 @@ async function main() {
   }
   function setView(v) {
     const is3d = v === '3d';
+    viewMode = v;
+    updateFloorSwitch();
     $('plan').toggleAttribute('hidden', is3d);        // SVG elements have no .hidden property
     $('view3d').hidden = !is3d;
     $('panel3d').hidden = !is3d;
@@ -258,18 +274,21 @@ async function main() {
     writePrefs({ view: v });
     if (is3d) ensure3d().catch(() => {});
   }
-  /** The camera for this house and level, as last left (else the framed default), in the last projection. */
+  /** Perspective, unless orthographic was picked with the button in this browser (`proj`; the older `projection` was kept with every orbit, so it is not read). */
+  const projection = () => (readPrefs().proj === 'ortho' ? 'ortho' : 'persp');
+  /** The camera for this house and level, as last left (else the framed default), in the chosen projection. */
   function restoreCamera() {
     if (!view3d || !level) return;
-    const p = readPrefs(), cam = p.cameras?.[cameraKey(locId, level.id)];
-    if (cam) view3d.setCamera(cam);
-    else if (p.projection === 'persp') view3d.setProjection('persp');
+    const cam = readPrefs().cameras?.[cameraKey(locId, level.id)];
+    // a camera kept in the other projection (before perspective became the default) gives way to the framed default in this one
+    if (cam?.projection === projection()) view3d.setCamera(cam);
+    else view3d.setProjection(projection());
   }
-  const keepCamera = cam => { if (level) writePrefs({ projection: cam.projection, cameras: { [cameraKey(locId, level.id)]: cam } }); };
+  const keepCamera = cam => { if (level) writePrefs({ cameras: { [cameraKey(locId, level.id)]: cam } }); };
   document.querySelectorAll('#viewbar button').forEach(b => (b.onclick = () => setView(b.dataset.view)));
   $('stackRow').hidden = model.levels.length < 2;
   $('stackMode').value = stackMode; $('exploded').checked = exploded; $('ceilings').checked = ceilings;
-  const restack = () => { stackMode = $('stackMode').value; exploded = $('exploded').checked; ceilings = $('ceilings').checked; writePrefs({ stack: stackMode, exploded, ceilings }); if (!view3d) return; build3d(); view3d.resetView(); refreshFixtures(); };
+  const restack = () => { stackMode = $('stackMode').value; exploded = $('exploded').checked; ceilings = $('ceilings').checked; writePrefs({ stack: stackMode, exploded, ceilings }); updateFloorSwitch(); if (!view3d) return; build3d(); view3d.resetView(); refreshFixtures(); };
   $('stackMode').onchange = restack; $('exploded').onchange = restack; $('ceilings').onchange = restack;
   // shadows: a level per kind of device (the house's settings), changed with the slider and remembered in this browser
   const device = globalThis.matchMedia?.('(pointer: coarse)').matches ? 'mobile' : 'desktop';
@@ -311,8 +330,8 @@ async function main() {
   applyLight();
   // the sun moves: the light follows it every 5 minutes (sun.js); with no position there is no sun and the low end stays
   setInterval(applyLight, 5 * 60 * 1000);
-  $('proj').onclick = () => { if (!view3d) return; const p = $('proj').classList.toggle('on') ? 'persp' : 'ortho'; view3d.setProjection(p); keepCamera(view3d.getCamera()); };
-  $('resetView').onclick = () => { if (!view3d) return; view3d.setProjection('ortho'); view3d.resetView(); $('proj').classList.remove('on'); keepCamera(view3d.getCamera()); };
+  $('proj').onclick = () => { if (!view3d) return; const p = $('proj').classList.toggle('on') ? 'persp' : 'ortho'; writePrefs({ proj: p }); view3d.setProjection(p); keepCamera(view3d.getCamera()); };
+  $('resetView').onclick = () => { if (!view3d) return; view3d.resetView(); view3d.setProjection(projection()); keepCamera(view3d.getCamera()); };
   levelSel.onchange = () => {
     level = model.levels.find(l => l.id === levelSel.value);
     params.set('level', level.id);

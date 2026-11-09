@@ -31,6 +31,7 @@ import { boundEntities } from '../ha/client.js';
 import { fixtureAppearance, toggleCalls } from '../ha/fixture.js';
 import { doorStates, doorEntities } from '../ha/door.js';
 import { coalesce } from '../coalesce.js';
+import { createFloorSwitch, showFloorSwitch } from '../floor-switch.js';
 import { materialTable, setDesignLibrary, setLibraryTextureBase } from '../model/materials.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -82,6 +83,10 @@ const STYLE = `
          background: rgba(32, 36, 42, .92); box-shadow: 0 2px 8px rgba(0, 0, 0, .35); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 2; }
   .msg.show { opacity: 1; transform: translate(-50%, 0); }
   .msg.err { background: var(--error-color, #db4437); }
+  /* the floor switch on the plan (floor-switch.js) in the dashboard's theme */
+  .fsw { --fs-bg: color-mix(in srgb, var(--card-background-color, #1c1f25) 88%, transparent); --fs-fg: var(--primary-text-color, #e1e1e1);
+         --fs-line: var(--divider-color, #3a404b); --fs-acc: var(--primary-color, #03a9f4); --fs-on: var(--text-primary-color, #fff);
+         --fs-hover: color-mix(in srgb, var(--primary-text-color, #fff) 9%, transparent); font-family: inherit; }
 `;
 
 class PlanternCard extends HTMLElement {
@@ -279,13 +284,20 @@ class PlanternCard extends HTMLElement {
       if (this._mode !== '3d') requestAnimationFrame(() => this._plans.forEach(p => p.view.fit()));
     };
 
-    // ---- the floor picker: pills, not a system dropdown; a plain name while a slideshow runs ----
+    // ---- the floor picker: on the plan, buttons or a dropdown (floor-switch.js) while one floor is on show; the pills above the plan
+    // only while 3D shows this floor and the ones below it (the floor picked is still the top one); a plain name while a slideshow runs ----
     // the arrows and swipes step one floor; in a slideshow that restarts the floor's time (CD5)
     let restartCycle = () => {};
     const stepFloor = dir => { current = stepLevel(pool, current, dir); drawPicker(); renderPlans(); restartCycle(); };
+    const stage = root.querySelector('.stage');
+    const floorSwitch = createFloorSwitch(stage, { onPick: id => { current = pool.find(l => l.id === id) || current; drawPicker(); renderPlans(); } });
+    const floorsOnShow = () => (this._mode === '3d' ? cardStack(model, shown(), stackChoice(), pool).length : shown().length);
     const drawPicker = () => {
       const arrows = '<button class="arr" data-d="-1" aria-label="Previous floor">‹</button>', arrowsNext = '<button class="arr" data-d="1" aria-label="Next floor">›</button>';
-      if (levelMode === 'select' && pool.length > 1) {
+      const onPlan = levelMode === 'select' && !!current && showFloorSwitch(pool.length, floorsOnShow());
+      floorSwitch.set(pool, current?.id);
+      floorSwitch.show(onPlan);
+      if (levelMode === 'select' && pool.length > 1 && !onPlan && this._mode === '3d' && stackChoice() === 'below') {
         lv.hidden = false;
         lv.innerHTML = arrows + pool.map(l => `<button data-l="${esc(l.id)}"${l === current ? ' class="on"' : ''}>${esc(levelName(l))}</button>`).join('') + arrowsNext;
         for (const b of lv.querySelectorAll('button[data-l]')) b.onclick = () => { current = pool.find(l => l.id === b.dataset.l); drawPicker(); renderPlans(); };
@@ -342,7 +354,7 @@ class PlanternCard extends HTMLElement {
     // the 3D stack: this floor, this and below, or all (remembered in this browser; without a choice, several floors are pulled apart)
     const stackEl = hd.querySelector('.stack');
     const markStack = () => { stackEl.value = stackChoice() ?? (shown().length > 1 ? 'all' : 'this'); };
-    stackEl.onchange = () => { writePrefs({ stack: stackEl.value }); markStack(); if (view3d) { build3d(); view3d.render(); } };
+    stackEl.onchange = () => { writePrefs({ stack: stackEl.value }); markStack(); drawPicker(); if (view3d) { build3d(); view3d.render(); } };
     const setMode = async mode => {
       if (mode === '3d') {
         try { await ensure3d(); this._say(''); } catch (e) { this._say(`Plantern: the 3D view could not load (${e.message})`, true); mode = '2d'; }
@@ -350,6 +362,7 @@ class PlanternCard extends HTMLElement {
       this._mode = mode; mark(mode);
       plansEl.hidden = mode === '3d'; this._v3dEl.hidden = mode !== '3d';
       stackEl.hidden = mode !== '3d' || levelMode === 'together' || levelMode === 'single'; markStack();   // one or several floors ticked: no choice of floors to stack
+      drawPicker();
       if (mode === '3d') view3d.render(); else requestAnimationFrame(() => this._plans.forEach(p => p.view.fit()));
     };
     for (const b of hd.querySelectorAll('.view button')) b.onclick = () => setMode(b.dataset.v);
