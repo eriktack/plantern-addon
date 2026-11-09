@@ -65,7 +65,7 @@ export const meta = {
       unit: 'mm',
       default: 600,
       min: 400,
-      max: 650,
+      max: 1000,
       step: 10,
     },
     {

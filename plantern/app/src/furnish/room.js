@@ -19,7 +19,7 @@
 
 import { wallName, wallIndex } from '../capture/labels.js';
 import { buildLevelGeometry } from '../geometry/level.js';
-import { pointInPolygon } from '../geometry/polygon.js';
+import { pointInPolygon, polygonsOverlap } from '../geometry/polygon.js';
 import { wallInfo } from '../edit/inspect.js';
 import { bearingFromHeading } from '../model/orientation.js';
 import { displayName, fallbackName } from '../model/names.js';
@@ -52,6 +52,35 @@ function wallsAlong(level, room, i) {
     const side = info?.sides.right.includes(room.id) ? 'right' : 'left';
     const s = [dot([w.a[0] - e.p[0], w.a[1] - e.p[1]], e.u), dot([w.b[0] - e.p[0], w.b[1] - e.p[1]], e.u)].sort((x, y) => x - y);
     return { wall: w, side, s0: Math.max(0, s[0]), s1: Math.min(e.L, s[1]) };
+  });
+}
+
+/**
+ * The solids (chimney, pillar, boxing) that stand in the room: { id, name, kind, base, top, polygon, walls }, where `walls`
+ * says along which walls they stand and how far into the room they reach: [{ letter, from, to, reach }] (mm from the wall's
+ * start corner, and out from its face). A solid that touches no wall stands free (`walls` empty). Sampled every 10 mm.
+ */
+export function roomSolids(level, room) {
+  const ceiling = room.ceilingHeight ?? level.ceilingHeight ?? 2400;
+  return (level.solids || []).filter(sd => sd.polygon?.length >= 3 && polygonsOverlap(sd.polygon, room.polygon, 5)).map(sd => {
+    // the outline of the solid, sampled, kept where it is inside the room
+    const pts = sd.polygon.flatMap((a, i) => {
+      const b = sd.polygon[(i + 1) % sd.polygon.length], n = Math.max(1, Math.ceil(d2(a, b) / 10));
+      return Array.from({ length: n }, (_, k) => [a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+    }).filter(p => pointInPolygon(p, room.polygon) || room.polygon.some((_, i) => { const e = edge(room, i), t = dot([p[0] - e.p[0], p[1] - e.p[1]], e.u); return t >= -1 && t <= e.L + 1 && Math.abs(dot([p[0] - e.p[0], p[1] - e.p[1]], e.n)) < 2; }));
+    const walls = room.polygon.map((_, i) => {
+      const e = edge(room, i);
+      let from = null, to = null;
+      for (let t = 5; t < e.L; t += 10) {
+        const q = [e.p[0] + e.u[0] * t + e.n[0] * 5, e.p[1] + e.u[1] * t + e.n[1] * 5];   // just inside the room
+        if (pointInPolygon(q, sd.polygon)) { from ??= t - 5; to = Math.min(e.L, t + 5); }
+      }
+      if (from === null) return null;
+      const reach = Math.max(0, ...pts.map(p => dot([p[0] - e.p[0], p[1] - e.p[1]], e.n)));
+      return { letter: wallName(i), from: r0(from), to: r0(to), reach: r0(reach) };
+    }).filter(Boolean);
+    const base = sd.base ?? 0, top = sd.height !== undefined ? base + sd.height : ceiling;
+    return { id: sd.id, name: fallbackName(sd, 'solid'), kind: sd.kind ?? 'box', base, top, polygon: sd.polygon, walls };
   });
 }
 
@@ -96,6 +125,7 @@ export function roomContext(model, levelId, roomId) {
   return {
     level: level.id, room: { id: room.id, name: displayName(room), ceiling: room.ceilingHeight ?? level.ceilingHeight ?? 2400, area: Math.round(Math.abs(area) / 1e4) / 100, extent: [r0(Math.max(...xs) - Math.min(...xs)), r0(Math.max(...ys) - Math.min(...ys))] },
     walls, objects,
+    solids: roomSolids(level, room).map(({ polygon, ...sd }) => sd),
   };
 }
 
@@ -159,7 +189,7 @@ export function itemToSpec(model, levelId, roomId, item, size) {
 
 /**
  * A top-down plan of the room in text, at most `width` columns (default 72) so it is not wrapped in a narrow window.
- * Walls are '#', windows '=', doors '/', passages '.', wall letters outside their wall; objects are filled with their
+ * Walls are '#', windows '=', doors '/', passages '.', wall letters outside their wall; solids (a chimney) are '%'; objects are filled with their
  * key (1–9, then a–z) and listed under the plan. Plan north is up. Returns the text.
  */
 export function asciiPlan(model, levelId, roomId, { width = 72, objects = null } = {}) {
@@ -181,6 +211,14 @@ export function asciiPlan(model, levelId, roomId, { width = 72, objects = null }
   const keys = '123456789abcdefghijklmnopqrstuvwxyz';
   list.forEach((x, k) => { x.key = keys[k] ?? '*'; });
   const legend = list.map(({ o, label, key }) => `${key}  ${label ?? fallbackName(o, 'object')} · ${o.size.map(r0).join(' × ')} mm${o.attach?.wall ? ' · on a wall' : o.attach?.opening ? ' · in an opening' : ''}${zOf(o) > 0 ? ` · ${r0(zOf(o))} mm up` : ''}`);
+  // solids (a chimney in a corner) as '%', under the objects, so an object standing in one shows over it
+  const solids = roomSolids(level, room);
+  for (const sd of solids) {
+    const fxs = sd.polygon.map(p => p[0]), fys = sd.polygon.map(p => p[1]);
+    for (let y = Math.min(...fys); y <= Math.max(...fys); y += sy / 2) for (let x = Math.min(...fxs); x <= Math.max(...fxs); x += sx / 2) {
+      if (pointInPolygon([x, y], sd.polygon) && pointInPolygon([x, y], room.polygon)) put([x, y], '%');
+    }
+  }
   // the highest first, so what stands on the floor is drawn over what hangs above it (a wall cabinet over a counter)
   [...list].sort((a, b) => zOf(b.o) - zOf(a.o)).forEach(({ footprint, key }) => {
     const fxs = footprint.map(p => p[0]), fys = footprint.map(p => p[1]);
@@ -206,5 +244,6 @@ export function asciiPlan(model, levelId, roomId, { width = 72, objects = null }
   const scale = Math.round(sx / 10) * 10 || r0(sx);
   const head = `${ctx.room.name} (${room.id}) · ${ctx.room.extent.join(' × ')} mm · ceiling ${ctx.room.ceiling} · plan north up · one character ≈ ${scale} mm across, ${scale * 2} mm down`;
   const walls = ctx.walls.map(w => `${w.letter} ${w.length} mm (${w.side})${w.openings.length ? ': ' + w.openings.map(o => `${o.type} ${o.width} at ${o.fromStart}`).join(', ') : ''}`);
-  return [head, '', ...grid.map(r => r.join('').replace(/\s+$/, '')), '', 'Walls (clockwise from corner 0):', ...walls.map(s => '  ' + s), ...(legend.length ? ['', 'Objects:', ...legend.map(s => '  ' + s)] : [])].join('\n');
+  const solidLines = solids.map(sd => `%  ${sd.name} (${sd.kind}) · ${sd.walls.length ? sd.walls.map(w => `along ${w.letter} ${w.from}–${w.to}, ${w.reach} mm into the room`).join('; ') : 'stands free'}${sd.base > 0 ? ` · from ${r0(sd.base)} mm up` : ''}`);
+  return [head, '', ...grid.map(r => r.join('').replace(/\s+$/, '')), '', 'Walls (clockwise from corner 0):', ...walls.map(s => '  ' + s), ...(solidLines.length ? ['', 'Solids (nothing stands in them):', ...solidLines.map(s => '  ' + s)] : []), ...(legend.length ? ['', 'Objects:', ...legend.map(s => '  ' + s)] : [])].join('\n');
 }

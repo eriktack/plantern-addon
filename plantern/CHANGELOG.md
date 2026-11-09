@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1
+
+- Wardrobes and built-in closets can be up to 1000 mm deep; the furnish tool knows chimneys and pillars
+
 ## 0.8.0
 
 - A floor switch on the plan (buttons, or a dropdown on small screens) in the viewer and the card; the 3D view opens in perspective
