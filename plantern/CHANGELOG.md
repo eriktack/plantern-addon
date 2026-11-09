@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.5
+
+- Library: a linear LED ceiling light (batten or panel), flush or hanging
+
 ## 0.8.4
 
 - Library: wall shelves can be as shallow as 80 mm

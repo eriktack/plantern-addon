@@ -27,6 +27,9 @@ import { primitives, booleans, transforms, geometries } from '../lib/jscad.js';
 // UNSURE: Globe and bell shapes are approximated by overlapping conical bands because arbitrary surface modelling is not allowed.
 // ASSUMED: Chandeliers have 3 or 6 arms (6 starts on +x, 3 on -y). Heads point up (standing on arms at 20% of height, shades opening upward) or down (hanging from arms at 80% of height, band 0 to 65% of height). Three arms cannot be balanced, so the model is centred on its bounds and the stem sits off the middle.
 // UNSURE: Chandelier heads share one lightHeight value because only one light-specific parameter is permitted.
+// ASSUMED: A linear fixture is a rectangular housing (length × width) with an opal diffuser over its lower 40% (inset 3 mm at
+//          the sides), flush on the ceiling or hanging on two wires 100 mm in from its ends (radius 2 mm, a 30 mm canopy each)
+//          when dropLength is given; one light in its middle (a long LED panel or batten, issue: Tvättstuga BBV28).
 // UNSURE: Variant defaults apply only to omitted parameters; supplied values always win.
 
 const CHANDELIER_SHADE_RADIUS = 60;   // mm
@@ -34,25 +37,46 @@ const CHANDELIER_SHADE_RADIUS = 60;   // mm
 export const meta = {
   id: 'ceiling-light',
   name: 'Ceiling light',
-  summary: 'A ceiling light with flush, pendant, chandelier, recessed and track variants.',
+  summary: 'A ceiling light with flush, pendant, chandelier, recessed, track and linear (LED batten) variants.',
   description:
     'A ceiling-mounted light with its canopy at the ceiling and optional suspension above the fixture, with a configurable source height inside the lamp heads. Assumed: overall height is height plus dropLength; lightHeight is measured from the bottom, 0 means the head centre and other values are kept inside the head; the bare bulb of a bare_bulb shade is in the shade part; canopy diameter is the smaller of 100 mm and 30% of diameter, with height the smaller of 20 mm and fixture height; cord radius 3 mm with 5 mm fixture penetration; drum radius constant and cone top radius 40% of bottom; bell height/radius fractions 0/1, 0.35/0.72, 0.7/0.4, 1/0.32; globe height/radius fractions 0/0.4, 0.125/0.72, 0.25/0.9, 0.375/0.98, 0.5/1 and their vertical mirror; profile bands overlap 5 mm and bell/globe heads require 40 mm height; shade walls at most 5 mm, limited to half the smallest profile radius; a bare_bulb shape exposes globe lamp envelopes with half the nominal head radius and walls at most 3 mm; source sphere radius min(8 mm, half head height), socket radius 6 mm, support crosses 8 mm wide and 5 mm high; chandeliers have six radial heads of a fixed nominal radius of 60 mm (120 mm shades, whatever the fixture diameter) occupying the upper 65% of height, 12 mm wide by 10 mm high arms centred at 20% of height, 6 mm radius central stem, and bottom finial radius min(10 mm, 8% of height); chandeliers have 3 or 6 arms, with heads pointing up (arms at 20% of height) or down (hanging from arms at 80% of height, heads in the lower 65%), and with 3 arms the model is centred on its bounds so the stem is off the middle; minimum chandelier diameter 300 mm and height 100 mm; track lights have three downward heads at x = -1.5, 0, 1.5 times diameter, a rail four times diameter long, rail height 15 mm and width min(30 mm, 40% of diameter), heads ending 20 mm below the top, and 8 mm radius necks entering heads and rail by 5 mm; minimum track height 70 mm; recessed trim thickness 5 mm and reflector radius 80% of overall radius; round fixture parts use 32 segments and small sources, cords and necks use 16; recessed fittings are represented below the ceiling.',
   params: [
     {
       key: 'variant',
-      labels: { flush: 'Flush ceiling light', pendant: 'Pendant', chandelier: 'Chandelier', recessed_downlight: 'Recessed downlight', track_light: 'Track light' },
+      labels: { flush: 'Flush ceiling light', pendant: 'Pendant', chandelier: 'Chandelier', recessed_downlight: 'Recessed downlight', track_light: 'Track light', linear: 'Linear LED fixture' },
       label: 'Variant',
       type: 'enum',
-      options: ['flush', 'pendant', 'chandelier', 'recessed_downlight', 'track_light'],
+      options: ['flush', 'pendant', 'chandelier', 'recessed_downlight', 'track_light', 'linear'],
       default: 'flush',
     },
     {
       key: 'diameter',
+      appliesTo: ['flush', 'pendant', 'chandelier', 'recessed_downlight', 'track_light'],
       label: 'Diameter',
       unit: 'mm',
       default: 350,
       min: 60,
       max: 1000,
+      step: 10,
+    },
+    {
+      key: 'length',
+      appliesTo: ['linear'],
+      label: 'Length',
+      unit: 'mm',
+      default: 1200,
+      min: 300,
+      max: 2400,
+      step: 10,
+    },
+    {
+      key: 'width',
+      appliesTo: ['linear'],
+      label: 'Width',
+      unit: 'mm',
+      default: 150,
+      min: 40,
+      max: 600,
       step: 10,
     },
     {
@@ -66,7 +90,7 @@ export const meta = {
     },
     {
       key: 'dropLength',
-      appliesTo: ['pendant', 'chandelier'],
+      appliesTo: ['pendant', 'chandelier', 'linear'],
       label: 'Drop length',
       unit: 'mm',
       default: 0,
@@ -76,6 +100,7 @@ export const meta = {
     },
     {
       key: 'shadeShape',
+      appliesTo: ['flush', 'pendant', 'chandelier', 'recessed_downlight', 'track_light'],
       label: 'Shade shape',
       type: 'enum',
       options: ['drum', 'cone', 'globe', 'bell', 'bare_bulb'],
@@ -139,8 +164,12 @@ export const meta = {
       diameter: 60,
       height: 150,
     },
+    linear: {
+      height: 60,
+      dropLength: 0,
+    },
   },
-  sizeParams: { x: { default: 'diameter', track_light: null }, y: { default: 'diameter', chandelier: null }, z: { default: 'height', pendant: null, chandelier: null } },
+  sizeParams: { x: { default: 'diameter', track_light: null, linear: 'length' }, y: { default: 'diameter', chandelier: null, linear: 'width' }, z: { default: 'height', pendant: null, chandelier: null, linear: null } },
 
   placement: { mount: 'ceiling', hosts: ['room', 'head'] },
 };
@@ -167,6 +196,7 @@ function headBounds(variant, height, direction = 'up') {
     return direction === 'down' ? [0, 0.65 * height] : [0.35 * height, height];
   }
   if (variant === 'track_light') return [0, height - 20];
+  if (variant === 'linear') return [0, 0.4 * height];   // the diffuser
   return [0, height];
 }
 
@@ -174,7 +204,7 @@ function resolve(p) {
   const variant = p.variant ?? 'flush';
   if (!meta.params[0].options.includes(variant)) {
     throw new Error(
-      'Unknown ceiling-light variant; choose flush, pendant, chandelier, recessed_downlight or track_light.'
+      'Unknown ceiling-light variant; choose flush, pendant, chandelier, recessed_downlight, track_light or linear.'
     );
   }
 
@@ -225,7 +255,7 @@ function resolve(p) {
   }
 
   const [bottom, top] = headBounds(variant, q.height, q.headDirection);
-  const curved = ['globe', 'bell', 'bare_bulb'].includes(q.shadeShape);
+  const curved = variant !== 'linear' && ['globe', 'bell', 'bare_bulb'].includes(q.shadeShape);
   if (curved && top - bottom < 40) {
     throw new Error(
       `The ${q.shadeShape} lamp head is ${top - bottom} mm high; this curved profile requires at least 40 mm.`
@@ -324,6 +354,19 @@ export function build(p = {}) {
   const canopyRadius = Math.min(50, 0.15 * q.diameter);
   const [headBottom, headTop] = headBounds(q.variant, q.height, q.headDirection);
   const sourceRadius = Math.min(8, (headTop - headBottom) / 2);
+
+  if (q.variant === 'linear') {
+    // a rectangular housing, the opal diffuser over its lower part; flush, or on two wires 100 mm in from its ends
+    const halfL = q.length / 2, halfW = q.width / 2, diffuserTop = 0.4 * q.height;
+    fitting.push(box(-halfL, halfL, -halfW, halfW, diffuserTop - 1, q.height));
+    shades.push(box(-halfL + 3, halfL - 3, -halfW + 3, halfW - 3, 0, diffuserTop));
+    if (q.dropLength > 0) {
+      for (const x of [-halfL + 100, halfL - 100]) {
+        fitting.push(cylinder(2, q.height - 5, ceiling - 10, x, 0, 16), cylinder(15, ceiling - 10, ceiling, x, 0));
+      }
+    }
+    return { fitting: combine(fitting), shade: combine(shades) };
+  }
 
   fitting.push(
     cylinder(canopyRadius, ceiling - canopyHeight, ceiling)

@@ -62,6 +62,7 @@ const DRAWN = {
   chandelier: '<path d="M12 2v5"/><circle cx="12" cy="10" r="2"/><path d="M4 14q8 6 16 0"/><circle cx="6" cy="14" r="1.5"/><circle cx="18" cy="14" r="1.5"/>',
   downlight: '<path d="M3 4h18"/><circle cx="12" cy="10" r="4"/>',
   track: '<path d="M3 4h18"/><path d="M7 4v5M12 4v6M17 4v5"/>',
+  batten: '<path d="M3 4h18"/><rect x="3" y="6" width="18" height="3" rx="1"/><path d="M6 12l-1 3M12 12v3M18 12l1 3"/>',
   arc: '<path d="M3 21h4"/><path d="M5 21c0-9 6-14 14-12"/><path d="M15 7l3 3-2 3-3-3z"/>',
   torchiere: '<path d="M9 9h6l-1 11h-4z"/><path d="M12 2v7"/>',
   tripod: '<path d="M8 6h8l-1-3h-6z"/><path d="M12 9v5M12 14 6 22M12 14l6 8"/>',
@@ -100,7 +101,7 @@ const BY_NAME = {
   single_bowl: 'basin', double_bowl: 'basinDouble', utility_tub: 'tub', single_sink: 'basin', double_sink: 'basinDouble',
   with_cabinet: 'basin', wall_hung: 'toilet', floor_standing: 'toilet', on_stand: 'basin', wall_mounted: 'mirror',
   enclosed_stall: 'stall', corner: 'stall', round_pedestal: 'pedestal', medicine_cabinet: 'mirror', backlit: 'mirror',
-  flush: 'flush', pendant: 'pendant', chandelier: 'chandelier', recessed_downlight: 'downlight', track_light: 'track',
+  flush: 'flush', pendant: 'pendant', chandelier: 'chandelier', recessed_downlight: 'downlight', track_light: 'track', linear: 'batten',
   track: 'track', arc: 'arc', torchiere: 'torchiere', tripod: 'tripod', drum: 'drum', cone: 'cone', globe: 'globe', bell: 'bell',
   bare_bulb: 'bulb', empire: 'empire', candlestick: 'candle', orb: 'orb', desk_arm: 'deskArm', swing_arm: 'deskArm', up_down: 'upDown',
 };
