@@ -55,7 +55,7 @@ export const meta = {
       options: ['two_seat', 'three_seat', 'corner_l', 'corner_u', 'sofa_bed'],
       default: 'two_seat',
     },
-    { key: 'width', label: 'Width', unit: 'mm', default: 2100, min: 1000, max: 3200, step: 10 },
+    { key: 'width', label: 'Width', unit: 'mm', default: 2100, min: 1000, max: 4200, step: 10 },
     { key: 'depth', label: 'Depth', unit: 'mm', default: 950, min: 500, max: 1200, step: 10 },
     { key: 'height', label: 'Height', unit: 'mm', default: 850, min: 650, max: 1050, step: 10 },
     { key: 'seatHeight', label: 'Seat height', unit: 'mm', default: 450, min: 400, max: 500, step: 10 },

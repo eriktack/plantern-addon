@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.2
+
+- Library: sofas can be up to 4200 mm wide, for long corner and U sofas
+
 ## 0.8.1
 
 - Wardrobes and built-in closets can be up to 1000 mm deep; the furnish tool knows chimneys and pillars
