@@ -140,7 +140,7 @@ export const meta = {
       unit: 'mm',
       default: 300,
       min: 250,
-      max: 400,
+      max: 600,
       step: 10,
     },
     {

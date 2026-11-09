@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.6
+
+- Library: bookshelves and storage shelving up to 600 mm deep
+
 ## 0.8.5
 
 - Library: a linear LED ceiling light (batten or panel), flush or hanging
