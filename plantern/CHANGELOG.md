@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.3
+
+- Library: a sofa's corner leg back can stop short of the leg's end, and a chaise can have a back along part of its outer side
+
 ## 0.8.2
 
 - Library: sofas can be up to 4200 mm wide, for long corner and U sofas

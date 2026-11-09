@@ -31,6 +31,9 @@ import { primitives, booleans, transforms, geometries } from '../lib/jscad.js';
 // UNSURE: chaise length is unspecified; it is independent of cornerLegLength.
 // ASSUMED: a corner_l's chaise (chaiseSide right) has its own length, 'Chaise length (L)', default 2400 mm measured from the
 //          outside back (the same as the leg by default); the left leg keeps the 'Corner leg length'.
+// ASSUMED: returnBackLength shortens a corner return's outside back (and its back cushion) to that length from the main
+//          back, the front of the leg left open; 0 is the whole leg. chaiseBackLength gives a chaise a full-height back
+//          along its outer side for that length (the same 100 mm shell and back cushion), and then no armrest there.
 // UNSURE: chaiseSide is still ignored for corner_u, which has no chaise; the UI does not offer it there yet (plan variant-options).
 // UNSURE: explicit values cannot be distinguished from defaults in a complete input;
 //         supplied values always win, and variant defaults fill only missing values.
@@ -77,6 +80,16 @@ export const meta = {
       key: 'cornerChaiseLength',
       appliesTo: ['corner_l'], label: 'Chaise length (L)', unit: 'mm',
       default: 2400, min: 1000, max: 3200, step: 10,
+    },
+    {
+      key: 'returnBackLength',
+      appliesTo: ['corner_l', 'corner_u'], label: 'Corner leg back length', unit: 'mm',
+      default: 0, min: 0, max: 3200, step: 10,
+    },
+    {
+      key: 'chaiseBackLength',
+      appliesTo: ['two_seat', 'three_seat', 'sofa_bed', 'corner_l'], label: 'Chaise back length', unit: 'mm',
+      default: 0, min: 0, max: 3200, step: 10,
     },
     {
       key: 'cornerLegLength',
@@ -248,8 +261,9 @@ export function build(input = {}) {
   addFeet(x0, x1, mainFront, rear);
   frame.push(boxBetween(x0, x1, rear - backThickness, rear, baseBottom, p.height));
 
-  const leftInset = cornerLeft ? backThickness : chaiseLeft ? chaiseInset : armWidth;
-  const rightInset = cornerRight ? backThickness : chaiseRight ? chaiseInset : armWidth;
+  // a chaise with its own back (chaiseBackLength) is closed by that back, like a corner return
+  const leftInset = cornerLeft ? backThickness : chaiseLeft ? (p.chaiseBackLength > 0 ? backThickness : chaiseInset) : armWidth;
+  const rightInset = cornerRight ? backThickness : chaiseRight ? (p.chaiseBackLength > 0 ? backThickness : chaiseInset) : armWidth;
   const seatLeft = x0 + leftInset;
   const seatRight = x1 - rightInset;
   const count = p.variant === 'two_seat' || p.variant === 'sofa_bed' ? 2 : 3;
@@ -286,8 +300,10 @@ export function build(input = {}) {
       ));
       addFeet(outerA, outerB, sf, mainFront + overlap);
 
-      // a chaise's cushions run the full width of its block: its armrest stops at the base sofa
-      const outerInset = cornerReturn ? backThickness : chaise ? 0 : armWidth;
+      // a chaise's cushions run the full width of its block: its armrest stops at the base sofa; with a back along its
+      // outer side (chaiseBackLength) they stop at that back
+      const chaiseBack = chaise && p.chaiseBackLength > 0;
+      const outerInset = cornerReturn || chaiseBack ? backThickness : chaise ? 0 : armWidth;
       const a = left ? outerA + outerInset : outerA;
       const b = left ? outerB : outerB - outerInset;
       const extensionLength = mainFront + overlap - sf;
@@ -300,17 +316,29 @@ export function build(input = {}) {
         cushions.push(boxBetween(a, b, c, d, seatBottom, p.seatHeight));
       }
 
+      if (chaiseBack) {
+        const shellA = left ? x0 : x1 - backThickness;
+        const shellB = left ? x0 + backThickness : x1;
+        const backFront = Math.min(rear - backThickness - 100, Math.max(sf, rear - p.chaiseBackLength));
+        frame.push(boxBetween(shellA, shellB, backFront, rear, baseBottom, p.height));
+        const padA = left ? shellB - overlap : shellA - 100 + overlap;
+        const padB = left ? shellB + 100 - overlap : shellA + overlap;
+        cushions.push(boxBetween(padA, padB, backFront, rear - backThickness + overlap, p.seatHeight - overlap, p.height - 40));
+      }
+
       if (cornerReturn) {
         const shellA = left ? x0 : x1 - backThickness;
         const shellB = left ? x0 + backThickness : x1;
+        // the outside back runs from the main back out along the leg, the whole leg unless returnBackLength says less
+        const backFront = p.returnBackLength > 0 ? Math.min(rear - backThickness - 100, Math.max(sf, rear - p.returnBackLength)) : sf;
         frame.push(boxBetween(
-          shellA, shellB, sf, rear - backThickness + overlap, baseBottom, p.height
+          shellA, shellB, backFront, rear - backThickness + overlap, baseBottom, p.height
         ));
         const padA = left ? shellB - overlap : shellA - 100 + overlap;
         const padB = left ? shellB + 100 - overlap : shellA + overlap;
         // the back cushion on the inside of the return, along its whole length (up to the main back)
         cushions.push(boxBetween(
-          padA, padB, sf, rear - backThickness + overlap,
+          padA, padB, backFront, rear - backThickness + overlap,
           p.seatHeight - overlap, p.height - 40
         ));
         // the back cushion in the corner, where the return's back meets the main back (was missing)
@@ -323,7 +351,7 @@ export function build(input = {}) {
       }
     }
 
-    if (!cornerReturn && armWidth > 0) {
+    if (!cornerReturn && armWidth > 0 && !(chaise && p.chaiseBackLength > 0)) {
       // a chaise's armrest is as wide as the chaise and runs over the base sofa's depth only
       const armW = chaise ? p.depth : armWidth;
       const a = left ? x0 : x1 - armW;
