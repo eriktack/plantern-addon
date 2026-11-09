@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.4
+
+- Library: wall shelves can be as shallow as 80 mm
+
 ## 0.8.3
 
 - Library: a sofa's corner leg back can stop short of the leg's end, and a chaise can have a back along part of its outer side

@@ -15,7 +15,7 @@ import { primitives, booleans, transforms, geometries } from '../lib/jscad.js';
 // ASSUMED: The hat-shelf hook rail is 30 mm high and 20 mm deep, inset 20 mm from each side (low mounting rail).
 // ASSUMED: Hat-shelf uprights and support arms are 20 mm wide; uprights are 20 mm deep and arms 10 mm high (simple wall brackets).
 // ASSUMED: Hat-shelf supports are centred 35 mm from the ends, overlapping the rail, arms and slats by 5 mm (connected support).
-// ASSUMED: Hooks have 5 mm radius; their horizontal arms run from 15 mm to 100 mm forward of the back, at z = 15 mm (usable coat hooks).
+// ASSUMED: Hooks have 5 mm radius; their horizontal arms run from 15 mm to 100 mm forward of the back (or to 5 mm behind the front of a shallower shelf), at z = 15 mm (usable coat hooks).
 // ASSUMED: Hook upturns run from z = 15 mm to 45 mm, overlapping the horizontal arms by 5 mm (raised hook tips).
 // ASSUMED: Multiple hooks span between positions 40 mm from each end; a single hook is centred (even distribution).
 // ASSUMED: Small round wire and hook parts use 16 segments (small-part resolution).
@@ -58,7 +58,7 @@ export const meta = {
       label: 'Depth',
       unit: 'mm',
       default: 250,
-      min: 150,
+      min: 80,
       max: 400,
       step: 10,
     },
@@ -290,14 +290,16 @@ export function build(p = {}) {
       );
     }
 
+    // a hook reaches 100 mm forward of the back, or to 5 mm behind the front of a shelf shallower than that (its tip's radius)
+    const reach = Math.min(100, q.depth - 5);
     for (let i = 0; i < q.hooks; i += 1) {
       const x = q.hooks === 1
         ? 0
         : x0 + 40 + (q.width - 80) * i / (q.hooks - 1);
 
       brackets.push(
-        depthRod(5, x, back - 100, back - 15, 15),
-        verticalRod(5, x, back - 100, 15, 45)
+        depthRod(5, x, back - reach, back - 15, 15),
+        verticalRod(5, x, back - reach, 15, 45)
       );
     }
   }
