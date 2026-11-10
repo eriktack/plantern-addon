@@ -137,7 +137,7 @@ export const isOpaque = w => (w.lightBlocking ? w.lightBlocking === 'opaque' : w
  * Occluder segments for 2D light: opaque wall pieces, solids, and closed openings (windows, doors).
  * A wall or solid above the plan's cut height (a lintel, boxing under the ceiling) lets the light pass in the plan.
  */
-export function occluders(geo, { cutPlane = 1200, doorStates = null } = {}) {
+export function occluders(geo, { cutPlane = 1200, doorStates = null, leaves = true } = {}) {
   const segs = [], ring = r => r.forEach((p, i) => segs.push([p, r[(i + 1) % r.length]]));
   for (const w of geo.walls) if (isOpaque(w) && wallProfile(w, geo.level).base < cutPlane) (geo.pieces.get(w.id) || []).forEach(ring);
   (geo.level.solids || []).filter(s => (s.base ?? 0) < cutPlane && s.polygon?.length >= 3).forEach(s => ring(s.polygon));
@@ -146,7 +146,9 @@ export function occluders(geo, { cutPlane = 1200, doorStates = null } = {}) {
     const w = geo.wallById.get(o.wall);
     if (!w || !isOpaque(w)) continue;
     // an open hinged door lets light past its gap: only the leaf, swung out, blocks it (model/doors.js)
-    if (isHingedDoor(o) && doorOpen(o, doorStates)) { segs.push(...openingSymbol(w, geo.frames.get(w.id), o, { open: true }).lines); continue; }
+    // (`leaves: false`, the 3D masks: the leaf is drawn see-through there, and a mask is the same at every height, so a leaf in it would
+    // darken the wall above the door's top too)
+    if (isHingedDoor(o) && doorOpen(o, doorStates)) { if (leaves) segs.push(...openingSymbol(w, geo.frames.get(w.id), o, { open: true }).lines); continue; }
     const l = geo.openingLine(o);
     if (l) segs.push(l);
   }

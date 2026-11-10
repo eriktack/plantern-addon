@@ -135,7 +135,7 @@ export const meta = {
   ],
   parts: [
     { key: 'stand', label: 'Base and stand' },
-    { key: 'shade', label: 'Shade' },
+    { key: 'shade', label: 'Shade', glows: true },
   ],
   variantDefaults: {
     arc: {

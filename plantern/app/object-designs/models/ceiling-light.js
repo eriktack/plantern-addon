@@ -141,7 +141,7 @@ export const meta = {
   ],
   parts: [
     { key: 'fitting', label: 'Canopy, cord and fitting' },
-    { key: 'shade', label: 'Shade' },
+    { key: 'shade', label: 'Shade', glows: true },
   ],
   variantDefaults: {
     pendant: {

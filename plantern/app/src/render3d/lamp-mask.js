@@ -8,16 +8,20 @@
 // The pure parts (rasterising a mask, packing them, the shader text) are here and tested in Node; installLampMask() patches
 // three's shader chunks and gives every material the shared uniforms, and is browser only.
 
-export const MASK_SIZE = 128;            // texels along one side of a lamp's mask
+export const MASK_SIZE = 256;            // texels along one side of a lamp's mask (about 23 mm for a lamp reaching 3 m)
+export const SUBROWS = 4;                // scanlines per texel row: the mask's edges are smooth
 export const MASK_COLS = 8;              // masks per row of the atlas
 export const MAX_MASKS = 64;             // lamps with a mask (8 rows of 8)
 export const NEAR_LIGHT = 0.4;           // metres: a point light is no brighter than it is this far away, so a lamp in a window does not blow out the frame beside it
+export const MASK_INSET = 0.02;          // metres: how far toward its lamp a fragment's mask is read (see lampMaskAt)
 export const DECAY_STEP = 1e-4;          // a lamp's mask number is in its light's decay: 2 + (number + 1) * DECAY_STEP
 
 /**
- * The mask of one lamp: size × size texels, 255 where the lamp's light may go, 0 where a wall hides it. `polygon` is the lamp's visibility
- * polygon in plan mm, `centre` the lamp's place (plan mm) and `radius` its reach: the mask covers the square of side 2 × radius round the centre,
- * row 0 at the south (plan y − radius), column 0 at the west. Even-odd scanline fill, sampled at the middle of each texel.
+ * The mask of one lamp: size × size texels, 255 where the lamp's light may go, 0 where a wall hides it, and in between along the polygon's
+ * edges (the part of the texel the polygon covers, so a ray past a door jamb is a smooth edge, not a staircase). `polygon` is the lamp's
+ * visibility polygon in plan mm, `centre` the lamp's place (plan mm) and `radius` its reach: the mask covers the square of side 2 × radius
+ * round the centre, row 0 at the south (plan y − radius), column 0 at the west. Even-odd scanlines, SUBROWS per texel row, each span adding
+ * the exact length it covers of every texel it crosses.
  */
 export function rasterizeMask(polygon, centre, radius, size = MASK_SIZE) {
   const out = new Uint8Array(size * size);
@@ -25,17 +29,22 @@ export function rasterizeMask(polygon, centre, radius, size = MASK_SIZE) {
   if (n < 3 || !(radius > 0)) return out;
   const toTexel = ([x, y]) => [((x - centre[0]) / (2 * radius) + 0.5) * size, ((y - centre[1]) / (2 * radius) + 0.5) * size];
   const pts = polygon.map(toTexel);
+  const acc = new Float32Array(size);
   for (let row = 0; row < size; row++) {
-    const y = row + 0.5, xs = [];
-    for (let i = 0; i < n; i++) {
-      const [x0, y0] = pts[i], [x1, y1] = pts[(i + 1) % n];
-      if ((y0 <= y && y1 > y) || (y1 <= y && y0 > y)) xs.push(x0 + (y - y0) / (y1 - y0) * (x1 - x0));
+    acc.fill(0);
+    for (let k = 0; k < SUBROWS; k++) {
+      const y = row + (k + 0.5) / SUBROWS, xs = [];
+      for (let i = 0; i < n; i++) {
+        const [x0, y0] = pts[i], [x1, y1] = pts[(i + 1) % n];
+        if ((y0 <= y && y1 > y) || (y1 <= y && y0 > y)) xs.push(x0 + (y - y0) / (y1 - y0) * (x1 - x0));
+      }
+      xs.sort((a, b) => a - b);
+      for (let j = 0; j + 1 < xs.length; j += 2) {
+        const a = Math.max(0, xs[j]), b = Math.min(size, xs[j + 1]);
+        for (let col = Math.floor(a); col < b && col < size; col++) acc[col] += (Math.min(b, col + 1) - Math.max(a, col)) / SUBROWS;
+      }
     }
-    xs.sort((a, b) => a - b);
-    for (let k = 0; k + 1 < xs.length; k += 2) {
-      const from = Math.max(0, Math.ceil(xs[k] - 0.5)), to = Math.min(size - 1, Math.ceil(xs[k + 1] - 0.5) - 1);
-      for (let col = from; col <= to; col++) out[row * size + col] = 255;
-    }
+    for (let col = 0; col < size; col++) out[row * size + col] = Math.round(255 * Math.min(1, acc[col]));
   }
   return out;
 }
@@ -77,7 +86,12 @@ float lampMaskAt( const in float decay, const in vec3 world ) {
 	vec4 a = texelFetch( uLampInfo, ivec2( idx, 0 ), 0 );
 	vec4 b = texelFetch( uLampInfo, ivec2( idx, 1 ), 0 );
 	if ( world.y < a.w || world.y > b.x ) return 0.0;
-	vec2 t = vec2( world.x - a.x, - ( world.z - a.y ) ) / a.z * 0.5 + 0.5;
+	// the point is looked up a little toward the lamp (at most MASK_INSET): a wall face lies on the polygon's edge, half in and half out, and
+	// would get half the light; its other face is a wall's thickness further on and stays dark
+	vec2 d = vec2( a.x - world.x, a.y - world.z );
+	float dl = length( d );
+	vec2 p = vec2( world.x, world.z ) + ( dl > 0.0 ? d / dl * min( dl, ${MASK_INSET.toFixed(3)} ) : vec2( 0.0 ) );
+	vec2 t = vec2( p.x - a.x, - ( p.y - a.y ) ) / a.z * 0.5 + 0.5;
 	if ( t.x < 0.0 || t.x > 1.0 || t.y < 0.0 || t.y > 1.0 ) return 0.0;
 	float margin = 0.5 / ${MASK_SIZE}.0;
 	t = clamp( t, vec2( margin ), vec2( 1.0 - margin ) );

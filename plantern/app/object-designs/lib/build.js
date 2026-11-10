@@ -41,11 +41,11 @@ export function buildModel(model, input = {}, library = {}, { textures = new Map
       images.set(path, textures.get(path));
       mesh = addPlanarUvs(mesh, material.texture.uvScale);
     }
-    return { key: part.key, label: part.label, mesh, material };
+    return { key: part.key, label: part.label, mesh, material, glows: part.glows === true };
   }).filter(p => p !== null);
 
   const assembled = buildGltfParts(
-    parts.map(p => ({ name: p.label, mesh: p.mesh, material: p.material })),
+    parts.map(p => ({ name: p.label, mesh: p.mesh, material: p.material, glows: p.glows })),
     { name: model.meta.name, generator: `plantern-object-designs ${model.meta.id}`, images },
   );
   return {

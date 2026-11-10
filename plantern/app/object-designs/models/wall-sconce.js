@@ -90,7 +90,7 @@ export const meta = {
   ],
   parts: [
     { key: 'mount', label: 'Wall plate and arm' },
-    { key: 'shade', label: 'Shade' },
+    { key: 'shade', label: 'Shade', glows: true },
   ],
   variantDefaults: {
     swing_arm: { projection: 350 },

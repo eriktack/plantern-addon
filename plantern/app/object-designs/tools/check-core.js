@@ -100,10 +100,14 @@ export function checkModule({ fileName, source, model, library, textures = new M
   const material = model.meta.params.find(d => d.type === 'material');
   try { resolveMaterial(material.default, library, 'default'); } catch (e) { err(e.message); }
   for (const part of model.meta.parts) {
+    // `glows` marks the part that shines when the lamp is on (the shade, the globe): only a lighting model has one
+    if (part.glows !== undefined && part.glows !== true) err(`part "${part.label}": glows is true or left out`);
+    if (part.glows && typeof model.lightPoint !== 'function') err(`part "${part.label}" glows, but the model has no lightPoint(): only a lamp glows`);
     if (part.defaultMaterial === undefined) continue;
     try { resolveMaterial(part.defaultMaterial, library, `part "${part.label}" defaultMaterial`); } catch (e) { err(e.message); }
   }
 
+  if (typeof model.lightPoint === 'function' && !model.meta.parts.some(p => p.glows)) err('a lamp (it has lightPoint()) marks the part that shines with glows: true');
   const kinds = kindsOf(model.meta);
   const build = input => buildModel(model, input, library, { textures });
 

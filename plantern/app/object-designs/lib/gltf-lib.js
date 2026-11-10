@@ -46,7 +46,8 @@ const pad4 = n => (4 - (n % 4)) % 4;
 
 /**
  * Assembles the glTF JSON (without its buffer uri) and the binary data.
- * parts:  [{ name, mesh, material }]  one primitive per part. material is a resolved material:
+ * parts:  [{ name, mesh, material, glows? }]  one primitive per part; `glows` marks the part that shines when the lamp is on
+ *         (written as the primitive's extras, which three.js puts in the geometry's userData). material is a resolved material:
  *         { name, color: [r,g,b,a] linear (0..1), roughness?, metallic?, texture?: { path, uvScale } }
  *         A textured material needs mesh.uv (see addPlanarUvs in geom.js).
  * opts:   { name, generator, unitScale (metres per plan unit, default 0.001 for mm),
@@ -117,7 +118,7 @@ export function buildGltfParts(parts, { name = 'Model', generator = 'gltf-lib', 
     };
     if (textured) pbr.baseColorTexture = { index: textureFor(material.texture.path) };
     materials.push({ name: material.name || part.name, pbrMetallicRoughness: pbr, ...(material.alphaMode === 'blend' && { alphaMode: 'BLEND' }) });
-    primitives.push({ attributes, indices, material: matIndex });
+    primitives.push({ attributes, indices, material: matIndex, ...(part.glows && { extras: { glows: true } }) });
   });
 
   const json = {

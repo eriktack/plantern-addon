@@ -9,6 +9,7 @@ import { lumensScale } from '../ha/appearance.js';
 
 /** The faint ball round a lit object's light, clicked with the object (m, and its opacity off / on). */
 const LIT_HALO_RADIUS = 0.16, LIT_HALO_OFF = 0.1, LIT_HALO_ON = 0.2;
+const GLOW_MIN = 0.5, GLOW_MAX = 1.6;      // how bright a lamp's shining part is (emissive intensity), dimmed to full (decision 290)
 import { installLampMask, setLampMasks, packMasks, decayFor, MAX_MASKS } from './lamp-mask.js';
 import { DEFAULT_NIGHT_LIGHT } from '../model/night.js';
 import { assetPlacement } from '../model/assets.js';
@@ -276,6 +277,11 @@ export function createView3d(container, hooks = {}) {
           if (lit) {
             if (box) { const k = pickables.indexOf(box); if (k >= 0) pickables.splice(k, 1); }
             m.traverse(c => { if (c.isMesh) { c.userData = { ...c.userData, fixture: lit, label: fixtureLabel(lit) }; pickables.push(c); } });
+            // the part that shines (the model's `glows` part: a shade, a globe) lights up while the lamp is on, as a strip does;
+            // its material is this object's own copy, since every copy of a model shares the cached one
+            const f = fixtures.get(lit.id), glow = [];
+            m.traverse(c => { if (c.isMesh && c.geometry?.userData?.glows) { c.material = c.material.clone(); glow.push(c.material); } });
+            if (f && glow.length) { f.glow = glow; if (f.state) glowLamp(f, f.state); }
           }
         } else {
           if (box) box.material.color.set(0xb00020);
@@ -299,7 +305,7 @@ export function createView3d(container, hooks = {}) {
     root.add(g);
 
     // the shadows go to the lamps whose light the walls would otherwise let through (a shadowless lamp lights through walls)
-    const reachOptions = { cutPlane: settings?.cutPlane ?? 1200, doorStates };
+    const reachOptions = { cutPlane: settings?.cutPlane ?? 1200, doorStates, leaves: false };
     const lampFixtures = (level.fixtures || []).filter(f => f.kind === 'lamp');
     for (const [id, reach] of lampReach(geo, lampFixtures, reachOptions)) {
       leakOf.set(id, leakOfLamp(lampFixtures.find(f => f.id === id), reach.leak));   // a light in an object first: its walls must stop it
@@ -494,6 +500,17 @@ export function createView3d(container, hooks = {}) {
     }
   }
 
+  /** A lit object's shining part (its `glows` meshes) in the light's colour while it is on, dimmer when dimmed; its own colour when off. */
+  function glowLamp(f, a) {
+    if (!f.glow) return;
+    // halfway to white: a lit shade or globe looks warm white, not the light's own colour (that is what it throws on the walls)
+    const col = new THREE.Color(`rgb(${a.rgb.join(',')})`).lerp(new THREE.Color(1, 1, 1), 0.5);
+    for (const mat of f.glow) {
+      mat.emissive.copy(a.on ? col : new THREE.Color(0));
+      mat.emissiveIntensity = a.on ? GLOW_MIN + (GLOW_MAX - GLOW_MIN) * a.brightness : 0;
+    }
+  }
+
   /** a = appearance(state): { available, on, brightness 0..1, rgb } */
   function setFixture(id, a) {
     const f = fixtures.get(id);
@@ -518,6 +535,7 @@ export function createView3d(container, hooks = {}) {
       f.bulb.material.color.set(a.available ? (a.on ? col : 0x555555) : 0x7a2a2a);
       f.bulb.material.emissive.copy(a.on ? col : new THREE.Color(0));
       f.bulb.material.emissiveIntensity = a.on ? 2 : 0;
+      glowLamp(f, a);
       assignShadows();
     } else {
       f.box.material.color.set(!a.available ? 0x7a2a2a : a.on ? col : 0x666666);

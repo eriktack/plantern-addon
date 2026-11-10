@@ -41,7 +41,7 @@ export const meta = {
   ],
   parts: [
     { key: 'base', label: 'Socket', defaultMaterial: 'ceramic' },
-    { key: 'shade', label: 'Globe', defaultMaterial: '#fbf6ee' },
+    { key: 'shade', label: 'Globe', defaultMaterial: '#fbf6ee', glows: true },
   ],
   sizeParams: { x: 'globeDiameter', y: { default: null, ceiling: 'globeDiameter' }, z: { default: 'globeDiameter', ceiling: null } },
 

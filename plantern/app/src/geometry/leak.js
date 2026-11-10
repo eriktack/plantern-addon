@@ -16,10 +16,11 @@ export function lampLeaks(geo, lamps, options = {}) {
 
 /**
  * Map(lampId → { centre, radius, polygon, leak }): where each lamp's light goes in the plan. `polygon` is its visibility polygon (plan mm), `leak` the
- * part of its reach it does not cover (mm², as lampLeaks). The 3D view makes a mask of the polygon (render3d/lamp-mask.js).
+ * part of its reach it does not cover (mm², as lampLeaks). The 3D view makes a mask of the polygon (render3d/lamp-mask.js), with `leaves: false`
+ * (an open door's leaf does not stop it; see occluders()).
  */
-export function lampReach(geo, lamps, { cutPlane = 1200, doorStates = null } = {}) {
-  const out = new Map(), occ = occluders(geo, { cutPlane, doorStates });
+export function lampReach(geo, lamps, { cutPlane = 1200, doorStates = null, leaves = true } = {}) {
+  const out = new Map(), occ = occluders(geo, { cutPlane, doorStates, leaves });
   for (const fx of lamps) {
     const c = geo.fixturePos(fx);
     if (!c) continue;

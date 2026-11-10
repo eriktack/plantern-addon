@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.8
+
+- HA link recovers without a reload; lamp shades glow when on; no dark patches above open doors
+
 ## 0.8.7
 
 - Library: a globe lamp (klotlampa), on a wall or in the ceiling

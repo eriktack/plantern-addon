@@ -132,7 +132,7 @@ export const meta = {
   ],
   parts: [
     { key: 'base', label: 'Base and stem' },
-    { key: 'shade', label: 'Shade' },
+    { key: 'shade', label: 'Shade', glows: true },
   ],
   variantDefaults: {
     sill: { height: 280, shadeDiameter: 170 },
