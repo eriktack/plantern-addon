@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.7
+
+- Library: a globe lamp (klotlampa), on a wall or in the ceiling
+
 ## 0.8.6
 
 - Library: bookshelves and storage shelving up to 600 mm deep

@@ -4836,3 +4836,27 @@ Per generator:
   ]
 }
 ```
+
+```json
+{
+  "category": "lighting",
+  "generators": [
+    {
+      "id": "globe_lamp",
+      "parameters": [
+        { "key": "variant", "label": "Mounted", "type": "enum", "options": ["wall", "ceiling"], "labels": { "wall": "On the wall", "ceiling": "In the ceiling" }, "default": "wall" },
+        { "key": "globeDiameter", "label": "Globe diameter", "type": "number", "unit": "mm", "default": 180, "min": 100, "max": 350, "step": 10 },
+        { "key": "baseDiameter", "label": "Socket diameter", "type": "number", "unit": "mm", "default": 110, "min": 60, "max": 200, "step": 5 },
+        { "key": "socketDepth", "label": "Socket depth", "type": "number", "unit": "mm", "default": 60, "min": 30, "max": 150, "step": 5 },
+        { "key": "material", "label": "Material (whole object)", "type": "material", "default": "ceramic" },
+        { "key": "lightHeight", "label": "Light source height", "type": "number", "unit": "mm", "default": 0, "min": 0, "max": 500, "step": 1 }
+      ],
+      "parts": [["base", "Socket"], ["shade", "Globe"]],
+      "placement": { "mount": "wall", "z": 1800, "hosts": ["wall"], "variants": { "ceiling": { "mount": "ceiling", "hosts": ["room", "head"] } } },
+      "notes": [
+        "A klotlampa (BBV28 Jordkällare, 2026-11-10): an opal glass globe screwed into a porcelain socket, with no arm or plate, on a wall (the socket out from the wall) or in the ceiling (hanging down); for storage rooms, cellars and garages."
+      ]
+    }
+  ]
+}
+```

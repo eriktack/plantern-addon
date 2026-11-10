@@ -71,7 +71,7 @@ const TABLE = {
   'kitchen-cabinet': ['Kitchen', 'cabinet'], appliance: ['Kitchen', 'appliance'], sink: ['Kitchen', 'sink'], 'kitchen-island': ['Kitchen', 'island'], worktop: ['Kitchen', 'worktop'], 'appliance-housing': ['Kitchen', 'housing'],
   toilet: ['Bathroom', 'toilet'], bathtub: ['Bathroom', 'bathtub'], shower: ['Bathroom', 'shower'], vanity: ['Bathroom', 'vanity'],
   'towel-rail': ['Bathroom', 'towelRail'], mirror: ['Bathroom', 'mirror'],
-  'ceiling-light': ['Lighting', 'ceiling'], 'table-lamp': ['Lighting', 'tableLamp'], 'floor-lamp': ['Lighting', 'floorLamp'], 'wall-sconce': ['Lighting', 'sconce'],
+  'ceiling-light': ['Lighting', 'ceiling'], 'table-lamp': ['Lighting', 'tableLamp'], 'floor-lamp': ['Lighting', 'floorLamp'], 'wall-sconce': ['Lighting', 'sconce'], 'globe-lamp': ['Lighting', 'ceiling'],
   radiator: ['Heating & other', 'radiator'], 'tile-stove': ['Heating & other', 'stove'], 'wood-stove': ['Heating & other', 'stove'],
   'heat-pump-indoor': ['Heating & other', 'heatPump'], rug: ['Heating & other', 'rug'], planter: ['Heating & other', 'planter'],
   'water-heater': ['Heating & other', 'waterHeater'], 'sauna-heater': ['Heating & other', 'sauna'],

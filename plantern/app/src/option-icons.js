@@ -168,7 +168,7 @@ const MORE = {
   straight: 'desk', base: 'hinged', base_drawer: 'drawers', upper: 'cabinetUpper', plain: 'cube',
   seating_overhang: 'islandDrawn', with_sink: 'basin', with_hob: 'hob', pot: 'pot', hanging: 'hanging',
   panel: 'panelRad', column: 'radiatorDrawn', runner: 'runner', wood_fired: 'stoveDrawn',
-  pivot: 'pivot', center: 'centre', wall: 'wallSide', top: 'arrowUp', up: 'arrowUp', down: 'arrowDown', rear: 'arrowBack',
+  pivot: 'pivot', center: 'centre', wall: 'wallSide', ceiling: 'flush', top: 'arrowUp', up: 'arrowUp', down: 'arrowDown', rear: 'arrowBack',
   rolled: 'rolledArm', bar: 'barStool', counter: 'stoolDrawn', step: 'stepStool', classic: 'tableLamp', sill: 'lampSill',
   ceramic: 'vase', baluster: 'vase', pole: 'pole', sphere: 'sphereStem', ladder: 'ladder', wall_bar: 'wallBar',
   single: 'sconceDrawn', hat_shelf: 'hatShelf', narrow: 'hinged', rounded: 'quarterRound', pedal: 'pedalBin', pouf: 'poufDrawn', multi: 'multiLamp', grille: 'grilleDrawn', slats: 'slatsDrawn', cane: 'caneDrawn',
