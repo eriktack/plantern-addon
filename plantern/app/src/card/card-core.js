@@ -36,6 +36,9 @@ export function cardConfig(config) {
   if (config.light !== undefined && config.light !== '' && light === undefined) throw new Error(`light is one of ${LIGHT_MODES.join(', ')}, not "${config.light}".`);
   const lightMin = configPercent(config.light_min, 'light_min'), lightMax = configPercent(config.light_max, 'light_max');
   if (lightMin !== undefined && lightMax !== undefined && lightMin > lightMax) throw new Error('light_min is above light_max: the low end of the light is at most the high end.');
+  // underlay: the house's photo or drawing under the plan (docs/plans/underlay.md UL7); off unless asked for
+  const underlay = config.underlay === undefined || config.underlay === '' || config.underlay === null ? undefined : config.underlay === true || String(config.underlay).toLowerCase() === 'true' ? true : config.underlay === false || String(config.underlay).toLowerCase() === 'false' ? false : null;
+  if (underlay === null) throw new Error(`underlay is true or false, not "${config.underlay}".`);
   return {
     ...(shadows ? { shadows } : {}),
     ...(light && light !== 'default' ? { light } : {}),
@@ -49,6 +52,7 @@ export function cardConfig(config) {
     ...(config.level ? { level: String(config.level) } : {}),
     ...(config.title ? { title: String(config.title) } : {}),
     ...(height !== undefined ? { height } : {}),
+    ...(underlay ? { underlay: true } : {}),
   };
 }
 

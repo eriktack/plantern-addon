@@ -1360,5 +1360,21 @@
     { "color": "#e9dfc9", "name": "Warm white" },
     { "color": "#cfd8dc", "name": "Cool grey" },
     { "color": "#a65c4a", "name": "Brick" }
+  ],
+  "underlays": [
+    {
+      "id": "u_site_sketch",
+      "name": "Site sketch",
+      "file": "assets/underlays/site-sketch.png",
+      "level": "ground",
+      "size": [760,480],
+      "points": [
+        { "image": [240,280], "plan": "r_kitchen#p0" },
+        { "image": [608,120], "plan": "r_living#p2" },
+        { "image": [616,368], "plan": "r_terrace#p2" }
+      ],
+      "opacity": 0.6,
+      "note": "Made-up drawing of the demo ground floor and its garden at 25 mm per pixel"
+    }
   ]
 }

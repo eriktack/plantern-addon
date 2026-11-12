@@ -19,6 +19,17 @@
 </script>
 <script type="module" src="src/nav.js"></script>
 <script type="module" src="src/capture/ui.js"></script>
+<style>
+  .ulimg { position: relative; overflow: auto; max-height: 300px; border: 1px solid var(--line, #333); margin: 4px 0; }
+  .ulimg #ulImgIn { position: relative; width: 100%; }
+  .ulimg img { display: block; width: 100%; height: auto; }
+  .ulimg svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .ulimg.picking { cursor: crosshair; outline: 2px solid #ffb454; }
+  .ultab { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+  .ultab td, .ultab th { padding: 2px 3px; text-align: left; }
+  .ultab input { width: auto; }
+  .ultab button.on { outline: 2px solid #ffb454; }
+</style>
 </head>
 <body>
 <main>
@@ -161,6 +172,26 @@
     <label>Ground-floor finished floor <input id="placeHeight" inputmode="decimal" placeholder="e.g. 42.5" class="inline-num wide" autocomplete="off"> m above sea level (RH 2000)
       <small>The height of the finished floor of the ground floor, which is the plan's zero. Measured or read from a drawing, never guessed.</small></label>
     <div class="mt6"><button type="button" class="primary" id="placeApply">Apply</button> <button type="button" id="placeRevert">Revert</button> <span id="placeMsg" class="help"></span></div>
+  </details>
+  <details class="sect" id="underlaySect"><summary>Photo under the plan <span id="ulCount"></span></summary>
+    <p class="help">A drone photo taken straight down, or a drawing, under this level's plan. It is fitted by points: a spot on the image and the same spot on the plan. Use points on the ground (wall corners at ground level, a post's foot): roof edges lean outward in a photo. Two points place it; with three or more each shows how far off it is.</p>
+    <div id="ulList"></div>
+    <div class="grid2">
+      <label>New photo or drawing <small>PNG, JPEG or WebP, at most 16 MB</small><input type="file" id="ulFile" accept="image/png,image/jpeg,image/webp"></label>
+      <label>Name <input id="ulName" autocomplete="off" placeholder="Drone photo 2023"></label>
+    </div>
+    <div class="row btns"><button type="button" id="ulAdd">+ Add to this level</button> <label class="inl"><input type="checkbox" id="ulShow" checked> Show in the plan</label></div>
+    <div id="ulMsg" class="help"></div>
+    <div id="ulFit" hidden>
+      <h3>Fit <span id="ulFitName"></span></h3>
+      <label>Zoom <input type="range" id="ulZoom" min="1" max="8" step="0.5" value="1"></label>
+      <div id="ulImgBox" class="ulimg"><div id="ulImgIn"><img id="ulImg" alt="The image being fitted"><svg id="ulMarks" preserveAspectRatio="none"></svg></div></div>
+      <table class="ultab"><thead><tr><th>#</th><th>Pixel</th><th>Plan point <small>(ref or x, y mm)</small></th><th>Off</th><th></th></tr></thead><tbody id="ulPts"></tbody></table>
+      <div class="row btns"><button type="button" id="ulAddPt">+ Point</button></div>
+      <p id="ulFitSum" class="help"></p>
+      <label>Shows <input type="range" id="ulOpacity" min="0.1" max="1" step="0.05"> <span id="ulOpTxt" class="help"></span></label>
+      <div class="mt6"><button type="button" class="primary" id="ulApply">Apply</button> <button type="button" id="ulRevert">Revert</button> <button type="button" id="ulClose">Close</button></div>
+    </div>
   </details>
   </div>
   <div id="edit" hidden>

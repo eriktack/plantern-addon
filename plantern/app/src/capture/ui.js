@@ -52,6 +52,7 @@ import { applyFixture, doSplit, showEntityPick, useObjectLight } from './editor/
 import { cancelDrag, dragMove, dragStart, endDrag, freePoint } from './editor/drag.js';
 import { hoverStatus, nudgeBy, openContextMenu, planKey, showShortcuts } from './editor/keys.js';
 import { Ed } from './editor/state.js';
+import { addFromFile, setShown, addPoint, applyFit, revertFit, closeFit, renderUnderlays, setDraftOpacity, imageClick as underlayImageClick, planClick as underlayPlanClick, pickingPlan, stopPick as stopUnderlayPick } from './editor/underlays.js';
 
 enhanceSegmented();                  // choices of up to four: a row of buttons (UX20); before the menus, which leave these alone
 enhanceAll(document, { skip: '#preview, #tree' });     // the plan and the tree are rebuilt all the time and hold no select (PF16)
@@ -105,6 +106,16 @@ async function init() {
   }
   $('placeApply').onclick = applyPlace;
   $('placeRevert').onclick = fillPlace;
+  // the photo under the plan (underlays.js)
+  $('ulAdd').onclick = addFromFile;
+  $('ulShow').onchange = e => setShown(e.target.checked);
+  $('ulAddPt').onclick = addPoint;
+  $('ulApply').onclick = applyFit;
+  $('ulRevert').onclick = revertFit;
+  $('ulClose').onclick = () => { closeFit(); renderUnderlays(); draw(); };
+  $('ulOpacity').oninput = e => setDraftOpacity(e.target.value);
+  $('ulZoom').oninput = e => { $('ulImgIn').style.width = `${Number(e.target.value) * 100}%`; };
+  $('ulImg').onclick = underlayImageClick;
   // the House view: "Place the house" moves into it from the sidebar; its settings are wired here
   $('houseBox').querySelector('.edhead').after($('placeSect'));   // under the House header, above the settings
   $('browse').after($('houseBox'), $('levelBox'));          // the forms sit where the browse list sits, not under the top row
@@ -465,6 +476,7 @@ async function init() {
   $('preview').addEventListener('click', async e => {
     if (Ed.suppressClick) { Ed.suppressClick = false; return; }        // the end of a drag that moved the plan
     if (Ed.splitPick) { const at = splitAtPointer(e); stopSplitPick(); if (at !== null) { $('wSplitAt').value = at; doSplit(); } return; }   // UX16
+    if (pickingPlan()) { underlayPlanClick(e); return; }               // fitting a photo: its point on the plan (underlays.js)
     if (Ed.placing) { const w = Ed.placing.wall && level().walls.find(x => x.id === Ed.placing.wall); let p = freePoint(e); if (w) { const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), u = [(w.b[0] - w.a[0]) / L, (w.b[1] - w.a[1]) / L], s0 = (p[0] - w.a[0]) * u[0] + (p[1] - w.a[1]) * u[1]; p = [w.a[0] + u[0] * s0, w.a[1] + u[1] * s0]; } finishPlacing(p); return; }   // UX10
     if (Ed.peekId) {                                                // looking at another level: read, never select or leave
       const pk = e.target.closest('[data-pk]');
@@ -502,6 +514,7 @@ async function init() {
     if (e.key === 'Escape') {
       if (Ed.dragging?.patch && cancelDrag()) return;
       if (Ed.placing) { stopPlacing('Placing cancelled'); return; }
+      if (stopUnderlayPick('Point picking cancelled')) return;
       if (Ed.splitPick) { $('wSplitAt').value = ''; stopSplitPick('Split cancelled'); draw(); return; }
       if (Ed.drawing) { stopDrawing(); return; }
       if (Ed.fromPick) { stopFromPick(); return; }                           // picking a corner: Esc stops that first

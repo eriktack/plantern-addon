@@ -22,6 +22,7 @@ import { isHosted } from './hosted.js';
 import { checkName } from './names.js';
 import { checkMaterials, checkPalette } from './materials.js';
 import { checkSite } from './site.js';
+import { checkUnderlays } from './underlays.js';
 
 // Issues: { severity: 'error' | 'warn', id, msg }. Never throws on bad data; reports it.
 
@@ -43,6 +44,7 @@ function checkIds(model, out) {
   }
   (model.checks || []).forEach(x => note(x.id, 'checks'));
   (model.anchors || []).forEach(x => note(x.id, 'anchors'));
+  (Array.isArray(model.underlays) ? model.underlays : []).forEach(x => note(x?.id, 'underlays'));
 }
 
 /**
@@ -426,6 +428,7 @@ export function withNames(issues, model) {
   for (const lv of model.levels || []) for (const c of ID_COLLECTIONS) (lv[c] || []).forEach(add);
   (model.checks || []).forEach(add);
   (model.anchors || []).forEach(add);
+  (Array.isArray(model.underlays) ? model.underlays : []).forEach(add);
   if (!names.size) return issues;
   const ids = [...names.keys()].sort((a, b) => b.length - a.length).map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   // an id already in brackets, as some messages write it ("Trapp" (st_main)), is left as it is
@@ -443,7 +446,7 @@ function validateAll(model, geos, { blueprints, library } = {}) {
   checkIds(model, out);
   out.push(...checkMaterials(model, library), ...checkPalette(model), ...checkSite(model.site));
   for (const lv of model.levels) out.push(...validateLevel(lv, geos.get(lv.id), model.levels.some(l => l.id !== lv.id && l.elevation < lv.elevation && (l.building ?? null) === (lv.building ?? null)), model.checks, blueprints).map(x => ({ ...x, level: lv.id })));
-  out.push(...validateLevels(model, geos), ...validateStairs(model, geos), ...checkAnchors(model, geos));
+  out.push(...validateLevels(model, geos), ...validateStairs(model, geos), ...checkAnchors(model, geos), ...checkUnderlays(model, geos));
   const rooms = model.levels.flatMap(l => l.rooms || []);
   for (const c of model.checks || []) {
     const r = checkCheck(c, rooms);

@@ -21,6 +21,7 @@ import { showFixture } from './panel-fixture.js';
 import { showStairs } from './panel-stairs.js';
 import { showObject } from './panel-object.js';
 import { renderAnchors, renderAreas, renderChecks } from './checks.js';
+import { renderUnderlays } from './underlays.js';
 import { SELECT, afterLeave, confirmItem, enterEdit, isDoubleClick, mayLeave, showEditBar } from './session.js';
 import { Ed } from './state.js';
 import { publishDraft } from './draft-bus.js';
@@ -154,6 +155,7 @@ export function refresh() {
     renderMaterials();
     renderColors();
     renderAnchors();
+    renderUnderlays();
     renderChecks();
     renderAreas();
     const todo = stillToMeasure(level());

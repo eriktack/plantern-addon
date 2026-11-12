@@ -25,6 +25,23 @@ export const el = (t, a = {}, parent) => {
   return e;
 };
 
+/**
+ * Images under the plan (docs/plans/underlay.md): each { href, size: [w, h], opacity, matrix } (matrix: image pixel → plan mm,
+ * src/geometry/underlay.js). The SVG transform is built from three mapped points through toSvg(), so the y-flip stays in coords.js.
+ * They never count towards the plan's bounds: a photo is usually much larger than the house.
+ */
+export function underlayTransform(m) {
+  const o = toSvg([m.e, m.f]), u = toSvg([m.a + m.e, m.b + m.f]), v = toSvg([m.c + m.e, m.d + m.f]);
+  return `matrix(${u[0] - o[0]} ${u[1] - o[1]} ${v[0] - o[0]} ${v[1] - o[1]} ${o[0]} ${o[1]})`;
+}
+function drawUnderlays(g, list) {
+  for (const u of list || []) {
+    if (!u?.href || !u.matrix || !Array.isArray(u.size)) continue;
+    el('image', { href: u.href, x: 0, y: 0, width: u.size[0], height: u.size[1], preserveAspectRatio: 'none', opacity: u.opacity ?? 0.6,
+      transform: underlayTransform(u.matrix), 'pointer-events': 'none', 'data-underlay': u.id || '' }, g);
+  }
+}
+
 /** The lamp symbol in the plan: a light bulb about 220 mm tall, centred on the lamp (globe, neck, two lines for the base). */
 const BULB_PATH = 'M -46 52 C -118 12 -102 -104 0 -104 C 102 -104 118 12 46 52 Z M -40 74 H 40 M -28 96 H 28';
 
@@ -65,10 +82,11 @@ export function createPlanView(svg, hooks = {}) {
     return fromSvg([q.x, q.y]);
   }
 
-  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {}, assetStatus = () => 'unknown', assetColour = () => null, doorStates = null }) {
+  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {}, assetStatus = () => 'unknown', assetColour = () => null, doorStates = null, underlays = [] }) {
     svg.replaceChildren();
     fixEls = {}; lightEls = {};
     const defs = el('defs', {}, svg), layer = id => el('g', { id }, svg);
+    drawUnderlays(layer('underlay'), level ? underlays : []);
     const gFloor = layer('floor'), gLight = layer('light'), gObj = layer('objects'), gWall = layer('walls'), gFix = layer('fixtures');
     overlay = layer('overlay');
     const all = [];

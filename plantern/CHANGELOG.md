@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.9
+
+- Photo or drawing under the plan: upload and fit it by points in the Editor, show it in the viewer and the card (underlay: true)
+
 ## 0.8.8
 
 - HA link recovers without a reload; lamp shades glow when on; no dark patches above open doors

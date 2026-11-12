@@ -99,6 +99,14 @@ export class Registry extends EventEmitter {
     return f.store.writeAsset(f.house, name, files);
   }
 
+  /** Write one file into a house folder (an underlay image, `relativePath` already checked by the caller): see the storage's writeFile. */
+  async writeFile(id, relativePath, bytes) {
+    const f = this.find(id);
+    if (!f) throw Object.assign(new Error(`no house "${id}"`), { status: 404 });
+    if (f.store.readOnly) throw Object.assign(new Error(`${f.store.cfg?.name || f.store.id} is read-only`), { status: 403 });
+    return f.store.writeFile(f.house, relativePath, bytes);
+  }
+
   /** Both files of a house: { id, name, store, readOnly, location: { text, version }, model: { text, version } }. */
   async load(id) {
     const f = this.find(id);

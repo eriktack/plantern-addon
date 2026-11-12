@@ -18,6 +18,7 @@ import { followLevels, levelOfRef } from './levels.js';
 import { DEFAULT_CEILING, DEFAULT_FLOOR_THICKNESS, resolveElevations, checkElevationFrom, RELATIONS } from '../model/elevation.js';
 import { shiftLevelGeometry } from './align.js';
 import { anchorStatus, newAnchorId } from '../model/anchors.js';
+import { underlayShapeErrors, newUnderlayId } from '../model/underlays.js';
 import { isShared, edgeOfRef, boundEdges } from '../geometry/bound.js';
 import { generateWalls, PAIR_ANGLE } from '../capture/walls.js';
 import { wallProfile } from '../geometry/walls.js';
@@ -167,6 +168,54 @@ export function deleteCheck(model, id, options = {}) {
 export function deleteAnchor(model, id) {
   if (!(model.anchors || []).some(a => a.id === id)) return refuse(model, `no anchor "${id}"`);
   const next = { ...model, anchors: model.anchors.filter(a => a.id !== id) };
+  return { model: next, report: { errors: [], issues: validate(next) } };
+}
+
+// ---- underlays: an image under the plan, fitted by points (docs/plans/underlay.md, src/model/underlays.js) ----
+const UNDERLAY_KEYS = ['name', 'file', 'level', 'size', 'points', 'opacity', 'date', 'note'];
+const underlayIds = model => new Set([...allIds(model), ...(model.anchors || []).map(a => a.id), ...(model.checks || []).map(c => c.id), ...(model.underlays || []).map(u => u.id)]);
+
+/**
+ * A new underlay: spec = { name?, file, level, size: [w, h], points?: [{ image, plan }], opacity?, date?, note? }.
+ * The file must already be in the house folder (uploaded first). Returns { model, report, underlay }.
+ */
+export function addUnderlay(model, spec = {}) {
+  const used = underlayIds(model);
+  const id = spec.id ?? newUnderlayId(spec.name, used);
+  if (used.has(id)) return refuse(model, `the id ${id} is already used`);
+  const u = { id };
+  for (const k of UNDERLAY_KEYS) if (spec[k] !== undefined && spec[k] !== null && spec[k] !== '') u[k] = spec[k];
+  u.points ??= [];
+  if (!(model.levels || []).some(l => l.id === u.level)) return refuse(model, `no level "${u.level}"`);
+  const bad = underlayShapeErrors(u);
+  if (bad.length) return refuse(model, ...bad);
+  const next = { ...model, underlays: [...(model.underlays || []), u] };
+  return { model: next, report: { errors: [], issues: validate(next) }, underlay: u };
+}
+
+/** Change an underlay: props as for addUnderlay (not id); null removes an optional field. Returns { model, report, underlay }. */
+export function setUnderlay(model, id, props = {}) {
+  const old = (model.underlays || []).find(u => u.id === id);
+  if (!old) return refuse(model, `no underlay "${id}"`);
+  const u = { ...old };
+  for (const [k, v] of Object.entries(props)) {
+    if (!UNDERLAY_KEYS.includes(k)) return refuse(model, `${k} cannot be set on an underlay`);
+    if (v === null || v === '') { if (['file', 'level', 'size', 'points'].includes(k)) return refuse(model, `${k} cannot be removed`); delete u[k]; }
+    else u[k] = v;
+  }
+  if (!(model.levels || []).some(l => l.id === u.level)) return refuse(model, `no level "${u.level}"`);
+  const bad = underlayShapeErrors(u);
+  if (bad.length) return refuse(model, ...bad);
+  const next = { ...model, underlays: model.underlays.map(x => (x.id === id ? u : x)) };
+  return { model: next, report: { errors: [], issues: validate(next) }, underlay: u };
+}
+
+/** Remove an underlay from the model (its file stays in the house folder). */
+export function deleteUnderlay(model, id) {
+  if (!(model.underlays || []).some(u => u.id === id)) return refuse(model, `no underlay "${id}"`);
+  const rest = model.underlays.filter(u => u.id !== id);
+  const next = { ...model };
+  if (rest.length) next.underlays = rest; else delete next.underlays;
   return { model: next, report: { errors: [], issues: validate(next) } };
 }
 

@@ -31,6 +31,7 @@ import { drawWallOverlay, selectionMarks, wallEnds } from './walldraw.js';
 import { isRound } from './panel-room.js';
 import { setStatus } from './session.js';
 import { Ed } from './state.js';
+import { underlaysSvg, fitMarksSvg } from './underlays.js';
 import { pickVerb, pointerIsCoarse } from '../../touch.js';
 
 
@@ -245,6 +246,7 @@ function drawPlan() {
   const poly = (p, style) => `<polygon points="${p.map(q => toSvg(q).join(',')).join(' ')}" ${style}/>`;
   // rooms and walls are clickable; assumed thicknesses hatched, orphans red, the selection highlighted
   let out = `<defs><pattern id="hatch" patternUnits="userSpaceOnUse" width="${fs * 0.7}" height="${fs * 0.7}" patternTransform="rotate(45)"><rect width="${fs * 0.7}" height="${fs * 0.7}" fill="#6b7482"/><line x1="0" y1="0" x2="0" y2="${fs * 0.7}" stroke="#ffb454" stroke-width="${fs / 6}"/></pattern></defs>`;
+  out += underlaysSvg();                                       // a photo or drawing under the plan (underlays.js)
   // while placing something (or always, Levels: always): the walls and rooms of the level below (blue) and
   // above (amber), faintly, with their room names; their corners are start points too
   const underNames = [];
@@ -387,6 +389,7 @@ function drawPlan() {
   // the corners of the room being edited can be dragged (on top of the start dots: a click without a drag still picks the dot under it)
   out += onTop;
   out += `<g id="curHandles">${curHandlesSvg(cur, fs)}</g>`;
+  out += fitMarksSvg(fs);                                       // the points of a photo being fitted
   svg.innerHTML = out;
   Ed.measure?.draw();
   drawWallOverlay();                                                   // the measurement on top

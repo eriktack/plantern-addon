@@ -4,6 +4,7 @@
 //   GET  /api/houses/:id/versions        → { location, model } (for pages that cannot keep an event stream open)
 //   GET  /api/houses/:id/assets/<path>   → a file inside the house folder (textures, asset models)
 //   GET  /api/houses/:id/asset-list      → { assets: [names] }: the models in the house's assets/ folder (assets/<name>/model.glb)
+//   POST /api/houses/:id/files           { path, data } → { path, bytes, sync }: an underlay image into assets/underlays/ (data: base64)
 //   POST /api/houses/:id/save            { file: 'location' | 'model', value, base } → { version, text, merged? } | 409 { conflict }
 //   GET  /api/events                     → server-sent events: changed { house, file, version, source }, houses {}
 // Everything here is for your own network only, like saving (decision 106).
@@ -13,12 +14,14 @@ import { promises as fs } from 'node:fs';
 import { inside } from './folder.js';
 import { storeRoutes } from './manage.js';
 import { ASSET_NAME } from '../../src/model/assets.js';
+import { underlayFileOk, UNDERLAY_TYPES } from '../../src/model/underlays.js';
 
 const MAX_BODY = 8 * 1024 * 1024;
+export const MAX_FILE = 16 * 1024 * 1024;                 // an uploaded house file (an underlay image); base64 makes the body a third larger
 
-export async function readJsonBody(req) {
+export async function readJsonBody(req, max = MAX_BODY) {
   let size = 0; const chunks = [];
-  for await (const c of req) { size += c.length; if (size > MAX_BODY) throw Object.assign(new Error('request too large'), { status: 413 }); chunks.push(c); }
+  for await (const c of req) { size += c.length; if (size > max) throw Object.assign(new Error('request too large'), { status: 413 }); chunks.push(c); }
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch { throw Object.assign(new Error('malformed JSON body'), { status: 400 }); }
 }
 
@@ -68,6 +71,17 @@ export async function houseApi(registry, req, res, url, { ha } = {}) {
         const r = await registry.save(id, b.file, b.value, typeof b.base === 'string' ? b.base : undefined, typeof b.client === 'string' ? b.client.slice(0, 64) : undefined);
         return json(res, r.conflict ? 409 : 200, r), true;
       }
+      if (rest === 'files' && req.method === 'POST') {
+        const b = await readJsonBody(req, Math.ceil(MAX_FILE * 4 / 3) + 4096);
+        if (!underlayFileOk(b.path)) return json(res, 400, { error: 'path must be assets/underlays/<name>.png, .jpg or .webp (letters, digits, dot, dash, underscore)' }), true;
+        if (typeof b.data !== 'string' || !b.data) return json(res, 400, { error: 'data must be the file as base64' }), true;
+        const bytes = Buffer.from(b.data, 'base64');
+        if (bytes.length > MAX_FILE) return json(res, 413, { error: `the file is larger than ${MAX_FILE / 1024 / 1024} MB` }), true;
+        const type = UNDERLAY_TYPES[path.extname(b.path).toLowerCase()];
+        if (imageType(bytes) !== type) return json(res, 400, { error: `the file is not a ${type.slice(6).toUpperCase()} image` }), true;
+        const w = await registry.writeFile(id, b.path, bytes);
+        return json(res, 200, { path: b.path, bytes: bytes.length, ...(w.sync ? { sync: w.sync } : {}) }), true;
+      }
       if (rest.startsWith('assets/') && req.method === 'GET') {
         const f = registry.find(id), file = f && inside(f.house.dir, decodeURIComponent(rest));
         if (!file) return json(res, 404, { error: 'not found' }), true;
@@ -82,6 +96,14 @@ export async function houseApi(registry, req, res, url, { ha } = {}) {
     json(res, e.status || 500, { error: e.status ? e.message : `${e.message}` });
     return true;
   }
+}
+
+/** The image type of a file from its first bytes (PNG, JPEG, WebP), or null. */
+export function imageType(b) {
+  if (b.length >= 8 && b[0] === 0x89 && b.subarray(1, 4).toString('latin1') === 'PNG') return 'image/png';
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (b.length >= 12 && b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+  return null;
 }
 
 /** Names of the asset folders of a house that hold a model (assets/<name>/model.glb). */

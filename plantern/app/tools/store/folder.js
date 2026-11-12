@@ -119,6 +119,15 @@ export class FolderStore {
     return {};
   }
 
+  /** One file inside the house folder (an underlay image): `rel` relative to the house folder, never outside it. Replaces it. */
+  async writeFile(h, rel, data) {
+    if (this.readOnly) throw Object.assign(new Error(`${this.cfg.name || this.id} is read-only`), { status: 403 });
+    const file = inside(h.dir, rel);
+    if (!file) throw Object.assign(new Error(`bad path "${rel}"`), { status: 400 });
+    await writeAtomic(file, data);
+    return {};
+  }
+
   /** Stat of the house files, cheap enough to poll: 'mtime:size' per file. */
   async stamp(h) {
     const one = async f => { try { const s = await fs.stat(path.join(h.dir, this.fileName(h, f))); return `${s.mtimeMs}:${s.size}`; } catch { return 'missing'; } };

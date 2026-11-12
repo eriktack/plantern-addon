@@ -33,6 +33,7 @@ import { doorStates, doorEntities } from '../ha/door.js';
 import { coalesce } from '../coalesce.js';
 import { createFloorSwitch, showFloorSwitch } from '../floor-switch.js';
 import { materialTable, setDesignLibrary, setLibraryTextureBase } from '../model/materials.js';
+import { placedUnderlays } from '../model/underlays.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const getText = async url => {
@@ -274,7 +275,8 @@ class PlanternCard extends HTMLElement {
         plansEl.append(block);
         const svg = block.querySelector('svg');
         const view = createPlanView(svg, { interactive: false, palette, ...hooks });   // the page keeps its scroll; only taps on lamps and switches act
-        view.render({ level: l, geo: l && geos.get(l.id), settings: resolveSettings(loc, l), fixtureLabel, ...looks, doorStates: doorStates(model, bindings, getState) });
+        const underlays = cfg.underlay && l ? placedUnderlays(model, l.id, geos.get(l.id)).map(u => ({ ...u, href: baseUrl + u.file })) : [];   // the house's photo under the plan (underlay: true)
+        view.render({ level: l, geo: l && geos.get(l.id), settings: resolveSettings(loc, l), fixtureLabel, ...looks, doorStates: doorStates(model, bindings, getState), underlays });
         this._plans.push({ level: l, svg, view });
         this._ro?.observe(svg);
       }

@@ -34,6 +34,7 @@ import { northAngleOf } from './model/orientation.js';
 // nicer dropdowns (ND2): every select on the page is drawn as the page menu
 import { enhanceAll } from './select.js';
 import { createFloorSwitch, showFloorSwitch } from './floor-switch.js';
+import { placedUnderlays } from './model/underlays.js';
 enhanceAll();
 
 const params = new URLSearchParams(location.search);
@@ -216,22 +217,48 @@ async function main() {
     const b = bindings[fx.id];
     return `${fx.name ? `${fx.name} (${fx.id})` : fx.id} → ${b?.entity || (b?.controls ? 'controls ' + b.controls.join(', ') : 'unbound')}`;
   };
+  // images under the plan of this level (docs/plans/underlay.md), from the house's own folder
+  // on or off, and how strongly, are this browser's choice (prefs.js): { on: false } hides them, opacity overrides the house's
+  const underlaysHere = () => (level ? placedUnderlays(model, level.id, state().geo) : []);
+  const underlayPref = () => readPrefs().underlay || {};
+  const underlaysShown = () => (underlayPref().on === false ? [] : underlaysHere().map(u => ({ ...u, href: baseUrl + u.file, opacity: underlayPref().opacity ?? u.opacity })));
+  function updateUnderlayRow() {
+    const here = underlaysHere(), pref = underlayPref(), row = $('underlayRow');
+    row.hidden = !here.length;
+    if (!here.length) return;
+    const op = pref.opacity ?? here[0].opacity;
+    $('underlayOn').checked = pref.on !== false;
+    $('underlayOpacity').value = op;
+    $('underlayOpacity').disabled = pref.on === false;
+    $('underlayTxt').textContent = pref.on === false ? 'off' : `${Math.round(op * 100)} %`;
+    $('underlayReset').hidden = pref.on === undefined && pref.opacity === undefined;
+  }
+  const setUnderlayPref = patch => {
+    const next = { ...underlayPref(), ...patch };
+    for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k];
+    writePrefs({ underlay: next });
+    updateUnderlayRow(); drawPlan();
+  };
+  $('underlayOn').addEventListener('change', e => setUnderlayPref({ on: e.target.checked ? undefined : false }));
+  $('underlayOpacity').addEventListener('input', e => setUnderlayPref({ opacity: Number(e.target.value) }));
+  $('underlayReset').addEventListener('click', () => { writePrefs({ underlay: {} }); updateUnderlayRow(); drawPlan(); });
   // the 2D plan alone, with the lamps as they are (a render draws every lamp as unavailable until they are applied again)
   function drawPlan() {
     refreshLit();                                                  // a light that has just arrived from the server shows now
-    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors() });
+    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown() });
     refreshFixtures();
   }
   function showLevel() {
     refreshLit();
     litShown = litKey();
     planAfterAssets.cancel();                                      // this draws the plan now
-    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors() });
+    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown() });
     if (view3d) build3d();
     restoreCamera();
     refreshFixtures();
     measure.reset();
     updateFloorSwitch();
+    updateUnderlayRow();
   }
 
   // ---- 2D / 3D ----
