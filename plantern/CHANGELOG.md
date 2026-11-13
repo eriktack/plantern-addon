@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.12
+
+- Camera view cones are no longer cut off by an open door's leaf next to the camera
+
 ## 0.8.11
 
 - Devices: cameras, access points and other devices in the Editor and on layers in the plan, with camera view cones

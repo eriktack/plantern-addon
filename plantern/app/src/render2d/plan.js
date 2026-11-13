@@ -55,7 +55,7 @@ const ICON_R = 150;                                     // mm: an icon's radius 
  * Coverage (one layer at a time, device-layers.js) goes under the walls: a camera's cone cut by walls and its pan span
  * faintly, a Bluetooth proxy's reach. Icons go on top, each with its name on hover.
  */
-function drawDevices(level, geo, occ, devices, gCov, gDev, fixtureLabel, palette) {
+function drawDevices(level, geo, occ, devices, gCov, gDev, fixtureLabel, palette, occCamera = occ) {
   const L = devices.layers || {}, north = devices.northAngle ?? 0, headingOf = b => headingFromBearing(b, north);
   for (const fx of level.fixtures || []) {
     const id = layerOf(fx), step = id && L[id];
@@ -67,7 +67,7 @@ function drawDevices(level, geo, occ, devices, gCov, gDev, fixtureLabel, palette
       if (fx.kind === 'camera' && Number.isFinite(fx.bearing)) {
         const R = fx.range ?? DEVICE_DEFAULTS.camera.range, fov = fx.fov ?? DEVICE_DEFAULTS.camera.fov;
         if (Array.isArray(fx.pan)) { const sp = panSpan(fx.pan, headingOf); el('polygon', { points: svgPoints(sectorOutline(c, sp.from, sp.sweep, R)), fill: colour, 'fill-opacity': 0.05, stroke: colour, 'stroke-opacity': 0.5, 'stroke-dasharray': '120 90', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none' }, gCov); }
-        el('polygon', { points: svgPoints(cameraCone(c, headingOf(fx.bearing), fov, R, occ)), fill: colour, 'fill-opacity': 0.22, stroke: colour, 'stroke-opacity': 0.8, 'stroke-width': 1.2, 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none', 'data-cone': fx.id }, gCov);
+        el('polygon', { points: svgPoints(cameraCone(c, headingOf(fx.bearing), fov, R, occCamera)), fill: colour, 'fill-opacity': 0.22, stroke: colour, 'stroke-opacity': 0.8, 'stroke-width': 1.2, 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none', 'data-cone': fx.id }, gCov);
       } else if (fx.kind === 'device' && fx.role === 'bt-proxy') {
         el('polygon', { points: svgPoints(reachArea(c, fx.range ?? DEVICE_DEFAULTS.device.range, occ)), fill: colour, 'fill-opacity': 0.16, stroke: colour, 'stroke-opacity': 0.7, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none' }, gCov);
       }
@@ -244,7 +244,8 @@ export function createPlanView(svg, hooks = {}) {
     }
 
     const occ = occluders(geo, { cutPlane: settings.cutPlane, doorStates });
-    if (devices) drawDevices(level, geo, occ, devices, gCov, gDev, fixtureLabel, palette);
+    // a camera hangs above the doors: an open door's leaf (2D, no height) must not cut its view, as it does a lamp's light
+    if (devices) drawDevices(level, geo, occ, devices, gCov, gDev, fixtureLabel, palette, occluders(geo, { cutPlane: settings.cutPlane, doorStates, leaves: false }));
     for (const fx of level.fixtures || []) {
       const c = geo.fixturePos(fx);
       if (!c) continue;
