@@ -22,6 +22,7 @@ import { showStairs } from './panel-stairs.js';
 import { showObject } from './panel-object.js';
 import { renderAnchors, renderAreas, renderChecks } from './checks.js';
 import { renderUnderlays } from './underlays.js';
+import { renderYard } from './yard.js';
 import { SELECT, afterLeave, confirmItem, enterEdit, isDoubleClick, mayLeave, showEditBar } from './session.js';
 import { Ed } from './state.js';
 import { publishDraft } from './draft-bus.js';
@@ -156,6 +157,7 @@ export function refresh() {
     renderColors();
     renderAnchors();
     renderUnderlays();
+    renderYard();
     renderChecks();
     renderAreas();
     const todo = stillToMeasure(level());

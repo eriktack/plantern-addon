@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.14
+
+- The yard: surfaces, fences and retaining walls around the house, drawn on the ground floor and in the Editor's Yard section
+
 ## 0.8.13
 
 - Wi-Fi coverage: an estimate of each access point's reach, through walls and floors, on the Wi-Fi layer

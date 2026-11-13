@@ -19,6 +19,10 @@ export const DARK_PALETTE = Object.freeze({
   deviceLayer: { cameras: '#ff8a5b', wifi: '#4fb3ff', zigbee: '#7ed957', bluetooth: '#a98bff', smoke: '#ff5d5d', climate: '#ffc94d', speakers: '#4dd6c4', other: '#b8bec8' },
   deviceInk: '#14161a',
   wifi: { good: '#3fbf5f', fair: '#e8c33a', weak: '#e8713a', alpha: 0.32 },   // the Wi-Fi estimate's bands (DV7)
+  // the yard (docs/plans/yard.md): a fill per surface, a colour per kind of line
+  yardSurface: { grass: '#4f7a3a', gravel: '#9c9283', asphalt: '#3c3f45', paving: '#8a6f5c', deck: '#8a6a45', bed: '#5a4632', rock: '#7d7d78', forest: '#2f5a2f', water: '#3d6f9e', other: '#6d7480' },
+  yardAlpha: 0.55,
+  yardLine: { fence: '#c9b48a', hedge: '#4f8f3f', stonewall: '#a7a49c', retaining: '#d9d2c3', edging: '#bdb6a8' },
 });
 
 /** The light plan: dark walls and labels on pale floors; lamp glow is laid on with `multiply`, which shows on white. */
@@ -36,6 +40,9 @@ export const LIGHT_PALETTE = Object.freeze({
   deviceLayer: { cameras: '#d4572a', wifi: '#1f7fcf', zigbee: '#3f9a2a', bluetooth: '#6f4fd6', smoke: '#d63030', climate: '#c99410', speakers: '#16a08f', other: '#6b7280' },
   deviceInk: '#ffffff',
   wifi: { good: '#1f9c3f', fair: '#c99410', weak: '#d0561c', alpha: 0.30 },
+  yardSurface: { grass: '#a9cf8f', gravel: '#d8d2c6', asphalt: '#8e9199', paving: '#d2b9a6', deck: '#caa97f', bed: '#a88e72', rock: '#b9b9b3', forest: '#7fae74', water: '#9cc3e6', other: '#c4c9d2' },
+  yardAlpha: 0.6,
+  yardLine: { fence: '#8a6f3e', hedge: '#3f7a32', stonewall: '#77746c', retaining: '#5d5a52', edging: '#8d867a' },
 });
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;

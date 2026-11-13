@@ -38,6 +38,7 @@ import { placedUnderlays } from './model/underlays.js';
 import { normalizeLayers, setLayerStep, layersInModel } from './model/device-layers.js';
 import { DARK_PALETTE } from './render2d/palette.js';
 import { wifiInputs } from './model/wifi.js';
+import { yardLevelId } from './model/yard.js';
 enhanceAll();
 
 const params = new URLSearchParams(location.search);
@@ -220,6 +221,14 @@ async function main() {
     const b = bindings[fx.id];
     return `${fx.name ? `${fx.name} (${fx.id})` : fx.id} → ${b?.entity || (b?.controls ? 'controls ' + b.controls.join(', ') : 'unbound')}`;
   };
+  // the yard (docs/plans/yard.md): on the ground floor, unless this browser switched it off
+  const yardShown = () => (model.yard && level && level.id === yardLevelId(model) && readPrefs().yard !== false ? model.yard : null);
+  function updateYardRow() {
+    const here = !!model.yard && !!level && level.id === yardLevelId(model);
+    $('yardRow').hidden = !here;
+    $('yardOn').checked = readPrefs().yard !== false;
+  }
+  $('yardOn').addEventListener('change', e => { writePrefs({ yard: e.target.checked ? undefined : false }); drawPlan(); });
   // the Devices layers (docs/plans/devices.md DV4): off / icons / coverage per subject, this browser's choice
   const devLayers = () => normalizeLayers(readPrefs().devices);
   const wifiBand = () => (['2.4', '5'].includes(readPrefs().wifiBand) ? readPrefs().wifiBand : '2.4');
@@ -290,14 +299,14 @@ async function main() {
   // the 2D plan alone, with the lamps as they are (a render draws every lamp as unavailable until they are applied again)
   function drawPlan() {
     refreshLit();                                                  // a light that has just arrived from the server shows now
-    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown() });
+    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown(), yard: yardShown() });
     refreshFixtures();
   }
   function showLevel() {
     refreshLit();
     litShown = litKey();
     planAfterAssets.cancel();                                      // this draws the plan now
-    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown() });
+    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown(), yard: yardShown() });
     if (view3d) build3d();
     restoreCamera();
     refreshFixtures();
@@ -305,6 +314,7 @@ async function main() {
     updateFloorSwitch();
     updateUnderlayRow();
     renderDeviceLayers();
+    updateYardRow();
   }
 
   // ---- 2D / 3D ----

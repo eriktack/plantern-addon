@@ -115,6 +115,34 @@ function drawWifi(g, wifi, palette) {
   el('image', { href: cv.toDataURL('image/png'), x: 0, y: 0, width: grid.cols, height: grid.rows, preserveAspectRatio: 'none', transform: underlayTransform(m), 'pointer-events': 'none', 'data-wifi': '1' }, g);
 }
 
+/**
+ * The yard (docs/plans/yard.md) under the floor of the ground level: its areas in order (later ones on top), each filled by its
+ * surface, then its lines by kind; a retaining wall gets ticks on its low side. yard = model.yard.
+ */
+function drawYard(g, yard, palette) {
+  for (const a of yard.areas || []) {
+    if (!Array.isArray(a.polygon) || a.polygon.length < 3) continue;
+    const p = el('polygon', { points: svgPoints(a.polygon), fill: a.color || palette.yardSurface[a.surface] || palette.yardSurface.other, 'fill-opacity': palette.yardAlpha, stroke: 'none', 'data-yard': a.id }, g);
+    el('title', {}, p).textContent = a.name ? `${a.name} (${a.surface})` : a.surface;
+  }
+  for (const l of yard.lines || []) {
+    if (!Array.isArray(l.points) || l.points.length < 2) continue;
+    const colour = palette.yardLine[l.kind] || palette.yardLine.edging;
+    const look = { fence: { w: 2, dash: '6 4' }, hedge: { w: 9, op: 0.8 }, stonewall: { w: 6 }, retaining: { w: 5 }, edging: { w: 1.5 } }[l.kind] || { w: 2 };
+    const pl = el('polyline', { points: svgPoints(l.points), fill: 'none', stroke: colour, 'stroke-width': look.w, 'stroke-opacity': look.op ?? 1, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'vector-effect': 'non-scaling-stroke', ...(look.dash ? { 'stroke-dasharray': look.dash } : {}), 'data-yard': l.id }, g);
+    el('title', {}, pl).textContent = l.name || l.kind + (l.kind === 'retaining' && l.drop ? `, ${l.drop} mm` : '');
+    if (l.kind === 'retaining' && (l.high === 'left' || l.high === 'right')) {
+      const sgn = l.high === 'left' ? -1 : 1;                    // ticks point down to the low side: the right of the direction when the left is high
+      for (let i = 1; i < l.points.length; i++) {
+        const [a, b] = [l.points[i - 1], l.points[i]], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (!L) continue;
+        const u = [(b[0] - a[0]) / L, (b[1] - a[1]) / L], n = [u[1] * -sgn, -u[0] * -sgn];
+        for (let t = 150; t < L; t += 350) { const p0 = [a[0] + u[0] * t, a[1] + u[1] * t]; el('line', { x1: toSvg(p0)[0], y1: toSvg(p0)[1], x2: toSvg([p0[0] + n[0] * 220, p0[1] + n[1] * 220])[0], y2: toSvg([p0[0] + n[0] * 220, p0[1] + n[1] * 220])[1], stroke: colour, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, g); }
+      }
+    }
+  }
+}
+
 /** The lamp symbol in the plan: a light bulb about 220 mm tall, centred on the lamp (globe, neck, two lines for the base). */
 const BULB_PATH = 'M -46 52 C -118 12 -102 -104 0 -104 C 102 -104 118 12 46 52 Z M -40 74 H 40 M -28 96 H 28';
 
@@ -155,11 +183,12 @@ export function createPlanView(svg, hooks = {}) {
     return fromSvg([q.x, q.y]);
   }
 
-  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {}, assetStatus = () => 'unknown', assetColour = () => null, doorStates = null, underlays = [], devices = null }) {
+  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {}, assetStatus = () => 'unknown', assetColour = () => null, doorStates = null, underlays = [], devices = null, yard = null }) {
     svg.replaceChildren();
     fixEls = {}; lightEls = {};
     const defs = el('defs', {}, svg), layer = id => el('g', { id }, svg);
     drawUnderlays(layer('underlay'), level ? underlays : []);
+    if (level && yard) drawYard(layer('yard'), yard, palette);
     const gFloor = layer('floor'), gLight = layer('light'), gCov = layer('coverage'), gObj = layer('objects'), gWall = layer('walls'), gFix = layer('fixtures'), gDev = layer('devices');
     overlay = layer('overlay');
     const all = [];

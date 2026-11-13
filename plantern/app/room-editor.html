@@ -179,6 +179,29 @@
       <small>The height of the finished floor of the ground floor, which is the plan's zero. Measured or read from a drawing, never guessed.</small></label>
     <div class="mt6"><button type="button" class="primary" id="placeApply">Apply</button> <button type="button" id="placeRevert">Revert</button> <span id="placeMsg" class="help"></span></div>
   </details>
+  <details class="sect" id="yardSect"><summary>Yard <span id="ydCount"></span></summary>
+    <p class="help">The ground around the house, on the ground floor: surfaces (lawn, gravel, asphalt, paving…) drawn as areas, and fences, hedges and walls as lines. Click the corners on the plan; they snap to the house's corners, Alt for a free point. Enter or a double-click finishes. The photo under the plan helps to trace.</p>
+    <p id="ydHere" class="help" hidden>The yard is drawn on the ground floor: switch to it to draw.</p>
+    <div id="ydList"></div>
+    <div id="ydTools">
+      <div class="grid2">
+        <label>Name <small>optional</small><input id="ydName" autocomplete="off" placeholder="e.g. Front lawn"></label>
+        <label>Surface <select id="ydSurface"><option value="grass">Grass</option><option value="gravel">Gravel</option><option value="asphalt">Asphalt</option><option value="paving">Paving</option><option value="deck">Deck</option><option value="bed">Bed</option><option value="rock">Rock</option><option value="forest">Trees</option><option value="water">Water</option><option value="other">Other</option></select></label>
+      </div>
+      <div class="row btns"><button type="button" id="ydAddArea">+ Area</button></div>
+      <div class="grid2">
+        <label>Line <select id="ydKind"><option value="fence">Fence</option><option value="hedge">Hedge</option><option value="stonewall">Stone wall</option><option value="retaining">Retaining wall</option><option value="edging">Edging</option></select></label>
+      </div>
+      <div id="ydRetain" class="grid2" hidden>
+        <label>Higher side <small>along the direction you draw it</small><select id="ydHigh"><option value="left">left</option><option value="right">right</option></select></label>
+        <label>Height difference <small>mm</small><input id="ydDrop" inputmode="numeric" autocomplete="off" placeholder="750"></label>
+      </div>
+      <div class="row btns"><button type="button" id="ydAddLine">+ Line</button></div>
+      <div class="row btns"><button type="button" id="ydBoundary">Draw the yard's outline</button> <span id="ydBoundaryState" class="help"></span></div>
+      <label>Ground height <small>mm relative to this floor, until the terrain exists</small><input id="ydElev" inputmode="numeric" autocomplete="off" placeholder="0"></label>
+    </div>
+    <div id="ydMsg" class="help"></div>
+  </details>
   <details class="sect" id="underlaySect"><summary>Photo under the plan <span id="ulCount"></span></summary>
     <p class="help">A drone photo taken straight down, or a drawing, under this level's plan. It is fitted by points: a spot on the image and the same spot on the plan. Use points on the ground (wall corners at ground level, a post's foot): roof edges lean outward in a photo. Two points place it; with three or more each shows how far off it is.</p>
     <div id="ulList"></div>

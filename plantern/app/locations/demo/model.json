@@ -1436,5 +1436,31 @@
       "opacity": 0.6,
       "note": "Made-up drawing of the demo ground floor and its garden at 25 mm per pixel"
     }
-  ]
+  ],
+  "yard": {
+    "areas": [
+      { "id": "ya_lawn", "name": "Lawn", "surface": "grass", "polygon": [[-5800,-4600],[-5800,6800],[10800,6800],[10800,-4600]] },
+      { "id": "ya_drive", "name": "Drive", "surface": "gravel", "polygon": [[11000,-5000],[11000,7000],[12500,7000],[12500,-5000]] },
+      {
+        "id": "ya_path_to_the_drive",
+        "name": "Path to the drive",
+        "surface": "paving",
+        "polygon": [[9400,1500],[9400,2700],[11000,2700],[11000,1500]]
+      }
+    ],
+    "lines": [
+      { "id": "yl_fence", "name": "Fence", "kind": "fence", "points": [[-5800,-4800],[10800,-4800]], "height": 1000 },
+      {
+        "id": "yl_garden_wall",
+        "name": "Garden wall",
+        "kind": "retaining",
+        "points": [[-5000,5500],[-3000,6200],[-1000,6400]],
+        "thickness": 300,
+        "high": "left",
+        "drop": 600
+      }
+    ],
+    "boundary": [[-6000,-5000],[-6000,7000],[13000,7000],[13000,-5000]],
+    "elevation": -150
+  }
 }

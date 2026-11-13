@@ -19,6 +19,8 @@ import { DEFAULT_CEILING, DEFAULT_FLOOR_THICKNESS, resolveElevations, checkEleva
 import { shiftLevelGeometry } from './align.js';
 import { anchorStatus, newAnchorId } from '../model/anchors.js';
 import { underlayShapeErrors, newUnderlayId } from '../model/underlays.js';
+import { areaErrors, lineErrors, newYardId, yardIds } from '../model/yard.js';
+import { isClockwise } from '../geometry/polygon.js';
 import { isShared, edgeOfRef, boundEdges } from '../geometry/bound.js';
 import { generateWalls, PAIR_ANGLE } from '../capture/walls.js';
 import { wallProfile } from '../geometry/walls.js';
@@ -219,6 +221,94 @@ export function deleteUnderlay(model, id) {
   const next = { ...model };
   if (rest.length) next.underlays = rest; else delete next.underlays;
   return { model: next, report: { errors: [], issues: validate(next) } };
+}
+
+// ---- the yard (docs/plans/yard.md, src/model/yard.js): surfaces and lines around the buildings ----
+const yardUsed = model => new Set([...allIds(model), ...(model.anchors || []).map(a => a.id), ...(model.checks || []).map(c => c.id), ...(model.underlays || []).map(u => u.id), ...yardIds(model)]);
+const yardOf = model => ({ areas: [], lines: [], ...(model.yard || {}) });
+const withYard = (model, y) => { const next = { ...model, yard: y }; return { model: next, report: { errors: [], issues: validate(next) } }; };
+const clockwise = poly => (isClockwise(poly) ? poly : [...poly].reverse());
+const roundPts = pts => pts.map(p => p.map(v => Math.round(v)));
+
+/** The yard's outline and ground height: props = { boundary?: [[x, y], …] | null, elevation?: mm | null }. */
+export function setYard(model, props = {}) {
+  const y = yardOf(model);
+  for (const [k, v] of Object.entries(props)) {
+    if (!['boundary', 'elevation'].includes(k)) return refuse(model, `${k} cannot be set on the yard here`);
+    if (v === null || v === '') delete y[k];
+    else if (k === 'boundary') { if (!Array.isArray(v) || v.length < 3) return refuse(model, 'a boundary needs three or more points'); y.boundary = roundPts(clockwise(v)); }
+    else { if (!Number.isFinite(v)) return refuse(model, 'elevation is a number of mm'); y.elevation = v; }
+  }
+  return withYard(model, y);
+}
+
+/** A new yard area: spec = { name?, surface, polygon, color? } (turned clockwise). Returns { model, report, area }. */
+export function addYardArea(model, spec = {}) {
+  const used = yardUsed(model), id = spec.id ?? newYardId('ya_', spec.name || spec.surface, used);
+  if (used.has(id)) return refuse(model, `the id ${id} is already used`);
+  const a = { id, ...(spec.name ? { name: String(spec.name).trim() } : {}), surface: spec.surface, polygon: Array.isArray(spec.polygon) ? roundPts(clockwise(spec.polygon)) : spec.polygon, ...(spec.color ? { color: spec.color } : {}) };
+  const bad = areaErrors(a);
+  if (bad.length) return refuse(model, ...bad);
+  const y = yardOf(model);
+  return { ...withYard(model, { ...y, areas: [...y.areas, a] }), area: a };
+}
+/** Change an area (name, surface, polygon, color; null removes name or color). Returns { model, report, area }. */
+export function setYardArea(model, id, props = {}) {
+  const y = yardOf(model), old = y.areas.find(a => a.id === id);
+  if (!old) return refuse(model, `no yard area "${id}"`);
+  const a = { ...old };
+  for (const [k, v] of Object.entries(props)) {
+    if (!['name', 'surface', 'polygon', 'color'].includes(k)) return refuse(model, `${k} cannot be set on a yard area`);
+    if (v === null || v === '') { if (k === 'surface' || k === 'polygon') return refuse(model, `${k} cannot be removed`); delete a[k]; }
+    else a[k] = k === 'polygon' && Array.isArray(v) ? roundPts(clockwise(v)) : v;
+  }
+  const bad = areaErrors(a);
+  if (bad.length) return refuse(model, ...bad);
+  return { ...withYard(model, { ...y, areas: y.areas.map(x => (x.id === id ? a : x)) }), area: a };
+}
+/** Move an area up or down the drawing order (later areas lie on top): by = +1 up, −1 down. */
+export function moveYardArea(model, id, by) {
+  const y = yardOf(model), i = y.areas.findIndex(a => a.id === id), j = i + by;
+  if (i < 0) return refuse(model, `no yard area "${id}"`);
+  if (j < 0 || j >= y.areas.length) return refuse(model, by > 0 ? 'it is already on top' : 'it is already at the bottom');
+  const areas = [...y.areas]; [areas[i], areas[j]] = [areas[j], areas[i]];
+  return withYard(model, { ...y, areas });
+}
+export function deleteYardArea(model, id) {
+  const y = yardOf(model);
+  if (!y.areas.some(a => a.id === id)) return refuse(model, `no yard area "${id}"`);
+  return withYard(model, { ...y, areas: y.areas.filter(a => a.id !== id) });
+}
+
+/** A new yard line: spec = { name?, kind, points, height?, thickness?, high?, drop? }. Returns { model, report, line }. */
+export function addYardLine(model, spec = {}) {
+  const used = yardUsed(model), id = spec.id ?? newYardId('yl_', spec.name || spec.kind, used);
+  if (used.has(id)) return refuse(model, `the id ${id} is already used`);
+  const l = { id, ...(spec.name ? { name: String(spec.name).trim() } : {}), kind: spec.kind, points: Array.isArray(spec.points) ? roundPts(spec.points) : spec.points };
+  for (const k of ['height', 'thickness', 'high', 'drop']) if (spec[k] !== undefined && spec[k] !== null && spec[k] !== '') l[k] = spec[k];
+  const bad = lineErrors(l);
+  if (bad.length) return refuse(model, ...bad);
+  const y = yardOf(model);
+  return { ...withYard(model, { ...y, lines: [...y.lines, l] }), line: l };
+}
+export function setYardLine(model, id, props = {}) {
+  const y = yardOf(model), old = y.lines.find(l => l.id === id);
+  if (!old) return refuse(model, `no yard line "${id}"`);
+  const l = { ...old };
+  for (const [k, v] of Object.entries(props)) {
+    if (!['name', 'kind', 'points', 'height', 'thickness', 'high', 'drop'].includes(k)) return refuse(model, `${k} cannot be set on a yard line`);
+    if (v === null || v === '') { if (k === 'kind' || k === 'points') return refuse(model, `${k} cannot be removed`); delete l[k]; }
+    else l[k] = k === 'points' && Array.isArray(v) ? roundPts(v) : v;
+  }
+  if (l.kind !== 'retaining') { delete l.high; delete l.drop; }
+  const bad = lineErrors(l);
+  if (bad.length) return refuse(model, ...bad);
+  return { ...withYard(model, { ...y, lines: y.lines.map(x => (x.id === id ? l : x)) }), line: l };
+}
+export function deleteYardLine(model, id) {
+  const y = yardOf(model);
+  if (!y.lines.some(l => l.id === id)) return refuse(model, `no yard line "${id}"`);
+  return withYard(model, { ...y, lines: y.lines.filter(l => l.id !== id) });
 }
 
 /** Move every level-wide thing of `levelId` by [dx, dy] (see align.js); rooms of other levels hung on it follow. */

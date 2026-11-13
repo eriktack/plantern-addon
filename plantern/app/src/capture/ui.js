@@ -55,6 +55,7 @@ import { Ed } from './editor/state.js';
 import { addFromFile, setShown, addPoint, applyFit, revertFit, closeFit, renderUnderlays, setDraftOpacity, imageClick as underlayImageClick, planClick as underlayPlanClick, pickingPlan, stopPick as stopUnderlayPick, toggleHand as toggleUnderlayHand, typedPlace as typedUnderlayPlace, handDown as underlayHandDown, setHand as setUnderlayHand } from './editor/underlays.js';
 import { isDevice, fixtureNoun } from '../model/devices.js';
 import { bearingDown } from './editor/device-drag.js';
+import { yardDrawing, yardClick, stopDraw as stopYardDraw, startDraw as startYardDraw, finishDraw as finishYardDraw, undoPoint as undoYardPoint, setElevation as setYardElevation } from './editor/yard.js';
 
 enhanceSegmented();                  // choices of up to four: a row of buttons (UX20); before the menus, which leave these alone
 enhanceAll(document, { skip: '#preview, #tree' });     // the plan and the tree are rebuilt all the time and hold no select (PF16)
@@ -118,6 +119,18 @@ async function init() {
   $('ulOpacity').oninput = e => setDraftOpacity(e.target.value);
   $('ulZoom').oninput = e => { $('ulImgIn').style.width = `${Number(e.target.value) * 100}%`; };
   $('ulImg').onclick = underlayImageClick;
+  // the yard (yard.js)
+  $('ydAddArea').onclick = () => startYardDraw('area');
+  $('ydAddLine').onclick = () => startYardDraw('line');
+  $('ydBoundary').onclick = () => startYardDraw('boundary');
+  $('ydKind').onchange = () => { $('ydRetain').hidden = $('ydKind').value !== 'retaining'; };
+  $('ydElev').onchange = e => setYardElevation(e.target.value);
+  $('preview').addEventListener('dblclick', e => { if (yardDrawing()) { e.preventDefault(); e.stopPropagation(); finishYardDraw(); } }, true);
+  addEventListener('keydown', e => {
+    if (!yardDrawing() || e.target?.closest?.('input, textarea, select')) return;
+    if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); finishYardDraw(); }
+    else if (e.key === 'Backspace') { e.preventDefault(); e.stopImmediatePropagation(); undoYardPoint(); }
+  }, true);
   $('ulHand').onclick = toggleUnderlayHand;
   $('ulScale').onchange = typedUnderlayPlace;
   $('ulRot').onchange = typedUnderlayPlace;
@@ -493,6 +506,7 @@ async function init() {
     if (Ed.suppressClick) { Ed.suppressClick = false; return; }        // the end of a drag that moved the plan
     if (Ed.splitPick) { const at = splitAtPointer(e); stopSplitPick(); if (at !== null) { $('wSplitAt').value = at; doSplit(); } return; }   // UX16
     if (pickingPlan()) { underlayPlanClick(e); return; }               // fitting a photo: its point on the plan (underlays.js)
+    if (yardDrawing()) { yardClick(e); return; }                      // drawing a yard area or line (yard.js)
     if (Ed.placing) { const w = Ed.placing.wall && level().walls.find(x => x.id === Ed.placing.wall); let p = freePoint(e); if (w) { const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), u = [(w.b[0] - w.a[0]) / L, (w.b[1] - w.a[1]) / L], s0 = (p[0] - w.a[0]) * u[0] + (p[1] - w.a[1]) * u[1]; p = [w.a[0] + u[0] * s0, w.a[1] + u[1] * s0]; } finishPlacing(p); return; }   // UX10
     if (Ed.peekId) {                                                // looking at another level: read, never select or leave
       const pk = e.target.closest('[data-pk]');
@@ -531,6 +545,7 @@ async function init() {
       if (Ed.dragging?.patch && cancelDrag()) return;
       if (Ed.placing) { stopPlacing('Placing cancelled'); return; }
       if (stopUnderlayPick('Point picking cancelled')) return;
+      if (stopYardDraw('Drawing cancelled')) return;
       if (Ed.ul?.hand) { setUnderlayHand(false); return; }
       if (Ed.splitPick) { $('wSplitAt').value = ''; stopSplitPick('Split cancelled'); draw(); return; }
       if (Ed.drawing) { stopDrawing(); return; }
