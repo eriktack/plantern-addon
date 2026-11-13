@@ -19,7 +19,8 @@ import { assetKey } from '../model/assets.js';
 import { isDevice, DEVICE_DEFAULTS } from '../model/devices.js';
 import { layerOf } from '../model/device-layers.js';
 import { headingFromBearing } from '../model/orientation.js';
-import { cameraCone, sectorOutline, panSpan, reachArea } from '../geometry/coverage.js';
+import { cameraCone, sectorOutline, panSpan, reachArea, wifiGrid, wifiStep } from '../geometry/coverage.js';
+import { parseColour } from './palette.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 export const el = (t, a = {}, parent) => {
@@ -57,6 +58,7 @@ const ICON_R = 150;                                     // mm: an icon's radius 
  */
 function drawDevices(level, geo, occ, devices, gCov, gDev, fixtureLabel, palette, occCamera = occ) {
   const L = devices.layers || {}, north = devices.northAngle ?? 0, headingOf = b => headingFromBearing(b, north);
+  if (L.wifi === 'coverage' && devices.wifi) drawWifi(gCov, devices.wifi, palette);
   for (const fx of level.fixtures || []) {
     const id = layerOf(fx), step = id && L[id];
     if (!step || step === 'off') continue;
@@ -90,6 +92,27 @@ function drawDevices(level, geo, occ, devices, gCov, gDev, fixtureLabel, palette
       t.textContent = ROLE_MARK[fx.role] || '•';
     }
   }
+}
+
+/**
+ * The Wi-Fi estimate (DV7) as a soft image under the walls: each grid cell coloured by its band (good / fair / weak, none
+ * left clear), laid on the plan through the same transform as an underlay. wifi = wifiInputs() (model/wifi.js).
+ */
+function drawWifi(g, wifi, palette) {
+  const grid = wifiGrid({ aps: wifi.aps, walls: wifi.walls, band: wifi.band, bounds: wifi.bounds, cell: wifi.cell });
+  if (typeof document === 'undefined') return;
+  const cv = document.createElement('canvas'); cv.width = grid.cols; cv.height = grid.rows;
+  const ctx = cv.getContext('2d'), img = ctx.createImageData(grid.cols, grid.rows), P = palette.wifi;
+  const rgb = [null, parseColour(P.weak), parseColour(P.fair), parseColour(P.good)], a = Math.round(P.alpha * 255);
+  for (let r = 0; r < grid.rows; r++) for (let c = 0; c < grid.cols; c++) {
+    const st = wifiStep(grid.dbm[r * grid.cols + c], wifi.limits);
+    if (!st || !rgb[st]) continue;
+    const i = ((grid.rows - 1 - r) * grid.cols + c) * 4;             // row 0 is the south edge: the image's last row
+    img.data[i] = rgb[st][0]; img.data[i + 1] = rgb[st][1]; img.data[i + 2] = rgb[st][2]; img.data[i + 3] = a;
+  }
+  ctx.putImageData(img, 0, 0);
+  const m = { a: grid.cell, b: 0, c: 0, d: -grid.cell, e: grid.x0, f: grid.y0 + grid.rows * grid.cell };   // image pixel → plan mm
+  el('image', { href: cv.toDataURL('image/png'), x: 0, y: 0, width: grid.cols, height: grid.rows, preserveAspectRatio: 'none', transform: underlayTransform(m), 'pointer-events': 'none', 'data-wifi': '1' }, g);
 }
 
 /** The lamp symbol in the plan: a light bulb about 220 mm tall, centred on the lamp (globe, neck, two lines for the base). */

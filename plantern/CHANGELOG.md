@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.13
+
+- Wi-Fi coverage: an estimate of each access point's reach, through walls and floors, on the Wi-Fi layer
+
 ## 0.8.12
 
 - Camera view cones are no longer cut off by an open door's leaf next to the camera

@@ -37,6 +37,7 @@ import { createFloorSwitch, showFloorSwitch } from './floor-switch.js';
 import { placedUnderlays } from './model/underlays.js';
 import { normalizeLayers, setLayerStep, layersInModel } from './model/device-layers.js';
 import { DARK_PALETTE } from './render2d/palette.js';
+import { wifiInputs } from './model/wifi.js';
 enhanceAll();
 
 const params = new URLSearchParams(location.search);
@@ -221,7 +222,13 @@ async function main() {
   };
   // the Devices layers (docs/plans/devices.md DV4): off / icons / coverage per subject, this browser's choice
   const devLayers = () => normalizeLayers(readPrefs().devices);
-  const devicesShown = () => ({ layers: devLayers(), northAngle: northAngleOf(model) });
+  const wifiBand = () => (['2.4', '5'].includes(readPrefs().wifiBand) ? readPrefs().wifiBand : '2.4');
+  let geosMemo = null, geosFor = null;
+  const allGeos = () => { if (geosFor !== model) { geosMemo = buildModelGeometry(model); geosFor = model; } return geosMemo; };
+  const devicesShown = () => {
+    const layers = devLayers();
+    return { layers, northAngle: northAngleOf(model), ...(layers.wifi === 'coverage' && level ? { wifi: wifiInputs(model, level.id, allGeos(), state().settings, wifiBand()) } : {}) };
+  };
   const LAYER_SWATCH = DARK_PALETTE.deviceLayer;
   function renderDeviceLayers() {
     const offered = layersInModel(model), state = devLayers(), box = $('devLayers');
@@ -242,6 +249,17 @@ async function main() {
         seg.append(b);
       }
       box.append(name, seg);
+      if (l.id === 'wifi' && state.wifi === 'coverage') {                 // which band the estimate shows
+        const lab = document.createElement('span'); lab.className = 'muted'; lab.textContent = 'Band';
+        const bands = document.createElement('div'); bands.className = 'seg';
+        for (const bnd of ['2.4', '5']) {
+          const b = document.createElement('button'); b.type = 'button'; b.textContent = `${bnd} GHz`;
+          b.classList.toggle('on', wifiBand() === bnd); b.setAttribute('aria-pressed', String(wifiBand() === bnd));
+          b.onclick = () => { writePrefs({ wifiBand: bnd }); renderDeviceLayers(); drawPlan(); };
+          bands.append(b);
+        }
+        box.append(lab, bands);
+      }
     }
   }
   // images under the plan of this level (docs/plans/underlay.md), from the house's own folder

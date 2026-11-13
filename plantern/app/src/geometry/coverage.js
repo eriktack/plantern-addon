@@ -52,3 +52,40 @@ export const reachArea = (c, R, segs) => visibility(c, R, segs);
 
 const wrap = a => ((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
 const round1 = v => Math.round(v * 10) / 10;
+
+// ---- Wi-Fi: an estimate of the signal (DV7) ----
+
+/** Do segments p1–p2 and q1–q2 cross (touching ends do not count)? */
+function crosses(p1, p2, q1, q2) {
+  const d = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const d1 = d(q1, q2, p1), d2 = d(q1, q2, p2), d3 = d(p1, p2, q1), d4 = d(p1, p2, q2);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
+/**
+ * The estimated signal (dBm) of the strongest access point at each cell of a grid: log-distance path loss,
+ * at1m − 10·exponent·log10(d / 1 m), less a loss for every wall crossed on the straight line to the cell and a floor's loss
+ * per level between (`floors`). aps = [{ pos: [x, y], z, floors }]; walls = [{ a, b, loss }] (the level's own walls);
+ * band = { at1m, exponent, floor }; bounds = { minx, miny, maxx, maxy } mm; cell mm. Heights count in the distance.
+ * Returns { x0, y0, cell, cols, rows, dbm: Float32Array (row-major from the south-west, -Infinity with no access point) }.
+ */
+export function wifiGrid({ aps, walls, band, bounds, cell = 600, z = 1000 }) {
+  const cols = Math.max(1, Math.ceil((bounds.maxx - bounds.minx) / cell)), rows = Math.max(1, Math.ceil((bounds.maxy - bounds.miny) / cell));
+  const dbm = new Float32Array(cols * rows).fill(-Infinity);
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const p = [bounds.minx + (c + 0.5) * cell, bounds.miny + (r + 0.5) * cell];
+    let best = -Infinity;
+    for (const ap of aps) {
+      const d = Math.max(500, Math.hypot(p[0] - ap.pos[0], p[1] - ap.pos[1], (ap.z ?? 2400) - z)) / 1000;
+      let s = band.at1m - 10 * band.exponent * Math.log10(d) - (ap.floors || 0) * band.floor;
+      if (s <= best) continue;                                       // walls only lower it: no need to count them
+      for (const w of walls) if (crosses(ap.pos, p, w.a, w.b)) { s -= w.loss; if (s <= best) break; }
+      if (s > best) best = s;
+    }
+    dbm[r * cols + c] = best;
+  }
+  return { x0: bounds.minx, y0: bounds.miny, cell, cols, rows, dbm };
+}
+
+/** 3 good, 2 fair, 1 weak, 0 none, from limits { good, fair, weak } in dBm. */
+export const wifiStep = (dbm, { good, fair, weak }) => (dbm >= good ? 3 : dbm >= fair ? 2 : dbm >= weak ? 1 : 0);

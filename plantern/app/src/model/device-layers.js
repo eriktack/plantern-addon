@@ -4,7 +4,7 @@
 
 export const DEVICE_LAYERS = [
   { id: 'cameras', label: 'Cameras', coverage: true },
-  { id: 'wifi', label: 'Wi-Fi', coverage: false },          // its coverage (the signal estimate) is DV7, not built yet
+  { id: 'wifi', label: 'Wi-Fi', coverage: true },
   { id: 'zigbee', label: 'Zigbee', coverage: false },
   { id: 'bluetooth', label: 'Bluetooth', coverage: true },
   { id: 'smoke', label: 'Smoke detectors', coverage: false },

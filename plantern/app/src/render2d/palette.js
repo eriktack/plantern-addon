@@ -18,6 +18,7 @@ export const DARK_PALETTE = Object.freeze({
   // the Devices layers (docs/plans/devices.md DV5): one colour per layer, the ink of the icons' marks
   deviceLayer: { cameras: '#ff8a5b', wifi: '#4fb3ff', zigbee: '#7ed957', bluetooth: '#a98bff', smoke: '#ff5d5d', climate: '#ffc94d', speakers: '#4dd6c4', other: '#b8bec8' },
   deviceInk: '#14161a',
+  wifi: { good: '#3fbf5f', fair: '#e8c33a', weak: '#e8713a', alpha: 0.32 },   // the Wi-Fi estimate's bands (DV7)
 });
 
 /** The light plan: dark walls and labels on pale floors; lamp glow is laid on with `multiply`, which shows on white. */
@@ -34,6 +35,7 @@ export const LIGHT_PALETTE = Object.freeze({
   glowBlend: 'multiply',
   deviceLayer: { cameras: '#d4572a', wifi: '#1f7fcf', zigbee: '#3f9a2a', bluetooth: '#6f4fd6', smoke: '#d63030', climate: '#c99410', speakers: '#16a08f', other: '#6b7280' },
   deviceInk: '#ffffff',
+  wifi: { good: '#1f9c3f', fair: '#c99410', weak: '#d0561c', alpha: 0.30 },
 });
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
