@@ -70,3 +70,43 @@ export const apply = (m, [u, v]) => [m.a * u + m.c * v + m.e, m.b * u + m.d * v 
 
 /** The image's four corners in the plan (top left, top right, bottom right, bottom left), for its size [width, height] px. */
 export const imageCorners = (m, [w, h]) => [[0, 0], [w, 0], [w, h], [0, h]].map(p => apply(m, p));
+
+// ---- placing by hand (docs/plans/underlay.md UL10): the image's middle at a plan point, a scale and a turn ----
+
+/**
+ * The matrix of a hand placement: place = { at: [x, y] mm, the plan point under the image's middle; scale: mm per pixel;
+ * rotation: degrees anticlockwise, the image's up turned from plan north (as fitSimilarity's rotationDeg) }, size [w, h] px.
+ */
+export function placeMatrix(place, [w, h]) {
+  const t = (place.rotation ?? 0) * Math.PI / 180, p = place.scale * Math.cos(t), q = place.scale * Math.sin(t);
+  // x = p·u + q·v + e, y = q·u − p·v + f, with the middle (w/2, h/2) landing on `at`
+  return { a: p, b: q, c: q, d: -p, e: place.at[0] - p * w / 2 - q * h / 2, f: place.at[1] - q * w / 2 + p * h / 2 };
+}
+
+/** The hand placement a matrix amounts to (a fit by points, to start moving it by hand from where it is). */
+export function placeOf(m, [w, h]) {
+  const at = apply(m, [w / 2, h / 2]);
+  return { at: at.map(v => Math.round(v)), scale: Math.round(Math.hypot(m.a, m.b) * 10000) / 10000, rotation: Math.round(Math.atan2(m.b, m.a) * 180 / Math.PI * 100) / 100 };
+}
+
+/** A plan point [x, y] mm → the image pixel [u, v] under it (the inverse of apply; null for a degenerate matrix). */
+export function pixelAt(m, [x, y]) {
+  const det = m.a * m.d - m.b * m.c;
+  if (Math.abs(det) < 1e-12) return null;
+  const dx = x - m.e, dy = y - m.f;
+  return [(m.d * dx - m.c * dy) / det, (m.a * dy - m.b * dx) / det];
+}
+
+/** Hand moves, each from the placement when the drag started (`from`) and two plan points (where the drag started, where it is). */
+export const movePlace = (from, start, now) => ({ ...from, at: [Math.round(from.at[0] + now[0] - start[0]), Math.round(from.at[1] + now[1] - start[1])] });
+export function turnPlace(from, start, now) {
+  const a0 = Math.atan2(start[1] - from.at[1], start[0] - from.at[0]), a1 = Math.atan2(now[1] - from.at[1], now[0] - from.at[0]);
+  let r = (from.rotation ?? 0) + (a1 - a0) * 180 / Math.PI;
+  r = ((r + 180) % 360 + 360) % 360 - 180;
+  return { ...from, rotation: Math.round(r * 100) / 100 };
+}
+export function scalePlace(from, start, now) {
+  const d0 = Math.hypot(start[0] - from.at[0], start[1] - from.at[1]), d1 = Math.hypot(now[0] - from.at[0], now[1] - from.at[1]);
+  if (d0 < 1 || d1 < 1) return from;
+  return { ...from, scale: Math.round(from.scale * d1 / d0 * 10000) / 10000 };
+}

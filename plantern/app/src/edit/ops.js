@@ -172,7 +172,7 @@ export function deleteAnchor(model, id) {
 }
 
 // ---- underlays: an image under the plan, fitted by points (docs/plans/underlay.md, src/model/underlays.js) ----
-const UNDERLAY_KEYS = ['name', 'file', 'level', 'size', 'points', 'opacity', 'date', 'note'];
+const UNDERLAY_KEYS = ['name', 'file', 'level', 'size', 'points', 'place', 'opacity', 'date', 'note'];
 const underlayIds = model => new Set([...allIds(model), ...(model.anchors || []).map(a => a.id), ...(model.checks || []).map(c => c.id), ...(model.underlays || []).map(u => u.id)]);
 
 /**

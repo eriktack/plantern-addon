@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.10
+
+- Photo under the plan: drag, turn and scale it into place first, then click points on the photo in the plan
+
 ## 0.8.9
 
 - Photo or drawing under the plan: upload and fit it by points in the Editor, show it in the viewer and the card (underlay: true)

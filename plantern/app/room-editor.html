@@ -29,6 +29,7 @@
   .ultab td, .ultab th { padding: 2px 3px; text-align: left; }
   .ultab input { width: auto; }
   .ultab button.on { outline: 2px solid #ffb454; }
+  #ulHand.on { outline: 2px solid #ffb454; }
 </style>
 </head>
 <body>
@@ -184,6 +185,10 @@
     <div id="ulMsg" class="help"></div>
     <div id="ulFit" hidden>
       <h3>Fit <span id="ulFitName"></span></h3>
+      <p class="help">First drag it roughly into place in the plan, then fit it by points: ◎ by the pixel, click the spot on the photo (in the plan, or on the small image below), then the matching point of the model.</p>
+      <div class="row btns"><button type="button" id="ulHand">Move / turn / scale</button>
+        <label class="inl">mm per pixel <input id="ulScale" size="6" inputmode="decimal" autocomplete="off"></label>
+        <label class="inl">turned <input id="ulRot" size="5" inputmode="decimal" autocomplete="off"> °</label></div>
       <label>Zoom <input type="range" id="ulZoom" min="1" max="8" step="0.5" value="1"></label>
       <div id="ulImgBox" class="ulimg"><div id="ulImgIn"><img id="ulImg" alt="The image being fitted"><svg id="ulMarks" preserveAspectRatio="none"></svg></div></div>
       <table class="ultab"><thead><tr><th>#</th><th>Pixel</th><th>Plan point <small>(ref or x, y mm)</small></th><th>Off</th><th></th></tr></thead><tbody id="ulPts"></tbody></table>

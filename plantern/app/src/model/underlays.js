@@ -1,13 +1,15 @@
 // Underlays (docs/plans/underlay.md, decision 293): an image under the plan of one level, a drone photo taken straight down or
 // a construction drawing, fitted to the plan by two or more points.
 //   { id: "u_drone", name?, file: "assets/underlays/drone.webp", level: "ground", size: [w, h],
-//     points: [{ image: [u, v], plan: "r_hall#p0" | [x, y] }, …], opacity?: 0–1, date?, note? }
+//     points: [{ image: [u, v], plan: "r_hall#p0" | [x, y] }, …], place?: { at: [x, y], scale, rotation }, opacity?: 0–1, date?, note? }
+// Two or more points that resolve fit it (fitSimilarity); with fewer, `place` (placed by hand: the image's middle at `at`, mm per
+// pixel, degrees anticlockwise) puts it where it is, so a photo can be dragged roughly into place first and fitted by points after.
 // `file` is a path inside the house folder, under assets/underlays/ so the house's own address serves it (with Plantern's
 // server and on a plain static server alike). A plan point is a snap ref of the underlay's level (it follows the model when the
 // model is corrected) or a position in mm. Pure.
 
 import { collectSnapPoints } from '../tools/snap.js';
-import { fitSimilarity } from '../geometry/underlay.js';
+import { fitSimilarity, placeMatrix } from '../geometry/underlay.js';
 
 export const UNDERLAY_DIR = 'assets/underlays/';
 export const UNDERLAY_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
@@ -38,8 +40,12 @@ export function underlayShapeErrors(u) {
     if (!(typeof pl === 'string' && pl.includes('#')) && !(Array.isArray(pl) && pl.length === 2 && pl.every(Number.isFinite))) e.push(`point ${i + 1}: plan must be a snap ref or [x, y] in mm`);
   });
   if (u.opacity !== undefined && !(Number.isFinite(u.opacity) && u.opacity >= 0 && u.opacity <= 1)) e.push('opacity must be between 0 and 1');
+  if (u.place !== undefined && !placeOk(u.place)) e.push('place must be { at: [x, y] mm, scale: mm per pixel (more than 0), rotation: degrees }');
   return e;
 }
+
+const placeOk = pl => !!pl && typeof pl === 'object' && Array.isArray(pl.at) && pl.at.length === 2 && pl.at.every(Number.isFinite)
+  && Number.isFinite(pl.scale) && pl.scale > 0 && (pl.rotation === undefined || Number.isFinite(pl.rotation));
 
 /**
  * Where an underlay's points are in the plan and how it fits: { pairs, missing: [refs], fit } (fit from fitSimilarity, or null
@@ -56,7 +62,10 @@ export function resolveUnderlay(model, u, geo, snaps) {
     else missing.push(p.plan);
   }
   const fit = pairs.length >= 2 ? fitSimilarity(pairs) : null;
-  return { pairs, missing, fit: fit?.ok ? fit : null, error: fit && !fit.ok ? fit.error : null };
+  if (fit?.ok) return { pairs, missing, fit, by: 'points', error: null };
+  // fewer than two points (or points that cannot fit): placed by hand, when it has been
+  if (placeOk(u.place) && Array.isArray(u.size)) return { pairs, missing, fit: { ok: true, matrix: placeMatrix(u.place, u.size), scale: u.place.scale, rotationDeg: u.place.rotation ?? 0, residuals: [], rms: 0 }, by: 'place', error: fit && !fit.ok ? fit.error : null };
+  return { pairs, missing, fit: null, by: null, error: fit && !fit.ok ? fit.error : null };
 }
 
 /** Validator issues for the model's underlays. `geos` = buildModelGeometry(model). */
@@ -70,11 +79,11 @@ export function checkUnderlays(model, geos) {
     for (const m of shape) out.push({ severity: 'error', id, msg: m });
     if (shape.length) continue;
     if (!(model.levels || []).some(l => l.id === u.level)) { out.push({ severity: 'error', id, msg: `level "${u.level}" does not exist` }); continue; }
-    if (u.points.length < 2) { out.push({ severity: 'warn', id, msg: 'not fitted yet: it needs at least two points (an image pixel and the plan point it shows)' }); continue; }
     const r = resolveUnderlay(model, u, geos.get(u.level));
+    if (u.points.length < 2 && !r.fit) { out.push({ severity: 'warn', id, msg: 'not placed yet: drag it into place by hand, or give it two points (an image pixel and the plan point it shows)' }); continue; }
     for (const ref of r.missing) out.push({ severity: 'warn', id, msg: `its point ${ref} does not exist on level ${u.level}` });
     if (r.error) out.push({ severity: 'warn', id, msg: `cannot be fitted: ${r.error}` });
-    if (!r.fit) continue;
+    if (!r.fit || r.by !== 'points') continue;
     if (r.fit.mirrored) out.push({ severity: 'warn', id, msg: 'the points fit a mirrored image better: are they in the right order, on the right image?' });
     r.fit.residuals.forEach((d, i) => { if (d > UNDERLAY_RESIDUAL_WARN) out.push({ severity: 'warn', id, msg: `point ${i + 1} (${r.pairs[i].ref || r.pairs[i].plan.map(Math.round).join(', ')}) is ${Math.round(d)} mm from where the fit puts it: a wrong click, or a point that is not on the ground?` }); });
   }
