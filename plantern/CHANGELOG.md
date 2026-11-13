@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.11
+
+- Devices: cameras, access points and other devices in the Editor and on layers in the plan, with camera view cones
+
 ## 0.8.10
 
 - Photo under the plan: drag, turn and scale it into place first, then click points on the photo in the plan

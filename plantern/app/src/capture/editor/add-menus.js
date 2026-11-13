@@ -55,6 +55,7 @@ export function addPick(where, entry) {
   const id = entry.id;
   if (id.startsWith('blueprint:')) { const [bid, at] = id.slice('blueprint:'.length).split('@'); return placeBlueprint(bid, where, at); }
   if (id.startsWith('model:')) return act.model(id.slice('model:'.length));
+  if (id.startsWith('device:')) return act.device(id.slice('device:'.length));
   if (id === 'box') return where === 'wall' ? act.wallBox() : act.box();
   return act[id]?.();
 }
@@ -113,8 +114,9 @@ export function wireAddMenus() {
     createMenu($(id), { label: 'Add', icon: 'plus', align: 'right', entries: () => addEntries(addContext(where)), onPick: e => { if (!beginPlacing(where, e)) addPick(where, e); } });
   }
 }
-const PLACE_IN_ROOM = id => id === 'ceilingLamp' || id === 'box' || id.startsWith('model:') || (id.startsWith('blueprint:') && !id.includes('@'));
-const PLACE_ON_WALL = id => ['switch', 'wallLamp', 'strip', 'box'].includes(id) || id.startsWith('model:') || (id.startsWith('blueprint:') && !id.includes('@'));
+const isDeviceEntry = id => id === 'camera' || id === 'ap' || id.startsWith('device:');
+const PLACE_IN_ROOM = id => id === 'ceilingLamp' || isDeviceEntry(id) || id === 'box' || id.startsWith('model:') || (id.startsWith('blueprint:') && !id.includes('@'));
+const PLACE_ON_WALL = id => ['switch', 'wallLamp', 'strip', 'box', 'wallCamera', 'wallAp'].includes(id) || id.startsWith('model:') || (id.startsWith('blueprint:') && !id.includes('@'));
 function beginPlacing(where, entry) {
   const ok = where === 'wall' ? PLACE_ON_WALL(entry.id) : (where === 'house' || where === 'room') && PLACE_IN_ROOM(entry.id);
   if (!ok) return false;
@@ -135,8 +137,8 @@ export function finishPlacing(p) {
   const { where, entry, wall: wid } = Ed.placing;
   if (p && where !== 'wall') {
     const r = (level().rooms || []).find(x => x.polygon?.length >= 3 && pointInPolygon(p, x.polygon));
-    if (!r) { setStatus('Click inside a room (Esc cancels)'); return; }
-    if (Ed.roomId !== r.id || Ed.shape !== 'room') selectRoom(r.id);
+    if (!r && !isDeviceEntry(entry.id)) { setStatus('Click inside a room (Esc cancels)'); return; }   // a device may go outside, in the yard
+    if (r && (Ed.roomId !== r.id || Ed.shape !== 'room')) selectRoom(r.id);
   }
   if (!p && where !== 'wall' && !(Ed.shape === 'room' && Ed.roomId)) { setStatus('Select a room first, or click in one (Esc cancels)'); return; }
   if (where === 'wall' && Ed.wallId !== wid) selectWall(wid);

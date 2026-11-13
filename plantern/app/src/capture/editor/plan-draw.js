@@ -32,6 +32,7 @@ import { isRound } from './panel-room.js';
 import { setStatus } from './session.js';
 import { Ed } from './state.js';
 import { underlaysSvg, fitMarksSvg } from './underlays.js';
+import { bearingSvg } from './device-drag.js';
 import { pickVerb, pointerIsCoarse } from '../../touch.js';
 
 
@@ -177,7 +178,7 @@ export function fixtureSvg(x, geo, fs) {
   const line = geo.fixtureLine?.(x), lc = line ? line.map(q => toSvg(q).join(',')).join(' ') : '';
   return `<g data-kind="fixture" data-id="${esc(x.id)}" style="cursor:pointer"><title>${esc(tip(x))}</title>` + (line ? `<polyline points="${lc}" fill="none" stroke="transparent" stroke-width="${fs * 1.6}" stroke-linecap="round"/><polyline points="${lc}" fill="none" stroke="${c}" stroke-width="${fs / 3}" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>` : '') + `<circle cx="${cx}" cy="${cy}" r="${fs}" fill="transparent"/>` + (x.kind === 'strip' ? `<circle cx="${cx}" cy="${cy}" r="${r * 0.7}" fill="${c}" stroke="${sel ? '#fff' : '#14161a'}" stroke-width="${fs / 10}"/>` : x.kind === 'switch'
     ? `<rect x="${cx - r}" y="${cy - r}" width="${2 * r}" height="${2 * r}" rx="${r / 3}" fill="#14161a" stroke="${c}" stroke-width="${fs / (sel ? 5 : 8)}"/>`
-    : `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${c}" stroke="${sel ? '#fff' : '#14161a'}" stroke-width="${fs / 10}"/>`) + '</g>';
+    : `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${c}" stroke="${sel ? '#fff' : '#14161a'}" stroke-width="${fs / 10}"/>`) + '</g>' + bearingSvg(x, P, fs, sel);
 }
 /** The ends of the selected LED strip on a wall: handles to drag (a vertical strip is sized by its height, not dragged: fixes list 48). */
 export function stripHandlesSvg(x, geo, fs) {

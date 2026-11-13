@@ -15,6 +15,9 @@ export const DARK_PALETTE = Object.freeze({
   objectDefault: '#888888', missing: '#b00020',
   fixtureOff: '#4a505a', fixtureOffStroke: '#8b93a1', fixtureOn: '#ffffff', fixtureUnavailable: '#e5534b',
   glowBlend: 'screen',                                // a lamp's light is added to what is under it
+  // the Devices layers (docs/plans/devices.md DV5): one colour per layer, the ink of the icons' marks
+  deviceLayer: { cameras: '#ff8a5b', wifi: '#4fb3ff', zigbee: '#7ed957', bluetooth: '#a98bff', smoke: '#ff5d5d', climate: '#ffc94d', speakers: '#4dd6c4', other: '#b8bec8' },
+  deviceInk: '#14161a',
 });
 
 /** The light plan: dark walls and labels on pale floors; lamp glow is laid on with `multiply`, which shows on white. */
@@ -29,6 +32,8 @@ export const LIGHT_PALETTE = Object.freeze({
   objectDefault: '#777777', missing: '#b00020',
   fixtureOff: '#c4c9d2', fixtureOffStroke: '#6b7280', fixtureOn: '#222222', fixtureUnavailable: '#d14a42',
   glowBlend: 'multiply',
+  deviceLayer: { cameras: '#d4572a', wifi: '#1f7fcf', zigbee: '#3f9a2a', bluetooth: '#6f4fd6', smoke: '#d63030', climate: '#c99410', speakers: '#16a08f', other: '#6b7280' },
+  deviceInk: '#ffffff',
 });
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;

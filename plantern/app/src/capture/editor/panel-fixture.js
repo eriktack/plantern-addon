@@ -22,9 +22,27 @@ import { refreshWallMeasure } from './add-menus.js';
 import { fillCopyInto } from './copy.js';
 import { assetCache } from './panel-object.js';
 import { Ed } from './state.js';
+import { isDevice, fixtureNoun } from '../../model/devices.js';
+import { deviceFormValues, deviceFields, deviceFormChanges } from '../device-form.js';
 
 
 /** The fixture panel: height, where it is (on a wall, or x/y), how far a lamp's light reaches. */
+/** The device fields of the panel (device-form.js): shown for a camera, access point or device, filled when the form is new. */
+function showDeviceFields(x, fresh) {
+  const dev = isDevice(x), fields = dev ? deviceFields(x) : [];
+  $('xDevBox').hidden = !dev;
+  if (!dev) return;
+  for (const [row, f] of [['xRoleRow', 'role'], ['xBearingRow', 'bearing'], ['xTiltRow', 'tilt'], ['xFovRow', 'fov'], ['xRangeRow', 'range'], ['xPanRow', 'pan'], ['xMountRow', 'mount'], ['xBandsRow', 'bands'], ['xOutdoorRow', 'outdoor']]) $(row).hidden = !fields.includes(f);
+  $('xRangeNote').textContent = x.kind === 'camera' ? 'mm it sees clearly' : 'mm it reaches';
+  if (!fresh) return;
+  const v = deviceFormValues(x);
+  $('xRole').value = v.role; $('xBearing').value = v.bearing; $('xTilt').value = v.tilt; $('xFov').value = v.fov; $('xRange').value = v.range;
+  $('xPanFrom').value = v.panFrom; $('xPanTo').value = v.panTo; $('xMount').value = v.mount;
+  $('xBand24').checked = v.bands['2.4']; $('xBand5').checked = v.bands[5]; $('xBand6').checked = v.bands[6]; $('xOutdoor').checked = v.outdoor;
+}
+/** What the device fields hold now, for deviceFormChanges(). */
+export const deviceFieldValues = () => ({ role: $('xRole').value, bearing: $('xBearing').value, tilt: $('xTilt').value, fov: $('xFov').value, range: $('xRange').value, panFrom: $('xPanFrom').value, panTo: $('xPanTo').value, mount: $('xMount').value, bands: { '2.4': $('xBand24').checked, 5: $('xBand5').checked, 6: $('xBand6').checked }, outdoor: $('xOutdoor').checked });
+
 export function showFixture() {
   const x = fixture();
   if (!x) { Ed.fixtureId = null; $('fixturePanel').hidden = true; return; }
@@ -32,11 +50,13 @@ export function showFixture() {
   const lampObj = lampOnObject(x), form = stripForm(x), onObject = form === 'object' || lampObj ? lv.objects?.find(o => o.id === x.attach.object) : null, onOpening = form === 'opening' ? lv.openings?.find(o => o.id === x.attach.opening) : null;
   const nm = ids => ids.map(id => lv.rooms?.find(r => r.id === id)?.name || id).join(', ') || 'outside';
   $('xTitle').innerHTML = titleHtml(x);
-  $('xInfo').innerHTML = `${x.kind === 'switch' ? 'switch' : x.kind === 'strip' ? 'LED strip' : lampObj ? 'light' : x.attach ? 'wall lamp' : 'lamp'}${w ? ` on <a href="#" id="xWall" title="${esc(w.id)}">${esc(refName(w.id))}</a>` : ''}${form === 'object' || form === 'opening' || lampObj ? ` on <a href="#" id="xTargetLink" title="${esc(x.attach.object ?? x.attach.opening)}">${esc(refName(x.attach.object ?? x.attach.opening))}</a>` : ''}` + (x.assumed?.length ? ` · <b class="warn">still default: ${esc(x.assumed.join(', '))}</b>` : '');
+  $('xInfo').innerHTML = `${isDevice(x) ? fixtureNoun(x) : x.kind === 'switch' ? 'switch' : x.kind === 'strip' ? 'LED strip' : lampObj ? 'light' : x.attach ? 'wall lamp' : 'lamp'}${w ? ` on <a href="#" id="xWall" title="${esc(w.id)}">${esc(refName(w.id))}</a>` : ''}${form === 'object' || form === 'opening' || lampObj ? ` on <a href="#" id="xTargetLink" title="${esc(x.attach.object ?? x.attach.opening)}">${esc(refName(x.attach.object ?? x.attach.opening))}</a>` : ''}` + (x.assumed?.length ? ` · <b class="warn">still default: ${esc(x.assumed.join(', '))}</b>` : '');
   $('xWall')?.addEventListener('click', e => { e.preventDefault(); afterLeave(() => enterEdit('wall', w.id))(); });
   $('xTargetLink')?.addEventListener('click', e => { e.preventDefault(); afterLeave(() => enterEdit(lampObj ? 'object' : form, x.attach.object ?? x.attach.opening))(); });
   for (const [id, show] of [['xRadiusRow', x.kind !== 'switch'], ['xOffsetRow', !!w], ['xLenRow', (!!w && x.kind === 'strip') || form === 'object'], ['xVertRow', !!w && x.kind === 'strip'], ['xStartRow', form === 'object'], ['xInsetRow', form === 'object'], ['xFromRow', !!w], ['xSideRow', !!w], ['xInRow', !!w && x.kind === 'lamp'], ['xXRow', !x.attach || lampObj], ['xYRow', !x.attach || lampObj], ['xTargetRow', !!onObject || !!onOpening || form === 'object' || form === 'opening' || lampObj], ['xEdgeRow', form === 'object'], ['xAtRow', form === 'object' || form === 'opening']]) $(id).hidden = !show;
   $('xSideRow').hidden = !(w || form === 'opening');
+  if (isDevice(x)) { for (const id of ['xRadiusRow', 'xInRow']) $(id).hidden = true; $('xBindBox').hidden = true; } else $('xBindBox').hidden = false;   // a device's link to Home Assistant is DV11
+  showDeviceFields(x, Ed.fixtureFormFor !== x);
   $('xXRow').querySelector('small').textContent = lampObj ? 'mm from the middle of the object, along its width' : 'mm, east';
   $('xYRow').querySelector('small').textContent = lampObj ? 'mm from the middle, out from its back' : 'mm, north';
   $('xZ').closest('label').hidden = form === 'object' || form === 'opening';                       // its height is the height of what it follows
@@ -262,6 +282,12 @@ export function applyFixture() {
   const nm = nameChange(x.name, $('xName').value);
   if (nm !== undefined) props.name = nm;
   for (const [id, k] of [['xZ', 'z'], ['xRadius', 'radius']]) if (!(lampOnObject(x) && k === 'z') && !$(id).closest('label').hidden && changed(id, x[k])) props[k] = num(id);
+  let devProps = {};
+  if (isDevice(x)) {                                                // its own fields (device-form.js); checked apart, they are not all mm
+    const d = deviceFormChanges(x, deviceFieldValues());
+    if (d.error) { $('xErr').textContent = d.error; return; }
+    devProps = d.props;
+  }
   const form = stripForm(x);
   if (lampOnObject(x)) {
     const dx = num('xX') || 0, dy = num('xY') || 0, up = num('xZ') || 0;
@@ -291,6 +317,7 @@ export function applyFixture() {
   if (x.pos && (changed('xX', x.pos[0]) || changed('xY', x.pos[1]))) props.pos = [num('xX'), num('xY')];
   if (props.attach && [props.attach.offset, props.attach.length, props.attach.inset].some(v => v !== undefined && (Array.isArray(v) ? !v.every(Number.isFinite) : !Number.isFinite(v)))) { $('xErr').textContent = 'Values must be numbers of mm.'; return; }
   if (Object.entries(props).some(([k, v]) => k !== 'name' && k !== 'attach' && (Array.isArray(v) ? v.some(n => !Number.isFinite(n)) : typeof v === 'object' ? !Number.isFinite(v.offset) : !Number.isFinite(v)))) { $('xErr').textContent = 'Values must be numbers of mm.'; return; }
+  Object.assign(props, devProps);
   if (!Object.keys(props).length && !bindingChanged) { $('xErr').textContent = 'Nothing changed.'; return; }
   const r = Object.keys(props).length ? setFixture(Ed.model, Ed.levelId, Ed.fixtureId, props, opts()) : { model: Ed.model, report: { errors: [] } };
   if (r.report.errors.length) { $('xErr').textContent = r.report.errors.join('; '); return; }

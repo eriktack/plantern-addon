@@ -16,6 +16,10 @@ import { wallLookPieces } from '../geometry/paint.js';
 import { stairsPlan } from '../geometry/stairs.js';
 import { stripSamples } from '../geometry/strip.js';
 import { assetKey } from '../model/assets.js';
+import { isDevice, DEVICE_DEFAULTS } from '../model/devices.js';
+import { layerOf } from '../model/device-layers.js';
+import { headingFromBearing } from '../model/orientation.js';
+import { cameraCone, sectorOutline, panSpan, reachArea } from '../geometry/coverage.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 export const el = (t, a = {}, parent) => {
@@ -39,6 +43,52 @@ function drawUnderlays(g, list) {
     if (!u?.href || !u.matrix || !Array.isArray(u.size)) continue;
     el('image', { href: u.href, x: 0, y: 0, width: u.size[0], height: u.size[1], preserveAspectRatio: 'none', opacity: u.opacity ?? 0.6,
       transform: underlayTransform(u.matrix), 'pointer-events': 'none', 'data-underlay': u.id || '' }, g);
+  }
+}
+
+// ---- devices (docs/plans/devices.md DV5, DV6): icons and coverage on their layers ----
+const ROLE_MARK = { 'zigbee-coordinator': 'ZC', 'zigbee-router': 'Z', 'bt-proxy': 'BT', smoke: 'S', climate: '°', speaker: '♪' };
+const ICON_R = 150;                                     // mm: an icon's radius in the plan
+
+/**
+ * The devices of a level whose layer is on: devices = { layers: { cameras: 'off' | 'icons' | 'coverage', … }, northAngle }.
+ * Coverage (one layer at a time, device-layers.js) goes under the walls: a camera's cone cut by walls and its pan span
+ * faintly, a Bluetooth proxy's reach. Icons go on top, each with its name on hover.
+ */
+function drawDevices(level, geo, occ, devices, gCov, gDev, fixtureLabel, palette) {
+  const L = devices.layers || {}, north = devices.northAngle ?? 0, headingOf = b => headingFromBearing(b, north);
+  for (const fx of level.fixtures || []) {
+    const id = layerOf(fx), step = id && L[id];
+    if (!step || step === 'off') continue;
+    const c = geo.fixturePos(fx);
+    if (!c) continue;
+    const colour = palette.deviceLayer[id], ink = palette.deviceInk;
+    if (step === 'coverage') {
+      if (fx.kind === 'camera' && Number.isFinite(fx.bearing)) {
+        const R = fx.range ?? DEVICE_DEFAULTS.camera.range, fov = fx.fov ?? DEVICE_DEFAULTS.camera.fov;
+        if (Array.isArray(fx.pan)) { const sp = panSpan(fx.pan, headingOf); el('polygon', { points: svgPoints(sectorOutline(c, sp.from, sp.sweep, R)), fill: colour, 'fill-opacity': 0.05, stroke: colour, 'stroke-opacity': 0.5, 'stroke-dasharray': '120 90', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none' }, gCov); }
+        el('polygon', { points: svgPoints(cameraCone(c, headingOf(fx.bearing), fov, R, occ)), fill: colour, 'fill-opacity': 0.22, stroke: colour, 'stroke-opacity': 0.8, 'stroke-width': 1.2, 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none', 'data-cone': fx.id }, gCov);
+      } else if (fx.kind === 'device' && fx.role === 'bt-proxy') {
+        el('polygon', { points: svgPoints(reachArea(c, fx.range ?? DEVICE_DEFAULTS.device.range, occ)), fill: colour, 'fill-opacity': 0.16, stroke: colour, 'stroke-opacity': 0.7, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none' }, gCov);
+      }
+    }
+    const [x, y] = toSvg(c), g = el('g', { class: 'device', 'data-device': fx.id, 'data-layer': id, transform: `translate(${x} ${y})` }, gDev);
+    el('title', {}, g).textContent = fixtureLabel(fx);
+    if (fx.kind === 'camera' && Number.isFinite(fx.bearing)) {
+      const h = headingOf(fx.bearing) * Math.PI / 180, tip = toSvg([Math.cos(h) * ICON_R * 2.4, Math.sin(h) * ICON_R * 2.4]);
+      el('line', { x1: 0, y1: 0, x2: tip[0], y2: tip[1], stroke: colour, 'stroke-width': 2.5, 'vector-effect': 'non-scaling-stroke', 'stroke-linecap': 'round' }, g);
+    }
+    el('circle', { r: ICON_R, fill: colour, stroke: ink, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, g);
+    if (fx.kind === 'ap') {
+      for (const r of [55, 100]) el('path', { d: `M ${-r * 0.7} ${-r * 0.2 + 40} A ${r} ${r} 0 0 1 ${r * 0.7} ${-r * 0.2 + 40}`, fill: 'none', stroke: ink, 'stroke-width': 22, 'stroke-linecap': 'round' }, g);
+      el('circle', { cx: 0, cy: 55, r: 22, fill: ink }, g);
+    } else if (fx.kind === 'camera') {
+      el('rect', { x: -75, y: -50, width: 150, height: 100, rx: 18, fill: ink }, g);
+      el('circle', { r: 30, fill: colour }, g);
+    } else {
+      const t = el('text', { 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 150, 'font-weight': 700, fill: ink }, g);
+      t.textContent = ROLE_MARK[fx.role] || '•';
+    }
   }
 }
 
@@ -82,12 +132,12 @@ export function createPlanView(svg, hooks = {}) {
     return fromSvg([q.x, q.y]);
   }
 
-  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {}, assetStatus = () => 'unknown', assetColour = () => null, doorStates = null, underlays = [] }) {
+  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {}, assetStatus = () => 'unknown', assetColour = () => null, doorStates = null, underlays = [], devices = null }) {
     svg.replaceChildren();
     fixEls = {}; lightEls = {};
     const defs = el('defs', {}, svg), layer = id => el('g', { id }, svg);
     drawUnderlays(layer('underlay'), level ? underlays : []);
-    const gFloor = layer('floor'), gLight = layer('light'), gObj = layer('objects'), gWall = layer('walls'), gFix = layer('fixtures');
+    const gFloor = layer('floor'), gLight = layer('light'), gCov = layer('coverage'), gObj = layer('objects'), gWall = layer('walls'), gFix = layer('fixtures'), gDev = layer('devices');
     overlay = layer('overlay');
     const all = [];
     if (!level) {
@@ -194,9 +244,11 @@ export function createPlanView(svg, hooks = {}) {
     }
 
     const occ = occluders(geo, { cutPlane: settings.cutPlane, doorStates });
+    if (devices) drawDevices(level, geo, occ, devices, gCov, gDev, fixtureLabel, palette);
     for (const fx of level.fixtures || []) {
       const c = geo.fixturePos(fx);
       if (!c) continue;
+      if (isDevice(fx)) continue;                                   // cameras, access points, devices: drawn on their own layers (docs/plans/devices.md DV5)
       if (fx.kind === 'strip') { drawStrip(fx, geo.fixtureLine(fx), fixtureLabel, defs, gFix, gLight, occ); continue; }
       const s = toSvg(c), g = el('g', { class: 'fix', transform: `translate(${s[0]} ${s[1]})` }, gFix);
       el('title', {}, g).textContent = fixtureLabel(fx);

@@ -2,7 +2,7 @@ import { add, sub, mul, cross } from './vec.js';
 import { dedupe, dropCollinear } from './polygon.js';
 
 /** Ray o + t·d against segment p–q; returns t ≥ 0 or null. */
-function ray(o, d, p, q) {
+export function ray(o, d, p, q) {
   const e = sub(q, p), den = cross(d, e);
   if (Math.abs(den) < 1e-9) return null;
   const w = sub(p, o), t = cross(w, e) / den, s = cross(w, d) / den;

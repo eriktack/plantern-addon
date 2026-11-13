@@ -35,6 +35,8 @@ import { northAngleOf } from './model/orientation.js';
 import { enhanceAll } from './select.js';
 import { createFloorSwitch, showFloorSwitch } from './floor-switch.js';
 import { placedUnderlays } from './model/underlays.js';
+import { normalizeLayers, setLayerStep, layersInModel } from './model/device-layers.js';
+import { DARK_PALETTE } from './render2d/palette.js';
 enhanceAll();
 
 const params = new URLSearchParams(location.search);
@@ -217,6 +219,31 @@ async function main() {
     const b = bindings[fx.id];
     return `${fx.name ? `${fx.name} (${fx.id})` : fx.id} → ${b?.entity || (b?.controls ? 'controls ' + b.controls.join(', ') : 'unbound')}`;
   };
+  // the Devices layers (docs/plans/devices.md DV4): off / icons / coverage per subject, this browser's choice
+  const devLayers = () => normalizeLayers(readPrefs().devices);
+  const devicesShown = () => ({ layers: devLayers(), northAngle: northAngleOf(model) });
+  const LAYER_SWATCH = DARK_PALETTE.deviceLayer;
+  function renderDeviceLayers() {
+    const offered = layersInModel(model), state = devLayers(), box = $('devLayers');
+    $('devRow').hidden = !offered.length;
+    box.replaceChildren();
+    for (const l of offered) {
+      const name = document.createElement('span');
+      name.innerHTML = `<span class="sw" style="background:${LAYER_SWATCH[l.id]}"></span>`;
+      name.append(l.label);
+      const seg = document.createElement('div');
+      seg.className = 'seg';
+      for (const step of ['off', 'icons', ...(l.coverage ? ['coverage'] : [])]) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.textContent = { off: 'Off', icons: 'Icons', coverage: 'Coverage' }[step];
+        b.classList.toggle('on', state[l.id] === step);
+        b.setAttribute('aria-pressed', String(state[l.id] === step));
+        b.onclick = () => { writePrefs({ devices: setLayerStep(devLayers(), l.id, step) }); renderDeviceLayers(); drawPlan(); };
+        seg.append(b);
+      }
+      box.append(name, seg);
+    }
+  }
   // images under the plan of this level (docs/plans/underlay.md), from the house's own folder
   // on or off, and how strongly, are this browser's choice (prefs.js): { on: false } hides them, opacity overrides the house's
   const underlaysHere = () => (level ? placedUnderlays(model, level.id, state().geo) : []);
@@ -245,20 +272,21 @@ async function main() {
   // the 2D plan alone, with the lamps as they are (a render draws every lamp as unavailable until they are applied again)
   function drawPlan() {
     refreshLit();                                                  // a light that has just arrived from the server shows now
-    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown() });
+    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown() });
     refreshFixtures();
   }
   function showLevel() {
     refreshLit();
     litShown = litKey();
     planAfterAssets.cancel();                                      // this draws the plan now
-    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown() });
+    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown() });
     if (view3d) build3d();
     restoreCamera();
     refreshFixtures();
     measure.reset();
     updateFloorSwitch();
     updateUnderlayRow();
+    renderDeviceLayers();
   }
 
   // ---- 2D / 3D ----

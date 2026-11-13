@@ -14,6 +14,7 @@ import { installLampMask, setLampMasks, packMasks, decayFor, MAX_MASKS } from '.
 import { DEFAULT_NIGHT_LIGHT } from '../model/night.js';
 import { assetPlacement } from '../model/assets.js';
 import { textureUrl } from '../model/materials.js';
+import { isDevice } from '../model/devices.js';
 
 /**
  * three.js view of one level. Geometry comes only from levelPrisms() (pure, tested);
@@ -345,6 +346,7 @@ export function createView3d(container, hooks = {}) {
     for (const fx of level.fixtures || []) {
       const pos = geo.fixturePos(fx);
       if (!pos) continue;
+      if (isDevice(fx)) continue;                                   // cameras, access points, devices: drawn on their own layers (docs/plans/devices.md DV5)
       if (fx.kind === 'strip') { addStrip(fx, geo, level, g, fixtureLabel); continue; }
       const at = new THREE.Vector3(...toThree(pos, geo.fixtureZ(fx) ?? (fx.kind === 'lamp' ? level.ceilingHeight - 100 : 1100)));
       if (fx.kind === 'lamp') {

@@ -12,7 +12,8 @@
  *   models:      names of the model files of the house and the shared assets/ (an empty list offers none)
  * }
  * Returns entries for createMenu(): { id, label, hint, icon, group, disabled? }. Ids: room, wall, stairs, solid, box, ceilingLamp,
- * blueprint:<id>, model:<name>, door, window, passage, switch, wallLamp, strip, openingLamp, openingStrip.
+ * blueprint:<id>, model:<name>, door, window, passage, switch, wallLamp, strip, openingLamp, openingStrip, camera, ap,
+ * device:<role>, wallCamera, wallAp.
  */
 export function addEntries(ctx) {
   const { where, roomSelected = false, hasRooms = false, levelAbove = false, blueprints = null, models = [] } = ctx;
@@ -50,9 +51,18 @@ export function addEntries(ctx) {
     add('switch', 'Switch', 'switch', 'Lights', 'On this wall');
     add('wallLamp', 'Wall lamp', 'lamp', 'Lights', 'On this wall');
     add('strip', 'LED strip', 'strip', 'Lights', 'Along this wall: under a cabinet, behind a TV');
+    add('wallCamera', 'Camera', 'lamp', 'Devices', 'On this wall, on its outside face where it has one; looks straight out');
+    add('wallAp', 'Access point', 'lamp', 'Devices', 'On this wall');
   } else {
     // placed with a click in a room (ui-consistency plan, UX10), so no room needs to be selected first
     add('ceilingLamp', 'Ceiling lamp', 'lamp', 'Lights', where === 'room' ? 'Click where it goes in this room' : 'Click in the room where it goes', where === 'room' ? false : noRoom);
+  }
+
+  if (where !== 'wall') {
+    // devices are placed with a click, in a room or outside every room (the yard), docs/plans/devices.md DV8
+    add('camera', 'Camera', 'lamp', 'Devices', 'Click where it goes, in a room or outside');
+    add('ap', 'Access point', 'lamp', 'Devices', 'Click where it goes; on the ceiling in a room');
+    for (const [role, label] of [['zigbee-coordinator', 'Zigbee coordinator'], ['zigbee-router', 'Zigbee router'], ['bt-proxy', 'Bluetooth proxy'], ['smoke', 'Smoke detector'], ['climate', 'Room sensor'], ['speaker', 'Speaker']]) add(`device:${role}`, label, 'lamp', 'Devices', 'Click where it goes');
   }
 
   const here = where === 'wall' ? 'on this wall' : where === 'room' ? 'in this room' : 'in the middle of the room';

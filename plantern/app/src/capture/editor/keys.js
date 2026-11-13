@@ -18,6 +18,7 @@ import { doSplit } from './panel-fixture.js';
 import { save } from './room-apply.js';
 import { togglePreview } from './preview3d.js';
 import { Ed } from './state.js';
+import { isDevice, fixtureNoun } from '../../model/devices.js';
 
 // ---- the keyboard on the plan (ui-consistency plan, UX8); never while a field has focus ----
 const SHORTCUTS = [
@@ -175,7 +176,7 @@ export function hoverStatus(e) {
   if (!el) { $('status').textContent = Ed.baseStatus; return; }
   const k = el.dataset.kind, id = el.dataset.id, lv = level();
   const thing = { room: lv.rooms, solid: lv.solids, wall: lv.walls, opening: lv.openings, fixture: lv.fixtures, stairs: lv.stairs, object: lv.objects }[k]?.find(x => x.id === id);
-  const what = k === 'fixture' && thing ? (thing.kind === 'switch' ? 'switch' : thing.kind === 'strip' ? 'LED strip' : 'lamp') : k === 'opening' && thing ? thing.type : KIND_WORD[k] || k;
+  const what = k === 'fixture' && thing ? (isDevice(thing) ? fixtureNoun(thing) : thing.kind === 'switch' ? 'switch' : thing.kind === 'strip' ? 'LED strip' : 'lamp') : k === 'opening' && thing ? thing.type : KIND_WORD[k] || k;
   const sel = selected(), isSel = sel && sel.kind === k && sel.id === id;
   $('status').textContent = `${thing ? readableName(thing, { room: 'rooms', solid: 'solids', wall: 'walls', opening: 'openings', fixture: 'fixtures', stairs: 'stairs', object: 'objects' }[k]) : id} · ${what}${thing?.name ? ` (${id})` : ''} · ${isSel ? 'double-click or Enter to edit' : 'click to select, double-click to edit'}`;
 }

@@ -8,8 +8,10 @@
 import { wallProfile } from '../geometry/walls.js';
 import { pointInPolygon } from '../geometry/polygon.js';
 import { roomAt, roomCeiling } from './rooms.js';
+import { DEVICE_KINDS, isDevice, checkDevice, OUTDOOR_TOP } from './devices.js';
 
-export const FIXTURE_KINDS = ['lamp', 'switch', 'strip'];
+// cameras, access points and other devices (devices.js, docs/plans/devices.md) are fixtures too
+export const FIXTURE_KINDS = ['lamp', 'switch', 'strip', ...DEVICE_KINDS];
 /** Defaults for a new fixture; `z` is listed in `assumed` until measured (a ceiling lamp's z is the ceiling). */
 export const FIXTURE_DEFAULTS = { lamp: { radius: 3000 }, switch: { z: 1100 }, wallLamp: { z: 1800 }, strip: { radius: 1200, length: 1200, wallZ: 1400 } };
 
@@ -92,7 +94,13 @@ export function checkFixture(fx, level) {
   if (fx.kind === 'switch' && !fx.attach) errors.push('a switch sits on a wall (attach)');
   if (own && !Number.isFinite(fx.z)) errors.push('z (height above the floor) must be a number of mm');
   let top = level.ceilingHeight ?? 2400;
-  if (fx.pos) { const r = roomAt(level, fx.pos, pointInPolygon); if (r) top = roomCeiling(level, r); }   // a lowered ceiling in that room
+  const device = isDevice(fx);
+  if (device) { const d = checkDevice(fx); errors.push(...d.errors); warnings.push(...d.warnings); }
+  if (fx.pos) {
+    const r = roomAt(level, fx.pos, pointInPolygon);
+    if (r) top = roomCeiling(level, r);                              // a lowered ceiling in that room
+    else if (device) top = OUTDOOR_TOP;                               // outdoors: a device in the yard has no ceiling over it (decision 292)
+  }
   if (fx.attach && own) {
     const w = (level.walls || []).find(x => x.id === fx.attach.wall);
     if (!w) errors.push(`attached to missing wall "${fx.attach.wall}"`);
@@ -117,7 +125,7 @@ export function checkFixture(fx, level) {
         if (hole) warnings.push(`sits in the opening ${hole.id} (if that is meant, say so in its panel: Stands in)`);
       }
     }
-  } else if (fx.pos && !(level.rooms || []).some(r => r.polygon?.length >= 3 && pointInPolygon(fx.pos, r.polygon))) warnings.push('is not inside any room');
+  } else if (fx.pos && !device && !(level.rooms || []).some(r => r.polygon?.length >= 3 && pointInPolygon(fx.pos, r.polygon))) warnings.push('is not inside any room');
   const z = fixtureHeight(fx, level);
   if (Number.isFinite(z) && (z < 0 || z > top + 1)) errors.push(`height ${z} mm is outside 0–${Math.round(top)} mm (floor to ${fx.attach ? 'the top of the wall there' : 'ceiling'})`);
   if (fx.radius !== undefined && !(fx.radius > 0)) errors.push('radius must be more than 0');

@@ -900,7 +900,67 @@
           "attach": { "side": "right", "wall": "w_k_n", "offset": 4850, "opening": "o_k_win" },
           "z": 1140,
           "radius": 1500
-        }
+        },
+        {
+          "id": "f_camera_1",
+          "name": "Garden camera",
+          "kind": "camera",
+          "attach": { "side": "left", "wall": "w_l_e", "offset": 2000 },
+          "z": 2300,
+          "bearing": 90,
+          "tilt": 25,
+          "fov": 100,
+          "range": 12000,
+          "assumed": ["bearing"]
+        },
+        {
+          "id": "f_camera_2",
+          "name": "Gate camera",
+          "kind": "camera",
+          "pos": [11500,6000],
+          "z": 3000,
+          "bearing": 225,
+          "tilt": 20,
+          "fov": 100,
+          "range": 10000,
+          "pan": [135,315],
+          "assumed": ["tilt","fov","range"]
+        },
+        {
+          "id": "f_ap_1",
+          "name": "Hall access point",
+          "kind": "ap",
+          "pos": [2500,2000],
+          "mount": "ceiling",
+          "z": 2500,
+          "bands": ["2.4","5"],
+          "outdoor": false
+        },
+        {
+          "id": "f_ap_2",
+          "name": "Garden access point",
+          "kind": "ap",
+          "pos": [11000,-3000],
+          "mount": "ceiling",
+          "z": 2500,
+          "bands": ["2.4","5"],
+          "outdoor": true
+        },
+        { "id": "f_device_1", "name": "Zigbee coordinator", "kind": "device", "pos": [8600,3600], "role": "zigbee-coordinator", "z": 1000 },
+        { "id": "f_device_2", "name": "Zigbee router studio", "kind": "device", "pos": [-800,500], "role": "zigbee-router", "z": 300 },
+        {
+          "id": "f_device_3",
+          "name": "Bluetooth proxy",
+          "kind": "device",
+          "pos": [4200,3500],
+          "role": "bt-proxy",
+          "z": 1800,
+          "range": 10000,
+          "assumed": ["range"]
+        },
+        { "id": "f_device_4", "name": "Smoke detector kitchen", "kind": "device", "pos": [1500,2000], "role": "smoke", "z": 2380 },
+        { "id": "f_device_5", "name": "Living room sensor", "kind": "device", "pos": [8800,2000], "role": "climate", "z": 1500 },
+        { "id": "f_device_6", "name": "Living room speaker", "kind": "device", "pos": [5600,400], "role": "speaker", "z": 900 }
       ],
       "capture": { "ceilingHeight": 2500, "floorToFloor": 2750 },
       "stairs": [

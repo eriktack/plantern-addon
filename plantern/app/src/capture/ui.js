@@ -53,6 +53,8 @@ import { cancelDrag, dragMove, dragStart, endDrag, freePoint } from './editor/dr
 import { hoverStatus, nudgeBy, openContextMenu, planKey, showShortcuts } from './editor/keys.js';
 import { Ed } from './editor/state.js';
 import { addFromFile, setShown, addPoint, applyFit, revertFit, closeFit, renderUnderlays, setDraftOpacity, imageClick as underlayImageClick, planClick as underlayPlanClick, pickingPlan, stopPick as stopUnderlayPick, toggleHand as toggleUnderlayHand, typedPlace as typedUnderlayPlace, handDown as underlayHandDown, setHand as setUnderlayHand } from './editor/underlays.js';
+import { isDevice, fixtureNoun } from '../model/devices.js';
+import { bearingDown } from './editor/device-drag.js';
 
 enhanceSegmented();                  // choices of up to four: a row of buttons (UX20); before the menus, which leave these alone
 enhanceAll(document, { skip: '#preview, #tree' });     // the plan and the tree are rebuilt all the time and hold no select (PF16)
@@ -119,7 +121,7 @@ async function init() {
   $('ulHand').onclick = toggleUnderlayHand;
   $('ulScale').onchange = typedUnderlayPlace;
   $('ulRot').onchange = typedUnderlayPlace;
-  $('preview').parentElement.addEventListener('pointerdown', e => { underlayHandDown(e); }, true);   // before the plan's own drag and pan
+  $('preview').parentElement.addEventListener('pointerdown', e => { if (!bearingDown(e)) underlayHandDown(e); }, true);   // before the plan's own drag and pan: a camera's bearing handle, a photo's hand handles
   // the House view: "Place the house" moves into it from the sidebar; its settings are wired here
   $('houseBox').querySelector('.edhead').after($('placeSect'));   // under the House header, above the settings
   $('browse').after($('houseBox'), $('levelBox'));          // the forms sit where the browse list sits, not under the top row
@@ -222,7 +224,7 @@ async function init() {
     if (!dropFresh([spec.attach?.wall, spec.attach?.opening, spec.attach?.object])) return;
     const base = Ed.model, r = addFixture(Ed.model, Ed.levelId, spec, opts());
     if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }
-    commit(r.model); enterEdit('fixture', r.fixture.id, { ask: false }); startFresh('fixture', r.fixture.id, base, spec.kind === 'switch' ? 'switch' : spec.kind === 'strip' ? 'LED strip' : 'lamp');
+    commit(r.model); enterEdit('fixture', r.fixture.id, { ask: false }); startFresh('fixture', r.fixture.id, base, isDevice(spec) ? fixtureNoun(r.fixture) : spec.kind === 'switch' ? 'switch' : spec.kind === 'strip' ? 'LED strip' : 'lamp');
     setStatus(`${r.fixture.id} is new: ${what}. Name it and Apply to create it`);
   };
   act.stairs = newStairs;
@@ -340,6 +342,16 @@ async function init() {
     const w = wall(), L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]), length = Math.min(1200, Math.round(L / 2));
     placeFixture({ kind: 'strip', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: wallSpot(w, length), length } }, 'along the middle of the wall; set where it starts and how long it is');
   };
+  // devices (docs/plans/devices.md DV8): where clicked (a room or the yard), else the middle of the selected room; on a wall,
+  // a camera goes on the face with no room (the outside) where the wall has one, and looks straight out from it
+  const deviceSpot = () => Ed.addAt ? Ed.addAt.map(Math.round) : room() ? roomSpot(room().polygon) : null;
+  const placeDevice = spec => { const pos = deviceSpot(); if (!pos) { setStatus('Click where it goes, or select a room first'); return; } placeFixture({ ...spec, pos }, Ed.addAt ? 'where you clicked; set which way it faces and its height' : 'in the middle of the room'); };
+  act.camera = () => placeDevice({ kind: 'camera' });
+  act.ap = () => placeDevice({ kind: 'ap' });
+  act.device = role => placeDevice({ kind: 'device', role });
+  const outsideFace = w => { const s = wallInfo(level(), w.id)?.sides; return s && !s.left?.length ? 'left' : s && !s.right?.length ? 'right' : 'right'; };
+  act.wallCamera = () => { const w = wall(); placeFixture({ kind: 'camera', attach: { wall: w.id, side: outsideFace(w), offset: wallSpot(w) } }, Ed.addAt ? 'where you clicked; it looks straight out from the wall' : 'in the middle of the wall; it looks straight out from it'); };
+  act.wallAp = () => { const w = wall(); placeFixture({ kind: 'ap', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: wallSpot(w) } }, Ed.addAt ? 'where you clicked' : 'in the middle of the wall'); };
   act.ceilingLamp = () => placeFixture({ kind: 'lamp', pos: roomSpot(room().polygon) }, `${Ed.addAt ? 'where you clicked' : 'in the middle of the room'}; set its position and height`);
   act.switch = () => { const w = wall(); placeFixture({ kind: 'switch', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: wallSpot(w) } }, Ed.addAt ? 'where you clicked' : 'in the middle of the wall'); };
   act.wallLamp = () => { const w = wall(); placeFixture({ kind: 'lamp', attach: { wall: w.id, side: wallInfo(level(), w.id).sides.right.length ? 'right' : 'left', offset: wallSpot(w) } }, Ed.addAt ? 'where you clicked' : 'in the middle of the wall'); };

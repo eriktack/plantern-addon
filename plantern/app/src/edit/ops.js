@@ -24,6 +24,8 @@ import { generateWalls, PAIR_ANGLE } from '../capture/walls.js';
 import { wallProfile } from '../geometry/walls.js';
 import { OPENING_TYPES, OPENING_DEFAULTS, checkOpening, openingAssumed, DOOR_OPENS, WINDOW_OPENS } from '../model/openings.js';
 import { FIXTURE_KINDS, FIXTURE_DEFAULTS, checkFixture, stripForm, lampOnObject } from '../model/fixtures.js';
+import { isDevice, DEVICE_DEFAULTS, faceBearing } from '../model/devices.js';
+import { northAngleOf } from '../model/orientation.js';
 import { checkMaterials, materialUse } from '../model/materials.js';
 import { checkSolid } from '../model/solids.js';
 import { checkStairs } from '../model/stairs.js';
@@ -986,6 +988,7 @@ export function addFixture(model, levelId, spec = {}, options = {}) {
   else if (spec.attach) fx.attach = { side: 'right', ...spec.attach };
   else if (spec.pos) fx.pos = spec.pos.map(Number);
   const derived = form === 'object' || form === 'opening' || onObject;           // its height is the height of what it follows
+  if (isDevice(fx)) return addDevice(model, lv, fx, spec, options);
   const zDefault = kind === 'strip' ? FIXTURE_DEFAULTS.strip.wallZ : kind === 'switch' ? FIXTURE_DEFAULTS.switch.z : spec.attach ? FIXTURE_DEFAULTS.wallLamp.z : (spec.pos ? roomCeiling(lv, roomAt(lv, spec.pos, pointInPolygon)) : lv.ceilingHeight ?? 2400);
   if (!derived) fx.z = Number(spec.z ?? zDefault);
   if (kind === 'lamp') fx.radius = Number(spec.radius ?? FIXTURE_DEFAULTS.lamp.radius);
@@ -996,6 +999,44 @@ export function addFixture(model, levelId, spec = {}, options = {}) {
   if (errors.length) return refuse(model, ...errors.map(e => `${fx.id}: ${e}`));
   const levels = model.levels.map(l => l.id !== levelId ? l : { ...l, fixtures: [...(l.fixtures || []), fx] });
   return { ...finish({ ...model, levels }, levelId, {}, options), fixture: fx };
+}
+
+/**
+ * The rest of addFixture for a camera, an access point or a device (docs/plans/devices.md, src/model/devices.js): its own fields
+ * from spec, the defaults for what is not given, listed in `assumed`. A camera on a wall looks straight out from its face; a free
+ * one north. An access point on the ceiling (free, no z given) is at the ceiling like a ceiling lamp; outdoors (a free spot outside
+ * every room) it is marked outdoor. A device needs a role.
+ */
+function addDevice(model, lv, fx, spec, options) {
+  const assumed = [], pick = (k, dflt) => { if (spec[k] !== undefined) fx[k] = spec[k]; else if (dflt !== undefined) { fx[k] = dflt; assumed.push(k); } };
+  const wall = fx.attach && (lv.walls || []).find(w => w.id === fx.attach.wall);
+  const inside = fx.pos ? roomAt(lv, fx.pos, pointInPolygon) : null;
+  if (fx.kind === 'camera') {
+    const D = DEVICE_DEFAULTS.camera;
+    pick('z', D.z);
+    pick('bearing', wall ? faceBearing(wall, fx.attach.side ?? 'right', northAngleOf(model)) : 0);
+    pick('tilt', D.tilt); pick('fov', D.fov); pick('range', D.range);
+    if (spec.pan !== undefined) fx.pan = spec.pan;
+  } else if (fx.kind === 'ap') {
+    fx.mount = spec.mount ?? (fx.attach ? 'wall' : 'ceiling');
+    if (spec.z !== undefined) fx.z = Number(spec.z);
+    else if (fx.mount === 'ceiling' && fx.pos && inside) fx.z = roomCeiling(lv, inside);   // on the ceiling: its height is the ceiling's
+    else { fx.z = fx.mount === 'ceiling' ? (lv.ceilingHeight ?? 2400) : DEVICE_DEFAULTS.ap.wallZ; assumed.push('z'); }
+    fx.bands = spec.bands ?? [...DEVICE_DEFAULTS.ap.bands];
+    fx.outdoor = spec.outdoor ?? (!!fx.pos && !inside);
+    for (const k of ['bearing', 'beam']) if (spec[k] !== undefined) fx[k] = spec[k];
+  } else {
+    if (!spec.role) return refuse(model, `${fx.id}: a device needs a role (zigbee-coordinator, zigbee-router, bt-proxy, smoke, climate or speaker)`);
+    fx.role = spec.role;
+    pick('z', DEVICE_DEFAULTS.device.z);
+    if (spec.range !== undefined) fx.range = spec.range; else if (fx.role === 'bt-proxy') { fx.range = DEVICE_DEFAULTS.device.range; assumed.push('range'); }
+  }
+  if (Array.isArray(spec.assumed)) { if (spec.assumed.length) fx.assumed = [...spec.assumed]; else delete fx.assumed; }
+  else if (assumed.length) fx.assumed = assumed;
+  const { errors } = checkFixture(fx, lv);
+  if (errors.length) return refuse(model, ...errors.map(e => `${fx.id}: ${e}`));
+  const levels = model.levels.map(l => l.id !== lv.id ? l : { ...l, fixtures: [...(l.fixtures || []), fx] });
+  return { ...finish({ ...model, levels }, lv.id, {}, options), fixture: fx };
 }
 
 // ---- objects (PLANTERN.md §6.1): boxes with a size, on a wall or standing in a room ----

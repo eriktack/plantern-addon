@@ -16,6 +16,7 @@ import { openingAssumed } from '../model/openings.js';
 import { boundEdges } from '../geometry/bound.js';
 import { solidCover, solidStretches } from '../geometry/solids.js';
 import { fallbackName, numberRepeats } from '../model/names.js';
+import { isDevice, fixtureNoun } from '../model/devices.js';
 
 const len = (p, q) => Math.hypot(q[0] - p[0], q[1] - p[1]);
 
@@ -29,7 +30,7 @@ export function levelTree(level, { blueprintName } = {}) {
   const objectNames = numberRepeats(objects.map(o => ({ id: o.id, name: fallbackName(o, 'object', { blueprintName }) })));
   const objectLabel = o => objectNames.get(o.id);
   const objectNode = (o, key) => ({ key, kind: 'object', id: o.id, label: objectLabel(o), note: `${o.id} · ${o.size.map(Math.round).join('×')}`, warn: !!o.assumed?.length, children: [] });
-  const fixtureKind = x => x.kind === 'switch' ? 'switch' : x.kind === 'strip' ? 'LED strip' : x.attach ? 'wall lamp' : 'lamp';
+  const fixtureKind = x => isDevice(x) ? fixtureNoun(x) : x.kind === 'switch' ? 'switch' : x.kind === 'strip' ? 'LED strip' : x.attach ? 'wall lamp' : 'lamp';
   // a friendly name is the label, with what it is and its id beside it
   const fixtureLabel = x => x.name || fixtureKind(x), fixtureNote = x => x.name ? `${fixtureKind(x)} · ${x.id}` : x.id;
   const thingsOn = (w, keep) => [

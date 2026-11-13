@@ -30,6 +30,11 @@
   .ultab input { width: auto; }
   .ultab button.on { outline: 2px solid #ffb454; }
   #ulHand.on { outline: 2px solid #ffb454; }
+  /* the device fields (docs/plans/devices.md DV8): rows with several inputs take the whole width and wrap */
+  #xPanRow, #xBandsRow, #xOutdoorRow, #xBearingRow { grid-column: 1 / -1; }
+  #xPanRow .row, #xBandsRow .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  #xPanRow .row { display: flex !important; } #xPanRow input { width: 6em !important; min-width: 0; flex: 0 0 auto; display: inline-block !important; }
+  #xDevBox { min-width: 0; max-width: 100%; }
 </style>
 </head>
 <body>
@@ -476,6 +481,20 @@
       <label id="xInRow">Stands in <small>a window or door of this wall (a lamp in the glass); “nothing” = on the wall face</small><select id="xIn"></select></label>
       <label id="xXRow">x <small>mm, east</small><input id="xX" inputmode="numeric" autocomplete="off"></label>
       <label id="xYRow">y <small>mm, north</small><input id="xY" inputmode="numeric" autocomplete="off"></label>
+    </div>
+    <div id="xDevBox" hidden>
+      <h3 class="psec">Device</h3>
+      <div class="grid2">
+        <label id="xRoleRow">Role <select id="xRole"><option value="zigbee-coordinator">Zigbee coordinator</option><option value="zigbee-router">Zigbee router</option><option value="bt-proxy">Bluetooth proxy</option><option value="smoke">Smoke detector</option><option value="climate">Room sensor (temperature, humidity)</option><option value="speaker">Speaker</option></select></label>
+        <label id="xBearingRow">Looks towards <small>compass bearing: 0 north, 90 east, 180 south, 270 west; or drag the round handle on the plan</small><input id="xBearing" inputmode="decimal" autocomplete="off"></label>
+        <label id="xTiltRow">Tilt <small>degrees down from level</small><input id="xTilt" inputmode="decimal" autocomplete="off"></label>
+        <label id="xFovRow">Angle of view <small>degrees across</small><input id="xFov" inputmode="decimal" autocomplete="off"></label>
+        <label id="xRangeRow">Range <small id="xRangeNote">mm it sees clearly</small><input id="xRange" inputmode="numeric" autocomplete="off"></label>
+        <label id="xPanRow">Turns between <small>two bearings, clockwise from the first; empty = a fixed camera</small><span class="row"><input id="xPanFrom" inputmode="decimal" autocomplete="off" size="5" aria-label="Turns from bearing"> – <input id="xPanTo" inputmode="decimal" autocomplete="off" size="5" aria-label="Turns to bearing"></span></label>
+        <label id="xMountRow">Mounted <select id="xMount" data-seg><option value="ceiling">on the ceiling</option><option value="wall">on a wall</option></select></label>
+        <label id="xBandsRow">Bands <span class="row"><label class="inl"><input type="checkbox" id="xBand24"> 2.4 GHz</label> <label class="inl"><input type="checkbox" id="xBand5"> 5 GHz</label> <label class="inl"><input type="checkbox" id="xBand6"> 6 GHz</label></span></label>
+        <label id="xOutdoorRow" class="check"><input type="checkbox" id="xOutdoor"> Outdoor access point</label>
+      </div>
     </div>
     <div id="xBindBox">
       <h3 class="psec">Home Assistant</h3>

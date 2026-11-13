@@ -1,6 +1,7 @@
 // Friendly names (PLANTERN.md §6): any entity may carry an optional `name` ("Badrum window",
 // "Ceiling lamp hall"), shown wherever a person reads it; the id stays the stable reference and is
 // shown beside it, smaller, or on hover. Pure.
+import { isDevice, fixtureNoun } from './devices.js';
 
 /** The name when there is one, else the fallback (the id). */
 export const displayName = (e, fallback = e?.id) => (typeof e?.name === 'string' && e.name.trim() ? e.name.trim() : fallback);
@@ -45,6 +46,7 @@ export function fallbackName(e, kind, { roomName = '', blueprintName = () => '' 
   const inRoom = word => (roomName ? `${roomName} ${word[0].toLowerCase()}${word.slice(1)}` : word);
   if (kind === 'object') return blueprintName(e.blueprint) || prettyId(e.blueprint || e.asset) || (e.attach?.wall ? 'Box on a wall' : 'Box');
   if (kind === 'fixture') {
+    if (isDevice(e)) { const n = fixtureNoun(e); return inRoom(n[0].toUpperCase() + n.slice(1)); }   // a camera, an access point, a Zigbee router…
     if (e.kind === 'switch') return inRoom('Switch');
     if (e.kind === 'strip') return inRoom('LED strip');
     if (e.attach?.opening) return inRoom('Lamp in a window');
