@@ -43,6 +43,38 @@ const PAINT = 3;       // mm: the paint skin on a solid's face where a room has 
  * `options.ceilings`: draw a ceiling plate over every indoor room (default: only over rooms with their own lower ceiling, translucent,
  * so the lamps under them still show from above; decision 127).
  */
+/** A surface material ({ material: id }) as a prism's look: its colour, and its texture laid out along `along` (plan direction). */
+function surface(id, materials, along, fallback) {
+  const m = id ? resolveSide({ material: id }, materials) : null;
+  if (!m) return { color: fallback };
+  return { color: m.color || fallback, ...(m.texture ? { tex: { texture: m.texture, uvScale: m.uvScale, along } } : {}) };
+}
+const longest = poly => { let best = [1, 0], bl = -1; poly.forEach((p, i) => { const q = poly[(i + 1) % poly.length], l = Math.hypot(q[0] - p[0], q[1] - p[1]); if (l > bl) { bl = l; best = [(q[0] - p[0]) / l, (q[1] - p[1]) / l]; } }); return best; };
+// a convex polygon minus a convex region: the convex pieces of what is left
+function minusConvex(A, R) {
+  const area = P => Math.abs(P.reduce((s, p, i) => { const q = P[(i + 1) % P.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2;
+  const ccw = R.reduce((s, p, i) => { const q = R[(i + 1) % R.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0) > 0, sg = ccw ? 1 : -1;
+  const out = []; let rest = A;
+  R.forEach((p, i) => {
+    if (rest.length < 3) return;
+    const q = R[(i + 1) % R.length], d = [q[0] - p[0], q[1] - p[1]], side = x => sg * (d[0] * (x[1] - p[1]) - d[1] * (x[0] - p[0]));
+    const outside = clipConvex(rest, x => -side(x));
+    if (outside.length >= 3 && area(outside) > 1) out.push(outside);
+    rest = clipConvex(rest, side);
+  });
+  return out;
+}
+const planeAt = pc => pc.slope?.top ? (x => { const t = pc.slope.top; return t.a + (t.b - t.a) * ((x[0] - t.origin[0]) * t.u[0] + (x[1] - t.origin[1]) * t.u[1]) / t.L; }) : (() => pc.z1);
+const convex = poly => { let sign = 0; for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length], c = poly[(i + 2) % poly.length]; const z = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]); if (Math.abs(z) < 1e-6) continue; if (sign && Math.sign(z) !== sign) return false; sign = Math.sign(z); } return true; };
+// two convex polygons share some area (not just an edge): A clipped by every edge of B keeps more than a sliver
+const overlaps = (A, B) => {
+  const ccw = B.reduce((s, p, i) => { const q = B[(i + 1) % B.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0) > 0;
+  let C = A;
+  B.forEach((p, i) => { if (C.length < 3) return; const q = B[(i + 1) % B.length], d = [q[0] - p[0], q[1] - p[1]];
+    C = clipConvex(C, x => (ccw ? 1 : -1) * (d[0] * (x[1] - p[1]) - d[1] * (x[0] - p[0]))); });
+  return C.length >= 3 && Math.abs(C.reduce((s, p, i) => { const q = C[(i + 1) % C.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2 > 1000;
+};
+
 export function levelPrisms(level, geo, materials = {}, options = {}) {
   const out = [], P = p => out.push(p);
   const ft = level.floorThickness ?? 0;
@@ -55,8 +87,8 @@ export function levelPrisms(level, geo, materials = {}, options = {}) {
     // a step within the level fills down to the level's slab; a floor well above or below it (an outbuilding or a deck up or
     // down the slope) is a slab of its own thickness, not a block reaching down to the house's floor
     const z1 = r.floorOffset ?? 0, slab = r.exterior ? Math.min(ft, 150) : ft, step = Math.abs(z1) <= slab;
-    P({ id: r.id, kind: 'floor', poly: r.polygon, z0: step ? Math.min(-slab, z1 - slab) : z1 - slab, z1,
-        color: r.floorColor || (r.exterior ? DEFAULT_COLORS.floorExterior : DEFAULT_COLORS.floor), ...(holes.length ? { holes } : {}) });
+    const look = surface(r.floorMaterial, materials, longest(r.polygon), r.floorColor || (r.exterior ? DEFAULT_COLORS.floorExterior : DEFAULT_COLORS.floor));
+    P({ id: r.id, kind: 'floor', poly: r.polygon, z0: step ? Math.min(-slab, z1 - slab) : z1 - slab, z1, ...look, ...(holes.length ? { holes } : {}) });
   }
 
   // ceilings: a room with its own lower ceiling always has its plate (translucent, so it can be seen through from above); with
@@ -71,9 +103,19 @@ export function levelPrisms(level, geo, materials = {}, options = {}) {
 
   // roofs over rooms (an outdoor room, a small building; docs/plans/yard.md Y9): sloped slabs, see-through unless every ceiling is drawn
   // the cover: a solid roof is opaque in a view from inside; white plastic lets some light through; glass is clear
-  for (const r of level.rooms || []) for (const [k, p] of roofPieces(r).entries()) {
+  // where two rooms' roofs meet (a cross gable: a porch roof running into the main roof), each keeps only where it is the upper
+  // surface: their pieces are planes, so that is a straight line (the valley) and each convex piece is cut along it
+  const roofs = [];
+  for (const r of level.rooms || []) for (const [k, p] of roofPieces(r).entries()) roofs.push({ r, k, p, polys: [p.poly] });
+  for (const A of roofs) for (const B of roofs) {
+    if (A.r === B.r || !convex(A.p.poly) || !convex(B.p.poly) || !overlaps(A.p.poly, B.p.poly)) continue;
+    const ha = planeAt(A.p), hb = planeAt(B.p);
+    const under = clipConvex(B.p.poly, x => hb(x) - ha(x) - 1e-6);       // where B is above A, within B
+    if (under.length >= 3) A.polys = A.polys.flatMap(P => minusConvex(P, under));
+  }
+  for (const { r, k, p, polys } of roofs) for (const poly of polys) {
     const cover = r.roof.cover ?? 'solid', opacity = cover === 'glass' ? 0.25 : cover === 'translucent' ? (options.ceilings ? 0.8 : 0.55) : options.ceilings ? null : 0.55;
-    P({ id: r.id, kind: 'roof', part: k, cover, poly: p.poly, z0: p.z0, z1: p.z1, ...(p.slope ? { slope: p.slope } : {}), color: r.roof.color || ROOF_COLORS[cover], ...(opacity == null ? {} : { opacity }) });
+    P({ id: r.id, kind: 'roof', part: k, cover, poly, z0: p.z0, z1: p.z1, ...(p.slope ? { slope: p.slope } : {}), color: r.roof.color || ROOF_COLORS[cover], ...(opacity == null ? {} : { opacity }) });
   }
 
   // stairs starting here: one block per step from the floor up to its surface (open undersides: a thin tread)
@@ -170,7 +212,7 @@ export function levelPrisms(level, geo, materials = {}, options = {}) {
     const base = s.base ?? 0;
     const z1 = solidTop(s, level);                                   // a beam without a height reaches the ceiling
     const circle = solidCircle(s);                                   // a round pillar: a smooth cylinder in 3D
-    P({ id: s.id, kind: 'solid', poly: s.polygon, z0: base, z1, color: s.color || DEFAULT_COLORS.solid, ...(circle ? { circle } : {}) });
+    P({ id: s.id, kind: 'solid', poly: s.polygon, z0: base, z1, ...surface(s.material, materials, [1, 0], s.color || DEFAULT_COLORS.solid), ...(circle ? { circle } : {}) });
     // painted per room: a skin a few mm thick in front of each stretch of face along that room
     if (s.sides) for (const st of solidStretches(s, level.rooms)) {
       const look = resolveSide(s.sides[st.room], materials);
@@ -184,7 +226,11 @@ export function levelPrisms(level, geo, materials = {}, options = {}) {
   for (const o of level.objects || []) {
     const fp = geo.objectFootprint(o);
     const z = geo.objectZ(o);
-    if (fp) P({ id: o.id, kind: 'object', poly: fp, z0: z, z1: z + o.size[2], color: o.color || DEFAULT_COLORS.object });
+    if (fp) P({ id: o.id, kind: 'object', poly: fp, z0: z, z1: z + o.size[2], ...surface(o.material, materials, longest(fp), o.color || DEFAULT_COLORS.object) });
   }
+  // a glass wall (a greenhouse): its body, and the parts of it above and below openings, are glass
+  const glass = new Set((level.walls || []).filter(w => w.glass).map(w => w.id));
+  for (const o of level.openings || []) if (glass.has(o.wall)) glass.add(o.id);
+  for (const p of out) if (glass.has(p.id) && p.kind === 'wall') { p.kind = 'glass'; p.color = DEFAULT_COLORS.glass; p.opacity = 0.25; delete p.sides; }
   return out;
 }

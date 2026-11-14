@@ -203,6 +203,8 @@ export function validateLevel(level, geo, below = true, checks = [], blueprints)
     }
     if (w.cut !== undefined && (!w.from || !Array.isArray(w.cut) || w.cut.length !== 2 || w.cut.some(v => v !== null && !Number.isFinite(v)))) out.push({ severity: 'error', id: w.id, msg: 'cut must be [mm or null, mm or null] on a wall that follows a room edge' });
     if (!WALL_KINDS.has(w.kind)) out.push({ severity: 'error', id: w.id, msg: `unknown wall kind "${w.kind}"` });
+    if (w.glass !== undefined && typeof w.glass !== 'boolean') out.push({ severity: 'error', id: w.id, msg: 'glass must be true or false' });
+    if (w.glass && w.kind !== 'wall') out.push({ severity: 'warn', id: w.id, msg: `glass has no effect on a ${w.kind}` });
     if (geo.frames.get(w.id).L < TOL) out.push({ severity: 'error', id: w.id, msg: 'wall has zero length' });
     if (w.kind === 'wall' && w.height === 0) out.push({ severity: 'error', id: w.id, msg: 'wall with height 0: leave the height out to reach the ceiling, or use kind "virtual"' });
     // a wall round rooms on a raised floor (an outbuilding up the slope) is measured from that floor

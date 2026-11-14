@@ -23,6 +23,7 @@ export const DARK_PALETTE = Object.freeze({
   yardSurface: { grass: '#4f7a3a', gravel: '#9c9283', asphalt: '#3c3f45', paving: '#8a6f5c', deck: '#8a6a45', bed: '#5a4632', rock: '#7d7d78', forest: '#2f5a2f', water: '#3d6f9e', other: '#6d7480' },
   yardAlpha: 0.55,
   roof: '#e0a35a',
+  wallGlass: '#7fb7d9',
   yardLine: { fence: '#c9b48a', hedge: '#4f8f3f', stonewall: '#a7a49c', retaining: '#d9d2c3', edging: '#bdb6a8' },
 });
 
@@ -44,6 +45,7 @@ export const LIGHT_PALETTE = Object.freeze({
   yardSurface: { grass: '#a9cf8f', gravel: '#d8d2c6', asphalt: '#8e9199', paving: '#d2b9a6', deck: '#caa97f', bed: '#a88e72', rock: '#b9b9b3', forest: '#7fae74', water: '#9cc3e6', other: '#c4c9d2' },
   yardAlpha: 0.6,
   roof: '#9a5b1e',
+  wallGlass: '#5a9cc4',
   yardLine: { fence: '#8a6f3e', hedge: '#3f7a32', stonewall: '#77746c', retaining: '#5d5a52', edging: '#8d867a' },
 });
 

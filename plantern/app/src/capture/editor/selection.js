@@ -15,6 +15,7 @@ import { loadRound, syncRound } from './panel-room.js';
 import { renderSolidSides } from './room-apply.js';
 import { fillShapeCopy } from './copy.js';
 import { Ed } from './state.js';
+import { materialOptionsHtml } from './panel-wall.js';
 
 
 /** Zoom by factor f (< 1 = in) around the pointer of event e, or around the middle. */
@@ -106,6 +107,7 @@ export function loadFormForSelection() {
   $('rFloor').value = r?.floor ?? 'slab'; $('rFloorOff').value = r?.floorOffset ?? ''; $('rCeil').value = r?.ceilingHeight ?? '';
   $('rCeilNote').textContent = `(${level().ceilingHeight ?? 2400})`;
   loadRoofFields(r);
+  $('rFloorMat').innerHTML = '<option value="">default</option>' + materialOptionsHtml(); $('rFloorMat').value = r?.floorMaterial ?? '';
   $('roomOptions').hidden = solid;
   // a solid is measured like a room (walking round it, the solid on your right) and has a kind, colour and height
   $('exteriorRow').hidden = solid; $('solidFields').hidden = !solid; $('addRoom').hidden = solid || !Ed.roomId;

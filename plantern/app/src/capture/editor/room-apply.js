@@ -34,7 +34,8 @@ export async function apply() {
   if ($('rFloor').value === 'none') next.floor = 'none';
   if (off !== '') next.floorOffset = Number(off);
   if (ceil !== '') next.ceilingHeight = Number(ceil);
-  delete next.roof;
+  delete next.roof; delete next.floorMaterial;
+  if ($('rFloorMat').value) next.floorMaterial = $('rFloorMat').value;
   if ($('rRoof').value) {
     const num = id => { const t = $(id).value.trim(); return t === '' ? undefined : Number(t); };
     const shape = $('rRoof').value, roof = { shape, eaves: num('rEaves'), slope: shape === 'flat' ? undefined : num('rSlope'), overhang: num('rOver'),

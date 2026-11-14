@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.23
+
+- Glass walls, textured floors and posts (materials), roofs that meet cut each other
+
 ## 0.8.22
 
 - Raised decks and outbuildings sit on a slab, not a tall block

@@ -232,6 +232,25 @@ export function createView3d(container, hooks = {}) {
     return { geometry: out, materials: [base, face('left'), face('right')] };
   }
 
+  /**
+   * A floor, post or box with a material that has an image: UVs laid flat in plan on the top and bottom (the boards running
+   * along `tex.along`) and along the face and up it on the sides, in repeats of uvScale (mm).
+   */
+  function texturedSurface(geom, p, baseUrl, base) {
+    const pos = geom.attributes.position, nrm = geom.attributes.normal, uv = new Float32Array(pos.count * 2), scale = (p.tex.uvScale || 1000) * MM;
+    const a = dirToThree([p.tex.along[0], p.tex.along[1]]), au = new THREE.Vector3(a[0], 0, a[2]).normalize(), av = new THREE.Vector3(-au.z, 0, au.x), v = new THREE.Vector3(), n = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i); n.fromBufferAttribute(nrm, i);
+      if (Math.abs(n.y) > 0.7) { uv[i * 2] = v.dot(au) / scale; uv[i * 2 + 1] = v.dot(av) / scale; }
+      else { const t = new THREE.Vector3(-n.z, 0, n.x).normalize(); uv[i * 2] = v.dot(t) / scale; uv[i * 2 + 1] = v.y / scale; }
+    }
+    geom.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    const m = new THREE.MeshStandardMaterial({ map: texture(textureUrl(p.tex.texture, baseUrl)), roughness: 0.85, metalness: 0 });
+    if (base.transparent) Object.assign(m, { transparent: true, opacity: base.opacity, depthWrite: false });
+    base.dispose();
+    return m;
+  }
+
   function clear() {
     root.traverse(o => { o.geometry?.dispose(); [].concat(o.material || []).forEach(m => m.dispose()); });
     root.clear();
@@ -327,6 +346,7 @@ export function createView3d(container, hooks = {}) {
       if (p.sides) paintSides(geom, p.sides);
       mat = material(p);
       if (p.sides?.tex) ({ geometry: geom, materials: mat } = texturedWall(geom, p, baseUrl, mat));
+      else if (p.tex) mat = texturedSurface(geom, p, baseUrl, mat);
       // `dim` ({ ids, opacity }): the walls round the thing being edited (and the pieces of them round its openings) are drawn see-through (the Editor's preview)
       const dimmed = !!dim && ['wall', 'railing', 'rail'].includes(p.kind) && dim.ids.has(p.id);
       if (dimmed) for (const x of [].concat(mat)) Object.assign(x, { transparent: true, opacity: dim.opacity ?? 0.3, depthWrite: false });

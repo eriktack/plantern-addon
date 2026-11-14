@@ -75,7 +75,7 @@ export function wallToForm(wall) {
     sloped: !!(wall.top || wall.bottom), topA: s(wall.top?.a ?? ''), topB: s(wall.top?.b ?? ''), bottomA: s(wall.bottom?.a ?? ''), bottomB: s(wall.bottom?.b ?? ''),
     // level stretches at either end before the slope (mm along the wall)
     topFlatA: s(wall.top?.flatA ?? ''), topFlatB: s(wall.top?.flatB ?? ''), bottomFlatA: s(wall.bottom?.flatA ?? ''), bottomFlatB: s(wall.bottom?.flatB ?? ''),
-    height: s(wall.height), base: s(wall.base), lightBlocking: wall.lightBlocking ?? '',
+    height: s(wall.height), base: s(wall.base), lightBlocking: wall.lightBlocking ?? '', glass: !!wall.glass,
     // a hand-drawn wall's own position (a wall made from room edges follows its rooms)
     ax: s(wall.a?.[0]), ay: s(wall.a?.[1]), bx: s(wall.b?.[0]), by: s(wall.b?.[1]), justify: wall.justify ?? 'center', lock: wall.lock === 'axis',
     // each side: '' (default), 'color' or 'material'
@@ -94,11 +94,11 @@ export function wallToForm(wall) {
 export function wallPropsFromForm(wall, form) {
   const props = {}, errors = [], before = wallToForm(wall);
   if (form.name !== undefined) { const n = nameChange(wall.name, form.name); if (n !== undefined) props.name = n; }
-  const num = (name, text, { optional }) => {
+  const num = (name, text, { optional, negative = false }) => {
     const t = String(text ?? '').trim();
     if (t === '') return optional ? null : (errors.push(`${name} is required`), undefined);
     const v = Number(t);
-    if (!Number.isFinite(v) || v < 0) { errors.push(`${name}: "${t}" is not a number of mm (0 or more)`); return undefined; }
+    if (!Number.isFinite(v) || (v < 0 && !negative)) { errors.push(`${name}: "${t}" is not a number of mm (0 or more)`); return undefined; }
     return v;
   };
   if (form.kind !== before.kind) { if (KINDS.includes(form.kind)) props.kind = form.kind; else errors.push(`unknown kind "${form.kind}"`); }
@@ -107,13 +107,14 @@ export function wallPropsFromForm(wall, form) {
     if (v !== undefined) props.thickness = v;
   }
   for (const k of ['height', 'base']) if (String(form[k] ?? '').trim() !== before[k]) {
-    const v = num(k, form[k], { optional: true });
+    const v = num(k, form[k], { optional: true, negative: k === 'base' });   // a base below the floor: an outbuilding down the slope
     if (v !== undefined) {
       // a height of 0 means the same as empty: up to the ceiling (a wall with no height is not a wall)
       const val = k === 'height' && v === 0 ? null : v;
       if (val !== null || wall[k] !== undefined) props[k] = val;
     }
   }
+  if (form.glass !== undefined && !!form.glass !== before.glass) props.glass = form.glass ? true : null;
   if ((form.lightBlocking ?? '') !== before.lightBlocking) {
     if (BLOCKING.includes(form.lightBlocking)) props.lightBlocking = form.lightBlocking || null; else errors.push(`unknown light blocking "${form.lightBlocking}"`);
   }

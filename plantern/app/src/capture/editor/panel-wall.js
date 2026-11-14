@@ -35,7 +35,7 @@ export function showWall() {
   ].filter(Boolean).join(' · ');
   if (Ed.wallFormFor !== w) {
     const f = wallToForm(w);
-    $('wName').value = f.name; $('wKind').value = f.kind; $('wLight').value = f.lightBlocking; $('wThick').value = f.thickness; $('wMeasured').checked = f.measured;
+    $('wName').value = f.name; $('wKind').value = f.kind; $('wLight').value = f.lightBlocking; $('wThick').value = f.thickness; $('wMeasured').checked = f.measured; $('wGlass').checked = f.glass;
     $('wHeight').value = f.height; $('wBase').value = f.base;
     $('wPosBox').hidden = !!w.from?.length;
     $('wJustify').value = f.justify;
@@ -102,7 +102,7 @@ export function showWall() {
   $('wDelete').hidden = info.bound && !info.orphan;
 }
 
-const wallForm = () => ({ name: $('wName').value, kind: $('wKind').value, lightBlocking: $('wLight').value, thickness: $('wThick').value, measured: $('wMeasured').checked, height: $('wHeight').value, base: $('wBase').value,
+const wallForm = () => ({ name: $('wName').value, kind: $('wKind').value, lightBlocking: $('wLight').value, thickness: $('wThick').value, measured: $('wMeasured').checked, glass: $('wGlass').checked, height: $('wHeight').value, base: $('wBase').value,
   roomSides: readLookRows($('wRoomLooks'), Object.fromEntries(Object.entries(wall()?.roomSides || {}).filter(([id]) => !Ed.foldedLooks.has(id)))),
   ...(wall()?.from?.length ? {} : (() => { const e = wallEnds(); return { ax: e ? String(e.a[0]) : '', ay: e ? String(e.a[1]) : '', bx: e ? String(e.b[0]) : '', by: e ? String(e.b[1]) : '', justify: $('wJustify').value, lock: $('wLock').checked, anchor: anchorForm() }; })()),
   topFlatA: $('wTopFlatA').value, topFlatB: $('wTopFlatB').value, bottomFlatA: $('wBotFlatA').value, bottomFlatB: $('wBotFlatB').value,

@@ -241,6 +241,7 @@
       <label>Floor <select id="rFloor" data-seg><option value="slab">a floor (slab)</option><option value="none">none: open to the level below</option></select></label>
       <label>Floor level <small>mm above (− below) the level's floor: a step</small><input id="rFloorOff" inputmode="numeric" placeholder="0" autocomplete="off"></label>
       <label>Ceiling height <small>mm; empty = the level's <span id="rCeilNote"></span></small><input id="rCeil" inputmode="numeric" autocomplete="off"></label>
+      <label>Floor material <small>boards, tiles: a material from the list</small><select id="rFloorMat"></select></label>
       <label>Roof <small>over a pergola, a deck, a carport, a sauna</small><select id="rRoof"><option value="">none</option><option value="flat">flat</option><option value="single">single slope</option><option value="gable">gable (two sides)</option></select></label>
       <label data-roof>Eaves <small>mm above its floor; empty = 2200</small><input id="rEaves" inputmode="numeric" autocomplete="off"></label>
       <label data-roof="single gable">Slope <small>degrees; empty = 15 single, 25 gable</small><input id="rSlope" inputmode="decimal" autocomplete="off"></label>
@@ -365,6 +366,7 @@
         <select id="wLight" data-seg><option value="">default for the kind</option><option value="opaque">blocks light</option><option value="transparent">lets light through</option></select></label>
       <label>Thickness <small id="wThickNote">mm</small><input id="wThick" inputmode="numeric" autocomplete="off"></label>
       <label class="inl" id="wMeasuredRow"><input type="checkbox" id="wMeasured"> measured</label>
+      <label class="inl" id="wGlassRow"><input type="checkbox" id="wGlass"> glass (a greenhouse wall)</label>
       <label class="flat">Height <small>mm from its base; empty = up to the ceiling</small><input id="wHeight" inputmode="numeric" autocomplete="off"></label>
       <label class="flat">Base <small>mm above floor</small><input id="wBase" inputmode="numeric" placeholder="0" autocomplete="off"></label>
     </div>

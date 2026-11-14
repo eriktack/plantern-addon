@@ -219,7 +219,7 @@ export function createPlanView(svg, hooks = {}) {
 
     for (const r of level.rooms || []) {
       // no floor (open to the level below): darker, outline dashed
-      el('polygon', { points: svgPoints(r.polygon), fill: r.floor === 'none' ? palette.floorNone : r.exterior ? palette.floorExterior : palette.floor, ...(r.exterior && (underlays.length || yard) ? { 'fill-opacity': 0.5 } : {}), ...(r.floor === 'none' ? { stroke: palette.floorNoneOutline, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': '6 4' } : {}) }, gFloor);
+      el('polygon', { points: svgPoints(r.polygon), fill: r.floor === 'none' ? palette.floorNone : (r.floorMaterial && resolveSide({ material: r.floorMaterial }, materials)?.color) || (r.exterior ? palette.floorExterior : palette.floor), ...(r.exterior && (underlays.length || yard) ? { 'fill-opacity': 0.5 } : {}), ...(r.floor === 'none' ? { stroke: palette.floorNoneOutline, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': '6 4' } : {}) }, gFloor);
       all.push(...r.polygon);
       // the name where the room is widest, sized to fit (two lines when that is bigger)
       const lay = roomNameLayout(r.polygon, r.name || r.id, { avoid: labelObstacles(level, geo) }), c = toSvg(lay.pos);
@@ -248,7 +248,7 @@ export function createPlanView(svg, hooks = {}) {
     for (const w of level.walls || []) {
       for (const poly of geo.pieces.get(w.id) || []) {
         all.push(...poly);
-        const fill = w.kind === 'railing' ? palette.wallRailing : palette.wall;
+        const fill = w.kind === 'railing' ? palette.wallRailing : w.glass ? palette.wallGlass : palette.wall;
         // above the plan's cut height (a lintel): dashed and see-through, like a wall cabinet
         const cut = wallCut(w, level, settings.cutPlane);
         if (cut === 'above') { el('polygon', { points: svgPoints(poly), fill, 'fill-opacity': 0.3, stroke: fill, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': '6 4' }, gWall); continue; }

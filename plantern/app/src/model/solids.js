@@ -35,6 +35,7 @@ export function checkSolid(s, level) {
   const lowest = -(level.floorThickness ?? 0);
   if (s.base !== undefined && !(Number.isFinite(s.base) && s.base >= lowest)) errors.push(lowest < 0 ? `base must be ${lowest} (the ceiling of the level below) or more mm above the floor` : 'base must be 0 or more mm above the floor');
   if (s.height !== undefined && !(Number.isFinite(s.height) && s.height > 0)) errors.push('height must be more than 0 mm');
+  if (s.material !== undefined && (typeof s.material !== 'string' || !s.material)) errors.push('material is the id of a material');
   if (s.color !== undefined && !HEX.test(s.color)) errors.push(`colour "${s.color}" must look like #rrggbb`);
   if (s.cutsWalls !== undefined && typeof s.cutsWalls !== 'boolean') errors.push('cutsWalls must be true or false');
   const top = s.height !== undefined ? (s.base ?? 0) + s.height : level.ceilingHeight ?? 2400;
