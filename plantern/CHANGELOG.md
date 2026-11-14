@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.22
+
+- Raised decks and outbuildings sit on a slab, not a tall block
+
 ## 0.8.21
 
 - Outbuildings above or below the house floor validate cleanly (windows, wall heights)
