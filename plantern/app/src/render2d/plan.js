@@ -218,7 +218,7 @@ export function createPlanView(svg, hooks = {}) {
 
     for (const r of level.rooms || []) {
       // no floor (open to the level below): darker, outline dashed
-      el('polygon', { points: svgPoints(r.polygon), fill: r.floor === 'none' ? palette.floorNone : r.exterior ? palette.floorExterior : palette.floor, ...(r.floor === 'none' ? { stroke: palette.floorNoneOutline, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': '6 4' } : {}) }, gFloor);
+      el('polygon', { points: svgPoints(r.polygon), fill: r.floor === 'none' ? palette.floorNone : r.exterior ? palette.floorExterior : palette.floor, ...(r.exterior && (underlays.length || yard) ? { 'fill-opacity': 0.5 } : {}), ...(r.floor === 'none' ? { stroke: palette.floorNoneOutline, 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', 'stroke-dasharray': '6 4' } : {}) }, gFloor);
       all.push(...r.polygon);
       // the name where the room is widest, sized to fit (two lines when that is bigger)
       const lay = roomNameLayout(r.polygon, r.name || r.id, { avoid: labelObstacles(level, geo) }), c = toSvg(lay.pos);
