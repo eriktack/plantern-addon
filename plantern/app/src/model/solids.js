@@ -9,7 +9,7 @@
 // A raised solid (`base` above the floor: boxing under the ceiling) does not bound rooms or cut walls;
 // without a height it reaches up to the ceiling. A lintel or a wall inside a room is a hand-drawn wall. Pure.
 
-import { isClockwise } from '../geometry/polygon.js';
+import { isClockwise, pointInPolygon } from '../geometry/polygon.js';
 import { solidStretches } from '../geometry/solids.js';
 
 export const SOLID_KINDS = ['chimney', 'pillar', 'box'];
@@ -38,6 +38,10 @@ export function checkSolid(s, level) {
   if (s.color !== undefined && !HEX.test(s.color)) errors.push(`colour "${s.color}" must look like #rrggbb`);
   if (s.cutsWalls !== undefined && typeof s.cutsWalls !== 'boolean') errors.push('cutsWalls must be true or false');
   const top = s.height !== undefined ? (s.base ?? 0) + s.height : level.ceilingHeight ?? 2400;
-  if (s.height !== undefined && top > (level.ceilingHeight ?? 2400) + 1) warnings.push(`rises to ${top} mm, above the ceiling (${level.ceilingHeight ?? 2400} mm)`);
+  // outdoors (in an exterior room, or in no room: a post in the yard) there is no ceiling to stay under
+  const mid = s.polygon?.length ? s.polygon.reduce((a, p) => [a[0] + p[0] / s.polygon.length, a[1] + p[1] / s.polygon.length], [0, 0]) : null;
+  const inRoom = mid && (level.rooms || []).find(r => r.polygon?.length >= 3 && pointInPolygon(mid, r.polygon));
+  const outdoors = mid && (!inRoom || inRoom.exterior);
+  if (s.height !== undefined && !outdoors && top > (level.ceilingHeight ?? 2400) + 1) warnings.push(`rises to ${top} mm, above the ceiling (${level.ceilingHeight ?? 2400} mm)`);
   return { errors, warnings };
 }

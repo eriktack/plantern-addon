@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.19
+
+- Outdoor posts can be taller than the house's ceiling without a warning
+
 ## 0.8.18
 
 - Roofs in parts: an L roof falling to both outer sides
