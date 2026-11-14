@@ -52,7 +52,9 @@ export function levelPrisms(level, geo, materials = {}, options = {}) {
   for (const r of level.rooms || []) {
     if (r.floor === 'none') continue;
     const holes = (geo.holes || []).filter(h => pointInPolygon([h.poly.reduce((s, p) => s + p[0], 0) / h.poly.length, h.poly.reduce((s, p) => s + p[1], 0) / h.poly.length], r.polygon)).map(h => h.poly);
-    P({ id: r.id, kind: 'floor', poly: r.polygon, z0: r.exterior ? -Math.min(ft, 150) : -ft, z1: r.floorOffset ?? 0,
+    // a floor below the level's (an outbuilding down the slope) keeps its own thickness under it
+    const z1 = r.floorOffset ?? 0, slab = r.exterior ? Math.min(ft, 150) : ft;
+    P({ id: r.id, kind: 'floor', poly: r.polygon, z0: Math.min(-slab, z1 - slab), z1,
         color: r.floorColor || (r.exterior ? DEFAULT_COLORS.floorExterior : DEFAULT_COLORS.floor), ...(holes.length ? { holes } : {}) });
   }
 

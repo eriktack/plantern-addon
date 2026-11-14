@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.20
+
+- Outbuildings lower than the house floor are drawn correctly in 3D
+
 ## 0.8.19
 
 - Outdoor posts can be taller than the house's ceiling without a warning
