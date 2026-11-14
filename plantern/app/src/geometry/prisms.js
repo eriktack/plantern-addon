@@ -14,6 +14,7 @@ import { padlockPrisms } from './padlock.js';
 import { roomCeiling } from '../model/rooms.js';
 
 /** Default colours; model colours (sides.*.color, solid/object color) win. */
+const ROOF_COLORS = { solid: '#7a5236', translucent: '#f2f1ea', glass: '#9fd3ff' };
 export const DEFAULT_COLORS = Object.freeze({
   wall: '#e6e2da', wallTop: '#9a958c', railing: '#3a3d42', glass: '#9fd3ff',
   ceiling: '#f2efe8', roof: '#7a5236', floor: '#c8b293', floorExterior: '#8f8f86', solid: '#6b4f3a', object: '#888888', stair: '#b59f7e', handrail: '#6b5442',
@@ -66,8 +67,11 @@ export function levelPrisms(level, geo, materials = {}, options = {}) {
   }
 
   // roofs over rooms (an outdoor room, a small building; docs/plans/yard.md Y9): sloped slabs, see-through unless every ceiling is drawn
-  for (const r of level.rooms || []) for (const [k, p] of roofPieces(r).entries())
-    P({ id: r.id, kind: 'roof', part: k, poly: p.poly, z0: p.z0, z1: p.z1, ...(p.slope ? { slope: p.slope } : {}), color: r.roof.color || DEFAULT_COLORS.roof, ...(options.ceilings ? {} : { opacity: 0.55 }) });
+  // the cover: a solid roof is opaque in a view from inside; white plastic lets some light through; glass is clear
+  for (const r of level.rooms || []) for (const [k, p] of roofPieces(r).entries()) {
+    const cover = r.roof.cover ?? 'solid', opacity = cover === 'glass' ? 0.25 : cover === 'translucent' ? (options.ceilings ? 0.8 : 0.55) : options.ceilings ? null : 0.55;
+    P({ id: r.id, kind: 'roof', part: k, cover, poly: p.poly, z0: p.z0, z1: p.z1, ...(p.slope ? { slope: p.slope } : {}), color: r.roof.color || ROOF_COLORS[cover], ...(opacity == null ? {} : { opacity }) });
+  }
 
   // stairs starting here: one block per step from the floor up to its surface (open undersides: a thin tread)
   for (const s of geo.stairs || []) {

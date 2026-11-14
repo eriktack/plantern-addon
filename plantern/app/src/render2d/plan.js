@@ -126,7 +126,8 @@ function drawRoofs(level, g, palette) {
     const ps = roofPieces(r);
     if (!ps.length) continue;
     const sw = { stroke: palette.roof, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none' };
-    for (const p of ps) el('polygon', { points: svgPoints(p.poly), fill: 'none', ...sw, 'stroke-dasharray': '8 5' }, g);
+    if (r.roof.cover === 'glass') sw['stroke-opacity'] = 0.6;
+    for (const p of ps) el('polygon', { points: svgPoints(p.poly), fill: 'none', ...sw, 'stroke-dasharray': r.roof.cover === 'glass' ? '3 4' : '8 5' }, g);
     const ridge = ps.find(p => p.ridge)?.ridge;
     if (ridge) el('polyline', { points: svgPoints(ridge), fill: 'none', ...sw, 'stroke-width': 2.5 }, g);
     for (const p of ps.filter(q => q.fallTo)) {

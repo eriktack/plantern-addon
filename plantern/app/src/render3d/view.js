@@ -168,7 +168,7 @@ export function createView3d(container, hooks = {}) {
   }
 
   function material(p) {
-    const opts = { color: p.sides ? 0xffffff : new THREE.Color(p.color), roughness: p.kind === 'glass' ? 0.1 : 0.85, metalness: 0, vertexColors: !!p.sides };
+    const opts = { color: p.sides ? 0xffffff : new THREE.Color(p.color), roughness: p.kind === 'glass' || p.cover === 'glass' ? 0.1 : 0.85, metalness: 0, vertexColors: !!p.sides };
     if (p.opacity != null && p.opacity < 1) Object.assign(opts, { transparent: true, opacity: p.opacity, depthWrite: false });
     return new THREE.MeshStandardMaterial(opts);
   }
@@ -333,7 +333,7 @@ export function createView3d(container, hooks = {}) {
       const m = new THREE.Mesh(geom, mat);
       m.name = `${p.id}:${p.kind}`;
       m.userData = { id: p.id, kind: p.kind };
-      m.castShadow = !dimmed && !['glass', 'railing', 'floor'].includes(p.kind);
+      m.castShadow = !dimmed && !['glass', 'railing', 'floor'].includes(p.kind) && p.cover !== 'glass';
       m.receiveShadow = p.kind !== 'glass';
       // a door's leaf gets a thin outline, amber when it is open and grey when closed (issue #29): the leaf stays see-through
       if (p.kind === 'leaf') m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geom), new THREE.LineBasicMaterial({ color: p.open ? 0xffb454 : 0xc9ced8, transparent: true, opacity: 0.85, depthWrite: false })));

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.17
+
+- Roofs can have their own outline (an L) and a cover: solid, translucent or glass
+
 ## 0.8.16
 
 - Outdoor rooms over the drone photo or the yard are see-through in the plan
