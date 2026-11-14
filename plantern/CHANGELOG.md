@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.15
+
+- Roofs over rooms (pergola, deck, carport): flat, single slope or gable
+
 ## 0.8.14
 
 - The yard: surfaces, fences and retaining walls around the house, drawn on the ground floor and in the Editor's Yard section

@@ -34,6 +34,15 @@ export async function apply() {
   if ($('rFloor').value === 'none') next.floor = 'none';
   if (off !== '') next.floorOffset = Number(off);
   if (ceil !== '') next.ceilingHeight = Number(ceil);
+  delete next.roof;
+  if ($('rRoof').value) {
+    const num = id => { const t = $(id).value.trim(); return t === '' ? undefined : Number(t); };
+    const shape = $('rRoof').value, roof = { shape, eaves: num('rEaves'), slope: shape === 'flat' ? undefined : num('rSlope'), overhang: num('rOver'),
+      ridge: shape === 'gable' && $('rRidge').value === 'short' ? 'short' : undefined, fall: shape === 'single' ? Number($('rFall').value) || 0 : undefined,
+      color: $('rRoofCol').value !== '#7a5236' ? $('rRoofCol').value : undefined };
+    for (const k of Object.keys(roof)) if (roof[k] === undefined) delete roof[k];
+    next.roof = roof;
+  }
   if ((off !== '' && !Number.isFinite(next.floorOffset)) || (ceil !== '' && !(next.ceilingHeight > 0))) { setStatus('Floor level and ceiling height must be numbers of mm (ceiling more than 0)'); return; }
   const r = applyRoom(Ed.model, Ed.levelId, next, { settings: resolveSettings(Ed.loc, level()) });
   if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return; }

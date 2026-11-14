@@ -21,6 +21,7 @@ import { layerOf } from '../model/device-layers.js';
 import { headingFromBearing } from '../model/orientation.js';
 import { cameraCone, sectorOutline, panSpan, reachArea, wifiGrid, wifiStep } from '../geometry/coverage.js';
 import { parseColour } from './palette.js';
+import { roofPieces } from '../geometry/roof.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 export const el = (t, a = {}, parent) => {
@@ -119,6 +120,24 @@ function drawWifi(g, wifi, palette) {
  * The yard (docs/plans/yard.md) under the floor of the ground level: its areas in order (later ones on top), each filled by its
  * surface, then its lines by kind; a retaining wall gets ticks on its low side. yard = model.yard.
  */
+/** Roofs over rooms (docs/plans/yard.md Y9): each piece's outline dashed, the ridge of a gable, the fall of a single slope as an arrow. */
+function drawRoofs(level, g, palette) {
+  for (const r of level.rooms || []) {
+    const ps = roofPieces(r);
+    if (!ps.length) continue;
+    const sw = { stroke: palette.roof, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none' };
+    for (const p of ps) el('polygon', { points: svgPoints(p.poly), fill: 'none', ...sw, 'stroke-dasharray': '8 5' }, g);
+    const ridge = ps.find(p => p.ridge)?.ridge;
+    if (ridge) el('polyline', { points: svgPoints(ridge), fill: 'none', ...sw, 'stroke-width': 2.5 }, g);
+    for (const p of ps.filter(q => q.fallTo)) {
+      const c = p.poly.reduce((a, q) => [a[0] + q[0] / p.poly.length, a[1] + q[1] / p.poly.length], [0, 0]), [x0, y0] = toSvg(c), [x1, y1] = toSvg(p.fallTo);
+      const a = Math.atan2(y1 - y0, x1 - x0), h = Math.min(400, Math.hypot(x1 - x0, y1 - y0) / 3), w = 0.45;
+      el('polyline', { points: `${x0},${y0} ${x1},${y1}`, fill: 'none', ...sw, 'stroke-width': 2.5 }, g);
+      el('polygon', { points: `${x1},${y1} ${x1 - h * Math.cos(a - w)},${y1 - h * Math.sin(a - w)} ${x1 - h * Math.cos(a + w)},${y1 - h * Math.sin(a + w)}`, fill: palette.roof, 'pointer-events': 'none' }, g);
+    }
+  }
+}
+
 function drawYard(g, yard, palette) {
   for (const a of yard.areas || []) {
     if (!Array.isArray(a.polygon) || a.polygon.length < 3) continue;
@@ -189,7 +208,7 @@ export function createPlanView(svg, hooks = {}) {
     const defs = el('defs', {}, svg), layer = id => el('g', { id }, svg);
     drawUnderlays(layer('underlay'), level ? underlays : []);
     if (level && yard) drawYard(layer('yard'), yard, palette);
-    const gFloor = layer('floor'), gLight = layer('light'), gCov = layer('coverage'), gObj = layer('objects'), gWall = layer('walls'), gFix = layer('fixtures'), gDev = layer('devices');
+    const gFloor = layer('floor'), gLight = layer('light'), gCov = layer('coverage'), gObj = layer('objects'), gWall = layer('walls'), gRoof = layer('roofs'), gFix = layer('fixtures'), gDev = layer('devices');
     overlay = layer('overlay');
     const all = [];
     if (!level) {
@@ -295,6 +314,7 @@ export function createPlanView(svg, hooks = {}) {
       }
     }
 
+    drawRoofs(level, gRoof, palette);
     const occ = occluders(geo, { cutPlane: settings.cutPlane, doorStates });
     // a camera hangs above the doors: an open door's leaf (2D, no height) must not cut its view, as it does a lamp's light
     if (devices) drawDevices(level, geo, occ, devices, gCov, gDev, fixtureLabel, palette, occluders(geo, { cutPlane: settings.cutPlane, doorStates, leaves: false }));

@@ -34,6 +34,8 @@ import { Ed } from './state.js';
 import { underlaysSvg, fitMarksSvg } from './underlays.js';
 import { bearingSvg } from './device-drag.js';
 import { yardSvg, yardDraftSvg } from './yard.js';
+import { roofPieces } from '../../geometry/roof.js';
+import { DARK_PALETTE } from '../../render2d/palette.js';
 import { pickVerb, pointerIsCoarse } from '../../touch.js';
 
 
@@ -390,6 +392,15 @@ function drawPlan() {
     }
   }
   // the corners of the room being edited can be dragged (on top of the start dots: a click without a drag still picks the dot under it)
+  // roofs over rooms (yard plan Y9): dashed outlines, a gable's ridge, a single slope's fall (the room being edited: as it is now)
+  for (const r of lv.rooms || []) {
+    const rr = r.id === Ed.roomId && cur ? { ...r, polygon: cur } : r, c = DARK_PALETTE.roof;
+    for (const p of roofPieces(rr)) {
+      out += `<polygon points="${p.poly.map(q => toSvg(q).join(',')).join(' ')}" fill="none" stroke="${c}" stroke-width="${fs / 8}" stroke-dasharray="${fs / 2} ${fs / 3}" pointer-events="none"/>`;
+      if (p.ridge) out += `<polyline points="${p.ridge.map(q => toSvg(q).join(',')).join(' ')}" fill="none" stroke="${c}" stroke-width="${fs / 5}" pointer-events="none"/>`;
+      if (p.fallTo) { const m = p.poly.reduce((a, q) => [a[0] + q[0] / 4, a[1] + q[1] / 4], [0, 0]); out += `<polyline points="${toSvg(m).join(',')} ${toSvg(p.fallTo).join(',')}" fill="none" stroke="${c}" stroke-width="${fs / 5}" pointer-events="none"/><circle cx="${toSvg(p.fallTo)[0]}" cy="${toSvg(p.fallTo)[1]}" r="${fs * 0.3}" fill="${c}" pointer-events="none"/>`; }
+    }
+  }
   out += onTop;
   out += `<g id="curHandles">${curHandlesSvg(cur, fs)}</g>`;
   out += fitMarksSvg(fs);                                       // the points of a photo being fitted

@@ -222,6 +222,14 @@
             }
           },
           "exterior": false
+        },
+        {
+          "id": "r_pergola",
+          "name": "Pergola",
+          "exterior": true,
+          "polygon": [[-5200,-4200],[-5200,-1400],[-1200,-1400],[-1200,-4200]],
+          "floorOffset": 150,
+          "roof": { "shape": "gable", "eaves": 2300, "slope": 22 }
         }
       ],
       "walls": [
@@ -381,6 +389,46 @@
           "height": 300,
           "sides": { "left": { "color": "#e8e0d0" }, "right": { "color": "#e8e0d0" } },
           "anchor": { "a": { "ref": "r_studio#p2", "offset": [-100, -1100] }, "b": { "ref": "r_studio#p2", "offset": [-100, 0] } }
+        },
+        {
+          "id": "w_pergola_e0",
+          "kind": "virtual",
+          "a": [-5200,-4200],
+          "b": [-5200,-1400],
+          "thickness": 0,
+          "justify": "center",
+          "rooms": ["r_pergola"],
+          "from": ["r_pergola#e0"]
+        },
+        {
+          "id": "w_pergola_e1",
+          "kind": "virtual",
+          "a": [-5200,-1400],
+          "b": [-1200,-1400],
+          "thickness": 0,
+          "justify": "center",
+          "rooms": ["r_pergola"],
+          "from": ["r_pergola#e1"]
+        },
+        {
+          "id": "w_pergola_e2",
+          "kind": "virtual",
+          "a": [-1200,-1400],
+          "b": [-1200,-4200],
+          "thickness": 0,
+          "justify": "center",
+          "rooms": ["r_pergola"],
+          "from": ["r_pergola#e2"]
+        },
+        {
+          "id": "w_pergola_e3",
+          "kind": "virtual",
+          "a": [-1200,-4200],
+          "b": [-5200,-4200],
+          "thickness": 0,
+          "justify": "center",
+          "rooms": ["r_pergola"],
+          "from": ["r_pergola#e3"]
         }
       ],
       "openings": [

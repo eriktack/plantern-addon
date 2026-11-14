@@ -2,6 +2,9 @@
 //   floor: "slab" (default) | "none"   no slab: the room is open to the level below (double height, a gallery)
 //   floorOffset: mm                   its floor above (+) or below (−) the level's finished floor (a step)
 //   ceilingHeight: mm                 its own ceiling instead of the level's (a lowered bathroom ceiling)
+//   roof: { shape, eaves, slope, ridge, fall, overhang, color }   a roof over it (an outdoor room, a small building; src/geometry/roof.js)
+
+import { roofErrors } from '../geometry/roof.js';
 
 export const ROOM_FLOORS = ['slab', 'none'];
 
@@ -19,6 +22,7 @@ export function checkRoomOptions(r, level, below) {
   if (r.floor !== undefined && !ROOM_FLOORS.includes(r.floor)) errors.push(`floor must be ${ROOM_FLOORS.map(f => `"${f}"`).join(' or ')}`);
   if (r.floorOffset !== undefined && !Number.isFinite(r.floorOffset)) errors.push('floorOffset must be a number of mm');
   if (r.ceilingHeight !== undefined && !(r.ceilingHeight > 0)) errors.push('ceilingHeight must be more than 0');
+  if (r.roof !== undefined) errors.push(...roofErrors(r.roof, r));
   if (r.floor === 'none' && !below) warnings.push('has no floor and nothing below it: there is nothing to look down onto');
   if (r.floor === 'none' && r.floorOffset) warnings.push('floorOffset has no effect without a floor');
   if (Number.isFinite(r.ceilingHeight) && r.ceilingHeight > (level.ceilingHeight ?? Infinity) + 1) warnings.push(`ceiling ${r.ceilingHeight} mm is higher than the level's ${level.ceilingHeight} mm: only a room open to the level above can be that high`);

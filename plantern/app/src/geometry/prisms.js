@@ -8,6 +8,7 @@ import { pointInPolygon } from './polygon.js';
 import { stairSolids, stairRails } from './stairs.js';
 import { openingFittings } from './fittings.js';
 import { doorOpen } from '../model/doors.js';
+import { roofPieces } from './roof.js';
 import { lockOf } from '../ha/door.js';
 import { padlockPrisms } from './padlock.js';
 import { roomCeiling } from '../model/rooms.js';
@@ -15,7 +16,7 @@ import { roomCeiling } from '../model/rooms.js';
 /** Default colours; model colours (sides.*.color, solid/object color) win. */
 export const DEFAULT_COLORS = Object.freeze({
   wall: '#e6e2da', wallTop: '#9a958c', railing: '#3a3d42', glass: '#9fd3ff',
-  ceiling: '#f2efe8', floor: '#c8b293', floorExterior: '#8f8f86', solid: '#6b4f3a', object: '#888888', stair: '#b59f7e', handrail: '#6b5442',
+  ceiling: '#f2efe8', roof: '#7a5236', floor: '#c8b293', floorExterior: '#8f8f86', solid: '#6b4f3a', object: '#888888', stair: '#b59f7e', handrail: '#6b5442',
 });
 
 const RAIL_CAP = 50;   // mm: solid top rail of a railing
@@ -31,7 +32,7 @@ const PAINT = 3;       // mm: the paint skin on a solid's face where a room has 
  *   a (at origin) to b (L mm along u); z0 / z1 are then the lowest and highest points.
  *   bar: { a, b, diameter } a round cylinder between two 3D points, ball: { center, diameter }, circle: { center, diameter } an upright round solid
  *   (round handrails, round pillars): the renderer draws those, `poly` and z0 / z1 are their outline in plan and their extent.
- *   kind: floor | ceiling | wall | railing | rail | glass | frame | leaf | sill | handrail | post | solid | paint | object
+ *   kind: floor | ceiling | roof | wall | railing | rail | glass | frame | leaf | sill | handrail | post | solid | paint | object
  *   frame, leaf, sill, glass: what fills an opening (geometry/fittings.js)
  *   padlock: a door's lock from Home Assistant, on each face of its wall (geometry/padlock.js; body prism and `bar` shackle)
  *   paint: a thin skin on the stretch of a solid's face along a room painted for that room (solids[].sides)
@@ -63,6 +64,10 @@ export function levelPrisms(level, geo, materials = {}, options = {}) {
     const top = roomCeiling(level, r);
     P({ id: r.id, kind: 'ceiling', poly: r.polygon, z0: top, z1: top + CEILING, color: r.ceilingColor || DEFAULT_COLORS.ceiling, ...(options.ceilings ? {} : { opacity: 0.45 }) });
   }
+
+  // roofs over rooms (an outdoor room, a small building; docs/plans/yard.md Y9): sloped slabs, see-through unless every ceiling is drawn
+  for (const r of level.rooms || []) for (const [k, p] of roofPieces(r).entries())
+    P({ id: r.id, kind: 'roof', part: k, poly: p.poly, z0: p.z0, z1: p.z1, ...(p.slope ? { slope: p.slope } : {}), color: r.roof.color || DEFAULT_COLORS.roof, ...(options.ceilings ? {} : { opacity: 0.55 }) });
 
   // stairs starting here: one block per step from the floor up to its surface (open undersides: a thin tread)
   for (const s of geo.stairs || []) {

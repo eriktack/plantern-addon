@@ -105,6 +105,7 @@ export function loadFormForSelection() {
   $('exterior').checked = r ? !!r.exterior : !!Ed.draft?.exterior;
   $('rFloor').value = r?.floor ?? 'slab'; $('rFloorOff').value = r?.floorOffset ?? ''; $('rCeil').value = r?.ceilingHeight ?? '';
   $('rCeilNote').textContent = `(${level().ceilingHeight ?? 2400})`;
+  loadRoofFields(r);
   $('roomOptions').hidden = solid;
   // a solid is measured like a room (walking round it, the solid on your right) and has a kind, colour and height
   $('exteriorRow').hidden = solid; $('solidFields').hidden = !solid; $('addRoom').hidden = solid || !Ed.roomId;
@@ -124,3 +125,18 @@ export function loadFormForSelection() {
 
 export function selectSolid(id) { Ed.shape = 'solid'; Ed.roomId = id; Ed.wallId = null; Ed.openingId = null; Ed.fixtureId = null; Ed.stairsId = null; Ed.objectId = null; Ed.draft = null; loadFormForSelection(); refresh(); }
 export function selectRoom(id) { Ed.shape = 'room'; Ed.roomId = id; Ed.wallId = null; Ed.openingId = null; Ed.fixtureId = null; Ed.stairsId = null; Ed.draft = null; loadFormForSelection(); refresh(); }
+
+/** The room form's roof fields (docs/plans/yard.md Y9) from a room; the fields that do not apply to the shape are hidden. */
+export function loadRoofFields(r) {
+  const f = r?.roof || {}, n = (r?.polygon || Ed.solved?.polygon || []).length;
+  $('rRoof').value = f.shape ?? ''; $('rEaves').value = f.eaves ?? ''; $('rSlope').value = f.slope ?? ''; $('rOver').value = f.overhang ?? '';
+  $('rRidge').value = f.ridge ?? 'long'; $('rRoofCol').value = f.color ?? '#7a5236';
+  $('rFall').innerHTML = Array.from({ length: n }, (_, i) => `<option value="${i}">${String.fromCharCode(65 + (i % 26))}</option>`).join('');
+  $('rFall').value = String(f.fall ?? 0);
+  $('rRoof').onchange = showRoofFields;
+  showRoofFields();
+}
+export function showRoofFields() {
+  const shape = $('rRoof').value;
+  document.querySelectorAll('[data-roof]').forEach(l => { const on = l.dataset.roof; l.hidden = !shape || (on !== '' && !on.split(' ').includes(shape)); });
+}

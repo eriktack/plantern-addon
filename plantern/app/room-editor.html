@@ -241,6 +241,13 @@
       <label>Floor <select id="rFloor" data-seg><option value="slab">a floor (slab)</option><option value="none">none: open to the level below</option></select></label>
       <label>Floor level <small>mm above (− below) the level's floor: a step</small><input id="rFloorOff" inputmode="numeric" placeholder="0" autocomplete="off"></label>
       <label>Ceiling height <small>mm; empty = the level's <span id="rCeilNote"></span></small><input id="rCeil" inputmode="numeric" autocomplete="off"></label>
+      <label>Roof <small>over a pergola, a deck, a carport, a sauna</small><select id="rRoof"><option value="">none</option><option value="flat">flat</option><option value="single">single slope</option><option value="gable">gable (two sides)</option></select></label>
+      <label data-roof>Eaves <small>mm above its floor; empty = 2200</small><input id="rEaves" inputmode="numeric" autocomplete="off"></label>
+      <label data-roof="single gable">Slope <small>degrees; empty = 15 single, 25 gable</small><input id="rSlope" inputmode="decimal" autocomplete="off"></label>
+      <label data-roof>Overhang <small>mm past the room's edges; empty = 300</small><input id="rOver" inputmode="numeric" autocomplete="off"></label>
+      <label data-roof="gable">Ridge <select id="rRidge"><option value="long">along the long side</option><option value="short">along the short side</option></select></label>
+      <label data-roof="single">Falls towards <small>the wall letter on the plan</small><select id="rFall"></select></label>
+      <label data-roof>Roof colour <input type="color" id="rRoofCol" value="#7a5236"></label>
     </div>
     <div class="grid2" id="solidFields" hidden>
       <label>Kind<select id="sKind" data-seg><option value="chimney" data-icon="chimney">chimney</option><option value="pillar" data-icon="pillar">pillar</option><option value="box" data-icon="box">boxed-in pipe or duct</option></select></label>
