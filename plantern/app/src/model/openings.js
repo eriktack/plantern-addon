@@ -31,7 +31,8 @@ export function checkOpening(o, wall, level, others = []) {
   if (err.length) return err;
   if (!(o.width > 0)) err.push('width must be more than 0');
   if (o.offset < 0 || o.offset + o.width > L + 1) err.push(`does not fit on ${wall.id} (${Math.round(L)} mm long): ${o.offset} + ${o.width} mm`);
-  if (o.sill < 0) err.push('the bottom (sill) cannot be below the floor');
+  // a wall standing lower than the level's floor (an outbuilding down the slope) takes openings down to its own base
+  if (o.sill < Math.min(0, bottom) - 1) err.push('the bottom (sill) cannot be below the floor');
   if (!(o.head > o.sill)) err.push('the top must be above the bottom');
   if (o.head > top + 1) err.push(`the top (${o.head} mm) is above the wall (${Math.round(top)} mm${prof.sloped ? ' where the opening is' : ''})`);
   if (prof.sloped && o.sill < bottom - 1) err.push(`the bottom (${o.sill} mm) is below the wall (${Math.round(bottom)} mm there)`);

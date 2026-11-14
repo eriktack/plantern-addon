@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.21
+
+- Outbuildings above or below the house floor validate cleanly (windows, wall heights)
+
 ## 0.8.20
 
 - Outbuildings lower than the house floor are drawn correctly in 3D
