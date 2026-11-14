@@ -131,7 +131,7 @@ export function loadRoofFields(r) {
   const f = r?.roof || {}, n = (r?.polygon || Ed.solved?.polygon || []).length;
   $('rRoof').value = f.shape ?? ''; $('rEaves').value = f.eaves ?? ''; $('rSlope').value = f.slope ?? ''; $('rOver').value = f.overhang ?? '';
   $('rRidge').value = f.ridge ?? 'long'; $('rRoofCol').value = f.color ?? '#7a5236'; $('rCover').value = f.cover ?? 'solid';
-  $('rRoofCol').dataset.was = $('rRoofCol').value; Ed.roofOutline = f.outline ?? null;
+  $('rRoofCol').dataset.was = $('rRoofCol').value; Ed.roofOutline = f.outline ?? null; Ed.roofParts = f.parts ?? null;
   $('rFall').innerHTML = Array.from({ length: n }, (_, i) => `<option value="${i}">${String.fromCharCode(65 + (i % 26))}</option>`).join('');
   $('rFall').value = String(f.fall ?? 0);
   $('rRoof').onchange = showRoofFields;
@@ -140,5 +140,5 @@ export function loadRoofFields(r) {
 export function showRoofFields() {
   const shape = $('rRoof').value;
   document.querySelectorAll('[data-roof]').forEach(l => { const on = l.dataset.roof; l.hidden = !shape || (on !== '' && !on.split(' ').includes(shape)); });
-  $('rOutlineNote').hidden = !shape || !Ed.roofOutline;
+  $('rOutlineNote').hidden = !shape || !(Ed.roofOutline || Ed.roofParts);
 }

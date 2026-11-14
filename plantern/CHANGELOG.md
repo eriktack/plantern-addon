@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.18
+
+- Roofs in parts: an L roof falling to both outer sides
+
 ## 0.8.17
 
 - Roofs can have their own outline (an L) and a cover: solid, translucent or glass

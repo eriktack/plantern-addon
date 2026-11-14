@@ -4,7 +4,9 @@
 //                 (default 15 single, 25 gable), ridge?: "long" | "short" (gable: along the room's longer or shorter side),
 //                 fall?: edge index (single: the roof falls towards that edge of the room), overhang?: mm (default 300), color?,
 //                 outline?: [[x, y], …] the roof's own outline in plan mm (an L roof over a room of another shape; replaces the
-//                 rectangle and the overhang; a gable takes the outline's rectangle), cover?: "solid" | "translucent" | "glass" }
+//                 rectangle and the overhang; a gable takes the outline's rectangle), cover?: "solid" | "translucent" | "glass",
+//                 parts?: [{ outline, fall, slope? }] (single: several planes, each falling to edge `fall` of its own outline; an L
+//                 roof that falls to both its outer sides, meeting in a valley) }
 // The roof is the room's outline turned to the roof's axes, as a rectangle, grown by the overhang. Heights are mm above the
 // level's floor (the room's floorOffset counted). A slab ROOF_T thick, sloped with the prisms' `slope` (prisms.js).
 
@@ -38,6 +40,15 @@ export function roofErrors(roof, room) {
   if (roof.ridge !== undefined && !['long', 'short'].includes(roof.ridge)) e.push('roof.ridge is "long" or "short"');
   if (roof.fall !== undefined && !(Number.isInteger(roof.fall) && roof.fall >= 0 && roof.fall < (room?.polygon?.length ?? Infinity))) e.push('roof.fall is the index of an edge of the room');
   if (roof.outline !== undefined && !(Array.isArray(roof.outline) && roof.outline.length >= 3 && roof.outline.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)))) e.push('roof.outline is 3 or more plan points [x, y]');
+  if (roof.parts !== undefined) {
+    if (!Array.isArray(roof.parts) || !roof.parts.length) e.push('roof.parts is a list of { outline, fall }');
+    else if (roof.shape !== 'single') e.push('roof.parts are for a single-slope roof');
+    else roof.parts.forEach((p, i) => {
+      if (!(Array.isArray(p?.outline) && p.outline.length >= 3 && p.outline.every(q => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite)))) e.push(`roof.parts[${i}].outline is 3 or more plan points`);
+      else if (!(Number.isInteger(p.fall) && p.fall >= 0 && p.fall < p.outline.length)) e.push(`roof.parts[${i}].fall is the index of an edge of its outline`);
+      if (p?.slope !== undefined && !(Number.isFinite(p.slope) && p.slope >= 0 && p.slope < 80)) e.push(`roof.parts[${i}].slope is degrees, 0 to 80`);
+    });
+  }
   if (roof.cover !== undefined && !ROOF_COVERS.includes(roof.cover)) e.push(`roof.cover is ${ROOF_COVERS.join(', ')}`);
   if (roof.color !== undefined && !/^#[0-9a-f]{6}$/i.test(String(roof.color))) e.push('roof.color is #rrggbb');
   return e;
@@ -59,6 +70,13 @@ export function roofPieces(room) {
     if (r.outline) return [{ poly: r.outline, z0: base, z1: base + ROOF_T, ridge: null, fallTo: null }];
     return [{ poly: rect(u, v, [su[0] - over, su[1] + over], [sv[0] - over, sv[1] + over]), z0: base, z1: base + ROOF_T, ridge: null, fallTo: null }];
   }
+  if (r.shape === 'single' && r.parts) return r.parts.map(pt => {
+    const o = pt.outline, p = o[pt.fall], q = o[(pt.fall + 1) % o.length], e = unit(sub(q, p));
+    const n = signedArea(o) < 0 ? [-e[1], e[0]] : [e[1], -e[0]], up = [-n[0], -n[1]];         // outward of its low edge; up the slope
+    const L = Math.max(...o.map(x => dot(sub(x, p), up))), t = Math.tan(((pt.slope ?? r.slope ?? ROOF_DEFAULTS.slope.single) * Math.PI) / 180), high = base + L * t;
+    const mid = o.reduce((a, x) => [a[0] + x[0] / o.length, a[1] + x[1] / o.length], [0, 0]);
+    return { poly: o, z0: base, z1: high + ROOF_T, slope: { bottom: { origin: p, u: up, L, a: base, b: high }, top: { origin: p, u: up, L, a: base + ROOF_T, b: high + ROOF_T } }, ridge: null, fallTo: [mid[0] + n[0] * L * 0.35, mid[1] + n[1] * L * 0.35] };
+  });
   if (r.shape === 'single') {
     const i = r.fall ?? 0, p = poly[i], q = poly[(i + 1) % poly.length], e = unit(sub(q, p));
     const cw = signedArea(poly) < 0, n = cw ? [-e[1], e[0]] : [e[1], -e[0]];            // outward normal of the edge it falls to
