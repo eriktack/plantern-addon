@@ -114,23 +114,26 @@ async function main() {
   showIssues();
 
   // ---- level ----
-  let level = model.levels.find(l => l.id === chooseLevel(model, locId, params.get('level'))) || null;
+  // the Yard view (docs/plans/yard.md Y3): not a level, the ground floor framed to the whole yard with the yard at full strength
+  const YARD = '@yard', hasYard = () => model.yard?.boundary?.length >= 3;
+  let yardView = params.get('level') === 'yard' && hasYard();
+  let level = model.levels.find(l => l.id === (yardView ? yardLevelId(model) : chooseLevel(model, locId, params.get('level')))) || null;
   linkPages(locId, level?.id);
   const levelSel = $('level');
-  levelSel.innerHTML = model.levels.map(l => `<option value="${esc(l.id)}">${esc(l.name || l.id)}</option>`).join('');
-  levelSel.hidden = model.levels.length < 2;
-  if (level) levelSel.value = level.id;
+  levelSel.innerHTML = model.levels.map(l => `<option value="${esc(l.id)}">${esc(l.name || l.id)}</option>`).join('') + (hasYard() ? `<option value="${YARD}">Yard</option>` : '');
+  levelSel.hidden = model.levels.length + (hasYard() ? 1 : 0) < 2;
+  if (level) levelSel.value = yardView ? YARD : level.id;
   // the floor switch on the map (in addition to the select above): buttons where they fit beside the 2D / 3D bar, else a dropdown;
   // only while the view shows one floor (2D, or 3D with only this level in its stack)
   const floorSwitch = createFloorSwitch(document.querySelector('main'), {
     onPick: id => { levelSel.value = id; levelSel.onchange(); },
     reserve: () => $('viewbar').offsetWidth + 10,
   });
-  const floorsUp = model.levels.slice().sort((a, b) => (a.elevation || 0) - (b.elevation || 0));
+  const floorsUp = [...(hasYard() ? [{ id: YARD, name: 'Yard' }] : []), ...model.levels.slice().sort((a, b) => (a.elevation || 0) - (b.elevation || 0))];
   let viewMode = '2d';
   const updateFloorSwitch = () => {
-    floorSwitch.set(floorsUp, level?.id);
-    floorSwitch.show(!!level && showFloorSwitch(model.levels.length, viewMode === '3d' ? shownLevels().length : 1));
+    floorSwitch.set(floorsUp, yardView ? YARD : level?.id);
+    floorSwitch.show(!!level && showFloorSwitch(floorsUp.length, viewMode === '3d' ? shownLevels().length : 1));
   };
   const state = () => ({
     geo: level && geos.get(level.id),
@@ -224,7 +227,7 @@ async function main() {
     return `${fx.name ? `${fx.name} (${fx.id})` : fx.id} → ${b?.entity || (b?.controls ? 'controls ' + b.controls.join(', ') : 'unbound')}`;
   };
   // the yard (docs/plans/yard.md): on the ground floor, unless this browser switched it off
-  const yardShown = () => (model.yard && level && level.id === yardLevelId(model) && readPrefs().yard !== false ? model.yard : null);
+  const yardShown = () => (model.yard && level && level.id === yardLevelId(model) && (yardView || readPrefs().yard !== false) ? model.yard : null);
   function updateYardRow() {
     const here = !!model.yard && !!level && level.id === yardLevelId(model);
     $('yardRow').hidden = !here;
@@ -301,14 +304,14 @@ async function main() {
   // the 2D plan alone, with the lamps as they are (a render draws every lamp as unavailable until they are applied again)
   function drawPlan() {
     refreshLit();                                                  // a light that has just arrived from the server shows now
-    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown(), yard: yardShown() });
+    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown(), yard: yardShown(), yardView });
     refreshFixtures();
   }
   function showLevel() {
     refreshLit();
     litShown = litKey();
     planAfterAssets.cancel();                                      // this draws the plan now
-    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown(), yard: yardShown() });
+    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown(), yard: yardShown(), yardView });
     if (view3d) build3d();
     restoreCamera();
     refreshFixtures();
@@ -422,8 +425,9 @@ async function main() {
   $('proj').onclick = () => { if (!view3d) return; const p = $('proj').classList.toggle('on') ? 'persp' : 'ortho'; writePrefs({ proj: p }); view3d.setProjection(p); keepCamera(view3d.getCamera()); };
   $('resetView').onclick = () => { if (!view3d) return; view3d.resetView(); view3d.setProjection(projection()); keepCamera(view3d.getCamera()); };
   levelSel.onchange = () => {
-    level = model.levels.find(l => l.id === levelSel.value);
-    params.set('level', level.id);
+    yardView = levelSel.value === YARD;
+    level = model.levels.find(l => l.id === (yardView ? yardLevelId(model) : levelSel.value));
+    params.set('level', yardView ? 'yard' : level.id);
     history.replaceState(null, '', '?' + params);
     remember(locId, level.id); linkPages(locId, level.id);
     showLevel();

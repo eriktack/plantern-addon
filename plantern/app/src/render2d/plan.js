@@ -230,12 +230,13 @@ export function createPlanView(svg, hooks = {}) {
     return fromSvg([q.x, q.y]);
   }
 
-  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', assetStatus = () => 'unknown', assetColour = () => null, doorStates = null, underlays = [], devices = null, yard = null }) {
+  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', assetStatus = () => 'unknown', assetColour = () => null, doorStates = null, underlays = [], devices = null, yard = null, yardView = false }) {
     svg.replaceChildren();
     fixEls = {}; lightEls = {};
     const defs = el('defs', {}, svg), layer = id => el('g', { id }, svg);
     drawUnderlays(layer('underlay'), level ? underlays : []);
-    if (level && yard) drawYard(layer('yard'), yard, palette, materials, baseUrl, defs);
+    // the yard: at full strength in the Yard view, faint around the ground floor (docs/plans/yard.md Y3, Y5)
+    if (level && yard) { const gy = layer('yard'); if (!yardView) gy.setAttribute('opacity', '0.45'); drawYard(gy, yard, palette, materials, baseUrl, defs); }
     const gFloor = layer('floor'), gLight = layer('light'), gCov = layer('coverage'), gObj = layer('objects'), gWall = layer('walls'), gRoof = layer('roofs'), gFix = layer('fixtures'), gDev = layer('devices');
     overlay = layer('overlay');
     const all = [];
@@ -373,6 +374,7 @@ export function createPlanView(svg, hooks = {}) {
       }
       setFixture(fx.id, { available: false, on: false, brightness: 0, rgb: [255, 214, 170] });
     }
+    if (yardView && yard?.boundary?.length >= 3) all.push(...yard.boundary);          // the Yard view frames the whole yard
     bounds = all.length ? {
       minx: Math.min(...all.map(p => p[0])), maxx: Math.max(...all.map(p => p[0])),
       miny: Math.min(...all.map(p => p[1])), maxy: Math.max(...all.map(p => p[1])),

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.35
+
+- A Yard view in the floor switch; the ground floor shows the yard faintly
+
 ## 0.8.34
 
 - Drag the corners of yard areas, lines and the outline in the Editor
