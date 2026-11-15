@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.33
+
+- Outdoor floors above the ground get sides down to it (decks, raised parts, the förstubro)
+
 ## 0.8.32
 
 - Import a GeoJSON map file (e.g. a robot mower's map) into the yard

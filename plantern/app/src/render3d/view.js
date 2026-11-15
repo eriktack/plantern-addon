@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { levelPrisms } from '../geometry/prisms.js';
+import { levelPrisms, DEFAULT_COLORS } from '../geometry/prisms.js';
 import { MM, toThree, dirToThree, prismGeometry, cylinderGeometry, barGeometry, ballGeometry } from './coords.js';
 import { groundMesh } from '../terrain/ground.js';
 import { pointInPolygon as inRoom } from '../geometry/polygon.js';
@@ -344,6 +344,39 @@ export function createView3d(container, hooks = {}) {
     return grp;
   }
 
+  /**
+   * The sides of an outdoor floor that stands above the ground (decision 309): a deck, a raised part, a porch. Each edge of an
+   * exterior room is closed from its floor down to the ground (sampled every 400 mm, so the side follows a slope), in the floor's
+   * material, unless a real wall stands on that edge. A floor at or below the ground has no side.
+   */
+  function addFloorSides(g, level, at, materials, baseUrl) {
+    for (const r of level.rooms || []) {
+      if (!r.exterior || !(r.polygon?.length >= 3)) continue;
+      const top = r.floorOffset ?? 0, P = r.polygon;
+      const walled = new Set((level.walls || []).filter(w => w.kind !== 'virtual').flatMap(w => (w.from || []).filter(f => f.startsWith(`${r.id}#e`)).map(f => Number(f.slice(r.id.length + 2)))));
+      const look = r.floorMaterial ? resolveSide({ material: r.floorMaterial }, materials) : null;
+      const colour = look?.color || r.floorColor || DEFAULT_COLORS.floorExterior;
+      // all the room's sides in one mesh with one material: every material costs a shader of its own (lamp masks)
+      const pos = [], idx = [];
+      for (let i = 0; i < P.length; i++) {
+        if (walled.has(i)) continue;
+        const a = P[i], b = P[(i + 1) % P.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1) continue;
+        const n = Math.max(1, Math.ceil(L / 400)), col = [];
+        for (let k = 0; k <= n; k++) { const p = [a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n], z = at(p); col.push([p, Number.isFinite(z) ? Math.min(z, top) - 50 : top - 150]); }
+        if (col.every(([, z]) => top - z < 80)) continue;              // on the ground: nothing to close
+        const base = pos.length / 3;
+        col.forEach(([p, z]) => pos.push(...toThree(p, top), ...toThree(p, z)));
+        for (let k = 0; k < n; k++) { const q = base + 2 * k; idx.push(q, q + 1, q + 3, q, q + 3, q + 2); }
+      }
+      if (!idx.length) continue;
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3)); geom.setIndex(idx); geom.computeVertexNormals();
+      let mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(colour), roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
+      if (look?.texture) { mat = texturedSurface(geom, { tex: { texture: look.texture, uvScale: look.uvScale, along: [1, 0] } }, baseUrl, mat); mat.side = THREE.DoubleSide; }
+      const m = new THREE.Mesh(geom, mat); m.name = `${r.id}:sides`; m.castShadow = true; m.receiveShadow = true; g.add(m);
+    }
+  }
+
   /** A picket fence: two rails and a picket every 120 mm (70 wide, 22 thick, pointed tops), on the ground, as one mesh. */
   function picketFence(l, look, at) {
     const H = l.height || look.h, pos = [], idx = [];
@@ -464,6 +497,7 @@ export function createView3d(container, hooks = {}) {
         if ((level.rooms || []).some(r => r.polygon?.length >= 3 && inRoom(c, r.polygon))) return o;
         const z = at(c); return Number.isFinite(z) ? { ...o, z } : o;
       }) };
+      if (at) addFloorSides(g, level, at, materials, baseUrl);
     }
 
     // the shadows go to the lamps whose light the walls would otherwise let through (a shadowless lamp lights through walls)
