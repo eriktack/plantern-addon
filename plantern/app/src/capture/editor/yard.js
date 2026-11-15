@@ -29,6 +29,7 @@ export function renderYard() {
   $('ydRetain').hidden = $('ydKind').value !== 'retaining';
   $('ydElev').value = y.elevation ?? '';
   $('ydBoundaryState').textContent = y.boundary ? `outline drawn (${y.boundary.length} corners)` : 'no outline yet';
+  renderTerrain();
   const matOpts = materialOptionsHtml('<option value="">Material: the surface\'s colour</option>');
   const surfOpts = cur => YARD_SURFACES.map(s => `<option value="${s}"${s === cur ? ' selected' : ''}>${SURFACE_LABEL[s]}</option>`).join('');
   $('ydList').innerHTML = [...areas].reverse().map(a => `<div class="arow"><span><b>${esc(a.name || SURFACE_LABEL[a.surface] || a.surface)}</b> <small>${esc(a.id)} · ${a.polygon.length} corners</small><br>`
@@ -125,6 +126,54 @@ export function setElevation(v) {
   const t = String(v).trim(), r = setYard(Ed.model, { elevation: t === '' ? null : Number(t) });
   if (r.report.errors.length) { msg(r.report.errors.join('; ')); return; }
   commit(r.model); msg('Ground height set (not saved yet)');
+}
+
+// ---- ground heights from Lantmäteriet (decision 311) ----
+// The yard's outline goes to Plantern's server, which fetches the 1 m ground model with the Geotorget login it keeps and
+// answers with yard.terrain; the page sets it as one undo step (Save keeps it).
+async function lmLogin() { try { const r = await fetch('api/terrain/login'); return r.ok ? await r.json() : { set: false }; } catch { return { set: false }; } }
+export async function renderTerrain() {
+  const t = Ed.model.yard?.terrain, server = !!Ed.house?.server;
+  $('ydTerrainState').textContent = t ? `: ${t.cols} × ${t.rows} m loaded (${t.source})` : server ? ': none yet. Fetching needs the yard\'s outline and the house\'s map position.' : ': none yet; fetching needs Plantern\'s server.';
+  $('ydLmFetch').hidden = !server; $('ydLmRemove').hidden = !t;
+  $('ydLmFetch').textContent = t ? 'Fetch them again' : 'Fetch ground heights';
+  if (!server) { $('ydLmLogin').hidden = $('ydLmSave').hidden = $('ydLmForget').hidden = true; return; }
+  const l = await lmLogin();
+  $('ydLmLogin').hidden = $('ydLmSave').hidden = l.set; $('ydLmForget').hidden = !l.set;
+  if (l.set) $('ydLmForget').title = `Forget the saved login (${l.user})`;
+}
+export async function saveLmLogin() {
+  const user = $('ydLmUser').value.trim(), password = $('ydLmPass').value;
+  if (!user || !password) { msg('Type the Geotorget user name and password first.'); return; }
+  const r = await fetch('api/terrain/login', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, password }) });
+  const b = await r.json().catch(() => ({}));
+  $('ydLmPass').value = '';
+  if (!r.ok) { msg(`Not saved: ${b.error || r.status}`); return; }
+  msg('Login saved on Plantern\'s server.'); renderTerrain();
+}
+export async function forgetLmLogin() { await fetch('api/terrain/login', { method: 'DELETE' }); msg('Login forgotten.'); renderTerrain(); }
+export async function fetchTerrainHeights() {
+  const y = Ed.model.yard;
+  if (!(y?.boundary?.length >= 3)) { msg('Draw the yard\'s outline first: the heights are fetched for it.'); return; }
+  if (!Ed.model.site?.georef?.origin) { msg('The house needs its map position first (the Place the house section).'); return; }
+  const l = await lmLogin();
+  if (!l.set) { $('ydLmLogin').hidden = $('ydLmSave').hidden = false; msg('Save your Geotorget login first (Lantmäteriet\'s free ground model needs one).'); return; }
+  msg('Fetching from Lantmäteriet…'); $('ydLmFetch').disabled = true;
+  try {
+    const res = await fetch('api/terrain/fetch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ site: Ed.model.site, boundary: y.boundary }) });
+    const b = await res.json().catch(() => ({}));
+    if (!res.ok) { msg(`Not fetched: ${b.error || res.status}`); return; }
+    const r = setYard(Ed.model, { terrain: b.terrain });
+    if (r.report.errors.length) { msg(r.report.errors.join('; ')); return; }
+    commit(r.model);
+    msg(`Ground heights loaded: ${b.terrain.cols} × ${b.terrain.rows} m (not saved yet). Your measured heights still decide the ground where they are.`);
+  } catch (e) { msg(`Not fetched: ${e.message}`); }
+  finally { $('ydLmFetch').disabled = false; }
+}
+export function removeTerrain() {
+  const r = setYard(Ed.model, { terrain: null });
+  if (r.report.errors.length) { msg(r.report.errors.join('; ')); return; }
+  commit(r.model); msg('Ground heights removed (not saved yet)');
 }
 
 // ---- dragging corners (Y6) ----

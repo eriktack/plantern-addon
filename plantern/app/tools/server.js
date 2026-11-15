@@ -25,6 +25,7 @@ import { createPublisher, publishDir } from './ha/publish.js';
 import { createGlbCache, readCacheLimit } from './blueprints/cache.js';
 import { glbApi } from './blueprints/api.js';
 import { libraryApi } from './library/api.js';
+import { terrainApi } from './terrain/api.js';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
@@ -120,6 +121,7 @@ export function createPlanternServer(root, { env = process.env, dataDir = defaul
       if (await haApi(ha, req, res, url, { json: send, readJsonBody, writeGuard, registry })) return;
       if (await glbApi(glb, registry, req, res, url)) return;
       if (await libraryApi(req, res, url)) return;
+      if (await terrainApi(req, res, url, { dataDir, json: send, readJsonBody, writeGuard })) return;
       if (await houseApi(registry, req, res, url, { ha })) return;
       if (url.pathname === '/api/save') return req.method === 'POST' ? await handleSave(root, req, res) : send(res, 405, { error: 'POST only' });
       if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'method not allowed');

@@ -3,7 +3,7 @@
 // reconcile()'s moves and `report.issues` from validateModel(). A refused operation returns the
 // model unchanged with `report.errors`.
 
-import { groundErrors } from '../terrain/ground.js';
+import { groundErrors, terrainErrors } from '../terrain/ground.js';
 import { checkCheck, checkCorners, solveExtra } from '../model/checks.js';
 import { freedPlacement } from '../model/hosted.js';
 import { solveCapture } from '../capture/solve.js';
@@ -235,8 +235,9 @@ const roundPts = pts => pts.map(p => p.map(v => Math.round(v)));
 export function setYard(model, props = {}) {
   const y = yardOf(model);
   for (const [k, v] of Object.entries(props)) {
-    if (!['boundary', 'elevation'].includes(k)) return refuse(model, `${k} cannot be set on the yard here`);
+    if (!['boundary', 'elevation', 'terrain'].includes(k)) return refuse(model, `${k} cannot be set on the yard here`);
     if (v === null || v === '') delete y[k];
+    else if (k === 'terrain') { const bad = terrainErrors(v); if (bad.length) return refuse(model, ...bad); y.terrain = v; }
     else if (k === 'boundary') { if (!Array.isArray(v) || v.length < 3) return refuse(model, 'a boundary needs three or more points'); y.boundary = roundPts(clockwise(v)); }
     else { if (!Number.isFinite(v)) return refuse(model, 'elevation is a number of mm'); y.elevation = v; }
   }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.36
+
+- Fetch ground heights from Lantmäteriet in the Editor's Yard section
+
 ## 0.8.35
 
 - A Yard view in the floor switch; the ground floor shows the yard faintly

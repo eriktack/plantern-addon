@@ -205,6 +205,14 @@
         <div class="row btns"><button type="button" id="ydAddGround">+ Ground height (click its spot)</button></div>
       </div>
       <label>Flat ground height <small>mm relative to this floor, used where no heights are measured</small><input id="ydElev" inputmode="numeric" autocomplete="off" placeholder="0"></label>
+      <div id="ydTerrain">
+        <p class="help"><b>Ground heights from Lantmäteriet</b> <span id="ydTerrainState"></span></p>
+        <div id="ydLmLogin" class="grid2" hidden>
+          <label>Geotorget user name<input id="ydLmUser" autocomplete="username"></label>
+          <label>Password <small>kept by Plantern's server, never in the house file</small><input id="ydLmPass" type="password" autocomplete="current-password"></label>
+        </div>
+        <div class="row btns"><button type="button" id="ydLmSave" hidden>Save the login</button> <button type="button" id="ydLmFetch">Fetch ground heights</button> <button type="button" id="ydLmRemove" hidden>Remove them</button> <button type="button" id="ydLmForget" hidden>Forget the login</button></div>
+      </div>
     </div>
     <div id="ydMsg" class="help"></div>
   </details>
