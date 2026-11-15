@@ -310,6 +310,15 @@ export function createPlanView(svg, hooks = {}) {
     for (const o of level.objects || []) {
       const fp = geo.objectFootprint(o);
       if (!fp) continue;
+      if (o.blueprint === 'tree') {                                   // a tree: its crown as a circle, the trunk a dot (yard plan Y10)
+        const c = fp.reduce((s, p) => [s[0] + p[0] / fp.length, s[1] + p[1] / fp.length], [0, 0]), [cx, cy] = toSvg(c);
+        const r = (o.params?.crownDiameter ?? o.size?.[0] ?? 4000) / 2, col = o.color || palette.yardSurface.forest;
+        const circle = el('circle', { cx, cy, r, fill: col, 'fill-opacity': 0.35, stroke: col, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, gObj);
+        el('circle', { cx, cy, r: Math.max(80, (o.params?.trunkDiameter ?? 300) / 2), fill: palette.yardLine.hedge, 'pointer-events': 'none' }, gObj);
+        el('title', {}, circle).textContent = `${o.name || 'Tree'}: ${(o.params?.height ?? o.size?.[2] ?? 0) / 1000} m high, crown ${r * 2 / 1000} m`;
+        all.push(...fp);
+        continue;
+      }
       const above = geo.objectZ(o) >= settings.cutPlane;
       // an asset whose model is missing is drawn in red, dashed, so it is seen and fixed (decision 146)
       const missing = o.kind === 'asset' && ['missing', 'broken'].includes(assetStatus(assetKey(o)));

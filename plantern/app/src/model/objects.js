@@ -132,10 +132,11 @@ export function checkObject(o, level, blueprints) {
     }
   } else if (o.pos) {
     if (!(Array.isArray(o.pos) && o.pos.length === 2 && o.pos.every(Number.isFinite))) errors.push('pos must be [x, y]');
-    else if (!(level.rooms || []).some(r => r.polygon?.length >= 3 && pointInPolygon(o.pos, r.polygon))) warnings.push('is not inside any room');
+    // a tree stands in the yard, outside the rooms (docs/plans/yard.md Y10)
+    else if (o.blueprint !== 'tree' && !(level.rooms || []).some(r => r.polygon?.length >= 3 && pointInPolygon(o.pos, r.polygon))) warnings.push('is not inside any room');
     if (o.rotationDeg !== undefined && !Number.isFinite(o.rotationDeg)) errors.push('rotationDeg must be a number');
   }
-  if (Number.isFinite(o.z) && Array.isArray(o.size) && Number.isFinite(o.size[2]) && o.z + o.size[2] > (level.ceilingHeight ?? 2400) + 1) warnings.push(`reaches ${Math.round(o.z + o.size[2])} mm, above the ceiling (${level.ceilingHeight ?? 2400} mm)`);
+  if (o.blueprint !== 'tree' && Number.isFinite(o.z) && Array.isArray(o.size) && Number.isFinite(o.size[2]) && o.z + o.size[2] > (level.ceilingHeight ?? 2400) + 1) warnings.push(`reaches ${Math.round(o.z + o.size[2])} mm, above the ceiling (${level.ceilingHeight ?? 2400} mm)`);
   return { errors, warnings };
 }
 

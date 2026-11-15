@@ -915,6 +915,28 @@
           "size": [2000,1050,850],
           "z": 0,
           "assumed": ["size"]
+        },
+        {
+          "id": "ob_tree_apple",
+          "kind": "asset",
+          "blueprint": "tree",
+          "name": "Apple tree",
+          "params": { "variant": "leafy", "height": 6000, "crownDiameter": 5000, "crownBase": 1800, "trunkDiameter": 250 },
+          "pos": [-8500,1000],
+          "rotationDeg": 0,
+          "size": [5000,5000,6000],
+          "z": 0
+        },
+        {
+          "id": "ob_tree_spruce",
+          "kind": "asset",
+          "blueprint": "tree",
+          "name": "Spruce",
+          "params": { "variant": "conifer", "height": 11000, "crownDiameter": 4000, "crownBase": 500, "trunkDiameter": 350 },
+          "pos": [12800,-4400],
+          "rotationDeg": 0,
+          "size": [4000,4000,11000],
+          "z": 0
         }
       ],
       "fixtures": [

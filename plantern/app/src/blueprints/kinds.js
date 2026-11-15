@@ -5,7 +5,7 @@
 import { ICONS } from '../icons.js';
 
 /** The groups in the order a list shows them. */
-export const KIND_GROUPS = Object.freeze(['Seating', 'Tables', 'Beds', 'Storage', 'Kitchen', 'Bathroom', 'Lighting', 'Heating & other', 'Electronics', 'Miscellaneous', 'Other']);
+export const KIND_GROUPS = Object.freeze(['Seating', 'Tables', 'Beds', 'Storage', 'Kitchen', 'Bathroom', 'Lighting', 'Heating & other', 'Electronics', 'Yard', 'Miscellaneous', 'Other']);
 
 // abstract drawings, 24 × 24 strokes, one per family of model (a chair is a seat, back and legs; a sofa a wide seat with arms…)
 const svg = body => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
@@ -48,6 +48,7 @@ const DRAWN = {
   heatPump: '<rect x="3" y="7" width="18" height="10" rx="2"/><path d="M7 14h4M13 14h4"/>',
   rug: '<rect x="3" y="7" width="18" height="10"/><rect x="6" y="10" width="12" height="4"/>',
   planter: '<path d="M6 13h12l-2 8H8z"/><path d="M12 13V6M12 6c-2-2-3-1-3 0M12 6c2-2 3-1 3 0"/>',
+  tree: '<circle cx="12" cy="9" r="6"/><path d="M12 15v6M9 21h6"/>',
   waterHeater: '<rect x="7" y="3" width="10" height="18" rx="5"/><path d="M12 7v4"/>',
   sauna: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M8 19h8M7 11h10"/>',
   tv: '<rect x="2" y="4" width="20" height="13" rx="1"/><path d="M8 21h8M12 17v4"/>',
@@ -76,7 +77,7 @@ const TABLE = {
   'heat-pump-indoor': ['Heating & other', 'heatPump'], rug: ['Heating & other', 'rug'], planter: ['Heating & other', 'planter'],
   'water-heater': ['Heating & other', 'waterHeater'], 'sauna-heater': ['Heating & other', 'sauna'],
   tv: ['Electronics', 'tv'], 'desk-setup': ['Electronics', 'deskSetup'],
-  'cat-tree': ['Miscellaneous', 'catTree'], chest: ['Miscellaneous', 'chest'], 'waste-bin': ['Miscellaneous', 'wasteBin'], 'radiator-cover': ['Heating & other', 'radiatorCover'], 'hook-rack': ['Storage', 'hookRack'],
+  tree: ['Yard', 'tree'], 'cat-tree': ['Miscellaneous', 'catTree'], chest: ['Miscellaneous', 'chest'], 'waste-bin': ['Miscellaneous', 'wasteBin'], 'radiator-cover': ['Heating & other', 'radiatorCover'], 'hook-rack': ['Storage', 'hookRack'],
 };
 
 /** { group, icon } of a model: from the table, else a guess from its id, else Other with a cube. icon is a name in ICONS (`kind:…`). */

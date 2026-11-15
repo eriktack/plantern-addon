@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.25
+
+- Trees, a Daylight button in 3D, and a smooth edge on the yard's ground
+
 ## 0.8.24
 
 - The yard's ground in 3D from measured heights, with the lawn, paving and walls on it

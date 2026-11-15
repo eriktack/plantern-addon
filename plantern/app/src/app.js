@@ -349,11 +349,12 @@ async function main() {
     updateFloorSwitch();
     $('plan').toggleAttribute('hidden', is3d);        // SVG elements have no .hidden property
     $('view3d').hidden = !is3d;
+    $('dayBtn').hidden = !is3d;
     $('panel3d').hidden = !is3d;
     $('panel2d').hidden = is3d;
     $('compass').hidden = is3d;
     if (!is3d) view.fit();
-    document.querySelectorAll('#viewbar button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+    document.querySelectorAll('#viewbar button[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === v));
     params.set('view', v);
     history.replaceState(null, '', '?' + params);
     writePrefs({ view: v });
@@ -370,7 +371,7 @@ async function main() {
     else view3d.setProjection(projection());
   }
   const keepCamera = cam => { if (level) writePrefs({ cameras: { [cameraKey(locId, level.id)]: cam } }); };
-  document.querySelectorAll('#viewbar button').forEach(b => (b.onclick = () => setView(b.dataset.view)));
+  document.querySelectorAll('#viewbar button[data-view]').forEach(b => (b.onclick = () => setView(b.dataset.view)));
   $('stackRow').hidden = model.levels.length < 2;
   $('stackMode').value = stackMode; $('exploded').checked = exploded; $('ceilings').checked = ceilings;
   const restack = () => { stackMode = $('stackMode').value; exploded = $('exploded').checked; ceilings = $('ceilings').checked; writePrefs({ stack: stackMode, exploded, ceilings }); updateFloorSwitch(); if (!view3d) return; build3d(); view3d.resetView(); refreshFixtures(); };
@@ -401,6 +402,7 @@ async function main() {
     const p = lightPrefs(readPrefs()), r3 = state().settings?.render3d;
     const { min, max } = lightPercents(p, r3);
     $('lightMode').value = p.mode ?? 'default';
+    $('dayBtn').setAttribute('aria-pressed', String(p.mode === 'daylight')); $('dayBtn').classList.toggle('on', p.mode === 'daylight');
     lightRange.set(min, max);
     $('lightTxt').textContent = `${min} – ${max} %`;
     view3d?.setLight(lightFor({ mode: p.mode, min: p.min, max: p.max, sun: houseDaylight(model.site) }, r3));
@@ -410,6 +412,8 @@ async function main() {
     writePrefs({ light: { mode: $('lightMode').value, min: p.min, max: p.max } });
     applyLight();
   };
+  // the quick switch on the 3D view: daylight, or back to the house's day/night
+  $('dayBtn').onclick = () => { const p = lightPrefs(readPrefs()); writePrefs({ light: { ...p, mode: p.mode === 'daylight' ? 'default' : 'daylight' } }); applyLight(); };
   $('lightReset').onclick = () => { writePrefs({ light: null, daylight: null, night: null }); applyLight(); };
   $('shadowReset').onclick = () => { writePrefs({ shadows: { ...(readPrefs().shadows || {}), [device]: null } }); applyShadows(); };
   applyLight();

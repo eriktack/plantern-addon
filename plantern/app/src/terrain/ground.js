@@ -124,6 +124,43 @@ function inside(p, poly) {
   return c;
 }
 
+const area = P => P.reduce((s, p, i) => { const q = P[(i + 1) % P.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0) / 2;
+/** A polygon cut to an axis-aligned box (Sutherland–Hodgman: the box is convex). */
+function clipToBox(poly, lo, hi) {
+  const edges = [[p => p[0] - lo[0], 0, lo[0]], [p => hi[0] - p[0], 0, hi[0]], [p => p[1] - lo[1], 1, lo[1]], [p => hi[1] - p[1], 1, hi[1]]];
+  let out = poly;
+  for (const [f, ax, v] of edges) {
+    const P = out; out = [];
+    P.forEach((p, k) => {
+      const q = P[(k + 1) % P.length], a = f(p), b = f(q);
+      if (a >= 0) out.push(p);
+      if ((a >= 0) !== (b >= 0)) { const t = a / (a - b); out.push(ax === 0 ? [v, p[1] + (q[1] - p[1]) * t] : [p[0] + (q[0] - p[0]) * t, v]); }
+    });
+    if (out.length < 3) return [];
+  }
+  return out;
+}
+/** Triangles of a simple polygon (ear clipping): index triples into it. */
+function earClip(poly) {
+  const idx = poly.map((_, i) => i), tris = [], ccw = area(poly) > 0;
+  const cross = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const inTri = (p, a, b, c) => { const d1 = cross(a, b, p), d2 = cross(b, c, p), d3 = cross(c, a, p); return (d1 > 1e-9 && d2 > 1e-9 && d3 > 1e-9) || (d1 < -1e-9 && d2 < -1e-9 && d3 < -1e-9); };   // strictly inside
+  let guard = 0;
+  while (idx.length > 3 && guard++ < 1000) {
+    let cut = false;
+    for (let k = 0; k < idx.length; k++) {
+      const i = idx[(k + idx.length - 1) % idx.length], j = idx[k], l = idx[(k + 1) % idx.length], a = poly[i], b = poly[j], c = poly[l];
+      const turn = cross(a, b, c);
+      if (ccw ? turn <= 0 : turn >= 0) continue;
+      if (idx.some(m => m !== i && m !== j && m !== l && inTri(poly[m], a, b, c))) continue;
+      tris.push([i, j, l]); idx.splice(k, 1); cut = true; break;
+    }
+    if (!cut) break;
+  }
+  if (idx.length === 3) tris.push([idx[0], idx[1], idx[2]]);
+  return tris;
+}
+
 /**
  * A grid mesh of the ground over the yard's boundary: { positions: [x, y, z]… (plan mm), triangles: [i, j, k]…,
  * colors: [r, g, b]… (0–1, per vertex: the surface of the area it lies in, later areas over earlier) } or null.
@@ -149,11 +186,25 @@ export function groundMesh(yard, { cell = 400, holes = [], colorOf = () => '#6f8
     }
     return index.get(k);
   };
+  const free = p => { positions.push([p[0], p[1], surf.at(p)]); colors.push(rgb(colourAt(p))); return positions.length - 1; };
   for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
-    const c = [x0 + (i + 0.5) * cell, y0 + (j + 0.5) * cell];
-    if (!inside(c, bound) || holes.some(h => inside(c, h))) continue;
-    const a = vert(i, j), b = vert(i + 1, j), d = vert(i + 1, j + 1), e = vert(i, j + 1);
-    triangles.push([a, b, d], [a, d, e]);
+    const sq = [[x0 + i * cell, y0 + j * cell], [x0 + (i + 1) * cell, y0 + j * cell], [x0 + (i + 1) * cell, y0 + (j + 1) * cell], [x0 + i * cell, y0 + (j + 1) * cell]];
+    const c = [x0 + (i + 0.5) * cell, y0 + (j + 0.5) * cell], n = sq.filter(p => inside(p, bound)).length;
+    if (n === 4 && !bound.some(p => p[0] > sq[0][0] && p[0] < sq[1][0] && p[1] > sq[0][1] && p[1] < sq[2][1])) {
+      if (holes.some(h => inside(c, h))) continue;
+      const a = vert(i, j), b = vert(i + 1, j), d = vert(i + 1, j + 1), e = vert(i, j + 1);
+      triangles.push([a, b, d], [a, d, e]);
+      continue;
+    }
+    // a cell the outline crosses: cut to the outline, so the edge follows it instead of stepping
+    // the cut leaves repeated points and points on a straight line: drop them before triangulating
+    let piece = clipToBox(bound, sq[0], sq[2]).filter((p, k, P) => { const q = P[(k + 1) % P.length]; return Math.hypot(p[0] - q[0], p[1] - q[1]) > 1e-6; });
+    piece = piece.filter((p, k, P) => { const a = P[(k + P.length - 1) % P.length], b = P[(k + 1) % P.length]; return Math.abs((p[0] - a[0]) * (b[1] - a[1]) - (p[1] - a[1]) * (b[0] - a[0])) > 1e-6 * cell * cell; });
+    if (piece.length < 3 || Math.abs(area(piece)) < 1) continue;
+    const mid = piece.reduce((s, p) => [s[0] + p[0] / piece.length, s[1] + p[1] / piece.length], [0, 0]);
+    if (holes.some(h => inside(mid, h))) continue;
+    const ids = piece.map(free);
+    for (const [a, b, d] of earClip(piece)) triangles.push([ids[a], ids[b], ids[d]]);
   }
   return { positions, triangles, colors, at: surf.at };
 }

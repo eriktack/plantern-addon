@@ -87,7 +87,7 @@ const DRAWN = {
 
 // the names the batches list, mapped to their family's drawing (ND5 batches 1 to 4)
 const BY_NAME = {
-  armchair: 'armchair', office: 'office', lounge: 'lounge', kitchen_sofa: 'sofa', two_seat: 'sofa', three_seat: 'sofaLong',
+  leafy: 'leafy', conifer: 'conifer', armchair: 'armchair', office: 'office', lounge: 'lounge', kitchen_sofa: 'sofa', two_seat: 'sofa', three_seat: 'sofaLong',
   corner_l: 'sofaL', corner_u: 'sofaU', sofa_bed: 'sofaBed',
   bun: 'bun', rectangular: 'table', round: 'round', oval: 'oval', square: 'square', pedestal: 'pedestal', trestle: 'trestle',
   nesting_pair: 'nesting', l_shaped: 'lShape', standing: 'standing', dining: 'table',
@@ -118,6 +118,8 @@ export function optionIcon(key, option, own = null) {
 
 // the options added with later models (ND5, the rest): directions, sizes of hobs and seats, and the rest by what they are
 Object.assign(DRAWN, {
+  leafy: '<circle cx="12" cy="9" r="6"/><path d="M12 15v6"/>',
+  conifer: '<path d="M12 3l6 9h-3l4 6H5l4-6H6z"/><path d="M12 18v3"/>',
   alcoveBath: '<path d="M3 3v16M21 3v16M3 19h18"/><path d="M6 11h12v5H6z"/>',
   arrowLeft: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
   arrowRight: '<path d="M5 12h14M13 6l6 6-6 6"/>',

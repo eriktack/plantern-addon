@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { levelPrisms } from '../geometry/prisms.js';
 import { MM, toThree, dirToThree, prismGeometry, cylinderGeometry, barGeometry, ballGeometry } from './coords.js';
 import { groundMesh } from '../terrain/ground.js';
+import { pointInPolygon as inRoom } from '../geometry/polygon.js';
 import { pointAlong, polylineLength } from '../geometry/strip.js';
 import { pickShadowLamps, SHADOW_COUNT, leakOfLamp } from '../model/shadows.js';
 import { lampReach } from '../geometry/leak.js';
@@ -259,7 +260,7 @@ export function createView3d(container, hooks = {}) {
   function addGround(g, level, yard) {
     const holes = (level.rooms || []).filter(r => !r.exterior && r.polygon?.length >= 3).map(r => r.polygon);
     const mesh = groundMesh(yard, { cell: 400, holes, colorOf: (surface, a) => a.color || GROUND[surface] || GROUND.other, fallback: GROUND.grass });
-    if (!mesh) return;
+    if (!mesh) return null;
     const pos = new Float32Array(mesh.positions.length * 3), col = new Float32Array(mesh.colors.length * 3), idx = [];
     mesh.positions.forEach((p, i) => pos.set(toThree([p[0], p[1]], p[2]), i * 3));
     mesh.colors.forEach((c, i) => col.set(c, i * 3));
@@ -288,6 +289,7 @@ export function createView3d(container, hooks = {}) {
         g.add(w);
       }
     }
+    return mesh.at;
   }
 
   function clear() {
@@ -362,7 +364,17 @@ export function createView3d(container, hooks = {}) {
     g.position.y = ((level.elevation || 0) + lift) * MM;
     g.position.x = shift[0] * MM; g.position.z = -shift[1] * MM;      // plan (x, y) → three (x, -y)
     root.add(g);
-    if (yard && level.id === yard.levelId) addGround(g, level, yard);
+    if (yard && level.id === yard.levelId) {
+      const at = addGround(g, level, yard);
+      // an object out in the yard (in no room) with no height of its own stands on the ground there: a tree
+      if (at) level = { ...level, objects: (level.objects || []).map(o => {
+        if (o.z || o.attach) return o;
+        const fp = geo.objectFootprint(o); if (!fp) return o;
+        const c = fp.reduce((s, p) => [s[0] + p[0] / fp.length, s[1] + p[1] / fp.length], [0, 0]);
+        if ((level.rooms || []).some(r => r.polygon?.length >= 3 && inRoom(c, r.polygon))) return o;
+        const z = at(c); return Number.isFinite(z) ? { ...o, z } : o;
+      }) };
+    }
 
     // the shadows go to the lamps whose light the walls would otherwise let through (a shadowless lamp lights through walls)
     const reachOptions = { cutPlane: settings?.cutPlane ?? 1200, doorStates, leaves: false };
