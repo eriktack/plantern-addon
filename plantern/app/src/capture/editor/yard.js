@@ -247,7 +247,7 @@ export async function importGeoFile(file) {
   const r = readGeoJson(text, Ed.model.site);
   $('ydGeo').value = '';
   if (!r.shapes.length) { yd().imp = null; renderImport(); msg(r.warnings.join(' ') || 'No shapes in the file'); return; }
-  yd().imp = { ...r, file: file.name, on: new Set(r.shapes.filter(s => !s.skip && (s.geom !== 'point' || s.z !== undefined)).map(s => s.n)) };
+  yd().imp = { ...r, file: file.name, shift: [...(Ed.model.yard?.importShift || [0, 0])], on: new Set(r.shapes.filter(s => !s.skip && (s.geom !== 'point' || s.z !== undefined)).map(s => s.n)) };
   renderImport(); draw();
   msg(`${r.shapes.length} shape${r.shapes.length > 1 ? 's' : ''} in ${file.name} (${r.crs === 'WGS84' ? 'GPS coordinates' : 'SWEREF 99 TM'}), shown dashed in the plan. ${r.warnings.join(' ')}`);
 }
@@ -261,10 +261,13 @@ function renderImport() {
     + imp.shapes.map(s => `<div class="arow"><label><input type="checkbox" data-ydimp="${s.n}"${imp.on.has(s.n) ? ' checked' : ''}${s.geom === 'point' && s.z === undefined ? ' disabled' : ''}> <b>${esc(s.name)}</b></label>`
       + ` <small>${s.geom === 'area' ? `area, ${s.points.length} corners` : s.geom === 'line' ? `line, ${s.points.length} points` : s.z !== undefined ? `ground height ${(s.z / 1000).toFixed(2)} m` : 'point without a height (skipped)'}${s.note ? `, ${esc(s.note)}` : ''}</small>`
       + (s.geom === 'area' ? ` <select data-ydimpsurf="${s.n}" aria-label="Surface of ${esc(s.name)}">${surfOpts(s.surface)}</select>` : s.geom === 'line' ? ` <select data-ydimpkind="${s.n}" aria-label="Kind of ${esc(s.name)}">${lineOpts(s.kind)}</select>` : '') + '</div>').join('')
+    + `<div class="grid2"><label>Move it east <small>mm along the plan's x (− west), for a file that sits off, e.g. a robot mower's map</small><input id="ydImpDx" inputmode="numeric" value="${imp.shift[0]}"></label>`
+    + `<label>Move it north <small>mm along the plan's y (− south)</small><input id="ydImpDy" inputmode="numeric" value="${imp.shift[1]}"></label></div>`
     + `<div class="row btns"><button type="button" id="ydImpAdd">Add the ticked shapes</button> <button type="button" id="ydImpCancel">Cancel</button></div>`;
   box.querySelectorAll('[data-ydimp]').forEach(c => (c.onchange = () => { const n = Number(c.dataset.ydimp); c.checked ? imp.on.add(n) : imp.on.delete(n); draw(); }));
   box.querySelectorAll('[data-ydimpsurf]').forEach(s => (s.onchange = () => { imp.shapes[Number(s.dataset.ydimpsurf)].surface = s.value; }));
   box.querySelectorAll('[data-ydimpkind]').forEach(s => (s.onchange = () => { imp.shapes[Number(s.dataset.ydimpkind)].kind = s.value; }));
+  for (const [k, i] of [['ydImpDx', 0], ['ydImpDy', 1]]) $(k).oninput = e => { const v = Number(String(e.target.value).replace('−', '-').trim()); if (Number.isFinite(v)) { imp.shift[i] = v; draw(); } };
   $('ydImpCancel').onclick = () => { yd().imp = null; renderImport(); draw(); msg('Import cancelled'); };
   $('ydImpAdd').onclick = addImported;
 }
@@ -272,8 +275,10 @@ function renderImport() {
 function addImported() {
   const imp = yd().imp; if (!imp) return;
   let m = Ed.model, n = 0;
-  for (const s of imp.shapes) {
-    if (!imp.on.has(s.n)) continue;
+  const [dx, dy] = imp.shift, mv = p => [Math.round(p[0] + dx), Math.round(p[1] + dy)];
+  for (const s0 of imp.shapes) {
+    if (!imp.on.has(s0.n)) continue;
+    const s = { ...s0, points: s0.points.map(mv) };
     const name = s.name.startsWith('Shape ') ? undefined : s.name;
     const r = s.geom === 'area' ? addYardArea(m, { surface: s.surface || 'grass', polygon: s.points, ...(name ? { name } : {}) })
       : s.geom === 'line' ? addYardLine(m, { kind: s.kind || 'edging', points: s.points, ...(name ? { name } : {}) })
@@ -283,13 +288,17 @@ function addImported() {
     m = r.model; n++;
   }
   if (!n) { msg('Nothing ticked'); return; }
+  // the shift is kept with the yard: the next file from the same source (the same mower) starts from it
+  const ks = setYard(m, { importShift: imp.shift }); if (!ks.report.errors.length) m = ks.model;
   yd().imp = null; renderImport();
   commit(m); msg(`${n} shape${n > 1 ? 's' : ''} added from the file (not saved yet)`);
 }
 /** The shapes of a file being imported, dashed in the plan (the ticked ones bolder). */
 function importSvg(fs) {
   const imp = Ed.yd?.imp; if (!imp) return '';
-  return '<g pointer-events="none">' + imp.shapes.map(s => {
+  const [dx, dy] = imp.shift, mv = p => [p[0] + dx, p[1] + dy];
+  return '<g pointer-events="none">' + imp.shapes.map(s0 => {
+    const s = { ...s0, points: s0.points.map(mv) };
     const on = imp.on.has(s.n), st = `stroke="#4fd1e8" stroke-width="${fs / (on ? 5 : 10)}" stroke-dasharray="${fs / 2} ${fs / 3}" stroke-opacity="${on ? 1 : 0.5}"`;
     if (s.geom === 'point') { const [x, y] = toSvg(s.points[0]); return `<circle cx="${x}" cy="${y}" r="${fs * 0.35}" fill="none" ${st}/>`; }
     return `<${s.geom === 'area' ? 'polygon' : 'polyline'} points="${pts(s.points)}" fill="${s.geom === 'area' && on ? '#4fd1e822' : 'none'}" ${st}/>`;

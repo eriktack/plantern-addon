@@ -63,6 +63,7 @@ export function checkYard(model) {
   }
   for (const m of groundErrors(y.ground)) out.push({ severity: 'error', id: 'yard', msg: m });
   for (const m of terrainErrors(y.terrain)) out.push({ severity: 'error', id: 'yard', msg: m });
+  if (y.importShift !== undefined && !(Array.isArray(y.importShift) && y.importShift.length === 2 && y.importShift.every(Number.isFinite))) out.push({ severity: 'error', id: 'yard', msg: 'importShift must be [x, y] in mm' });
   if (y.terrain && !(Array.isArray(model.site?.georef?.origin) && Number.isFinite(model.site?.georef?.groundFloorHeight))) out.push({ severity: 'warn', id: 'yard', msg: 'yard.terrain needs site.georef (origin and groundFloorHeight) to be placed; it is not used' });
   for (const a of y.areas || []) if (isPts(a?.polygon, 3) && !isClockwise(a.polygon)) out.push({ severity: 'warn', id: a.id, msg: 'area polygon is counter-clockwise (should be clockwise, like rooms)' });
   return out;

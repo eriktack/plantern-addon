@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.39
+
+- Map import can move a file that sits off; the yard remembers the shift
+
 ## 0.8.38
 
 - Underlays can carry their own fit tolerance
