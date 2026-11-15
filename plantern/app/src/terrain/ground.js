@@ -8,10 +8,43 @@
 // Outside the points' hull it takes the inverse-distance mean of the nearest points. A retaining wall (yard.lines kind
 // "retaining") adds its step: along the wall, the ground on its high side is the low side's plus `drop`. Heights near a
 // retaining wall come from the points on the same side of it only, so the step stays sharp.
-// Later, a fetched Lantmäteriet heightmap (docs/plans/terrain.md) can be laid under these points; the points win where
-// they are.
+// Under the points may lie a height grid (decision 307), e.g. Lantmäteriet's 1 m ground model (Markhöjdmodell):
+//   yard.terrain = { source, crs: "EPSG:3006", origin: [E, N] (m, the grid's north-west corner), cell (m), cols, rows,
+//                    z: [mm above sea level (RH 2000), row by row from the north, west to east; null = no data] }
+// placed with the house's `site` (passed in as yard.site by the caller: georef origin, north angle, ground-floor height).
+// With a grid, the ground is the grid (bilinear) plus a correction from the measured points: each point's difference to the
+// grid, spread by inverse distance and fading to none about 4 m from the points, so the points stay exact and the grid gives
+// the shape between and beyond them (a landscaped bed the grid does not know is fixed by a point on it).
 
 const ID = /^yg_[a-z0-9_]+$/;
+
+/** Problems with a height grid (yard.terrain): messages. */
+export function terrainErrors(t) {
+  if (t === undefined) return [];
+  if (!t || typeof t !== 'object') return ['yard.terrain must be an object'];
+  const e = [];
+  if (t.crs !== 'EPSG:3006') e.push('yard.terrain.crs must be "EPSG:3006" (SWEREF 99 TM)');
+  if (!(Array.isArray(t.origin) && t.origin.length === 2 && t.origin.every(Number.isFinite))) e.push('yard.terrain.origin must be [east, north] in metres');
+  if (!(t.cell > 0)) e.push('yard.terrain.cell must be metres, more than 0');
+  if (!(Number.isInteger(t.cols) && t.cols >= 2 && Number.isInteger(t.rows) && t.rows >= 2)) e.push('yard.terrain needs cols and rows (2 or more)');
+  else if (!Array.isArray(t.z) || t.z.length !== t.cols * t.rows || t.z.some(v => v !== null && !Number.isFinite(v))) e.push('yard.terrain.z must be cols × rows heights in mm (or null)');
+  return e;
+}
+
+/** The grid's height at a plan point, in mm relative to the plan datum, or null (no grid, no site, off the grid, no data). */
+export function terrainSampler(yard) {
+  const t = yard?.terrain, g = yard?.site?.georef;
+  if (!t || terrainErrors(t).length || !Array.isArray(g?.origin) || !Number.isFinite(g?.groundFloorHeight)) return null;
+  const a = ((yard.site.northAngleDeg ?? 0) * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a), floor = g.groundFloorHeight * 1000;
+  return p => {
+    const x = p[0] / 1000, y = p[1] / 1000, E = g.origin[0] + x * c + y * s, N = g.origin[1] - x * s + y * c;
+    const u = (E - t.origin[0]) / t.cell - 0.5, v = (t.origin[1] - N) / t.cell - 0.5, i = Math.floor(u), j = Math.floor(v);
+    if (i < 0 || j < 0 || i + 1 >= t.cols || j + 1 >= t.rows) return null;
+    const fu = u - i, fv = v - j, q = [t.z[j * t.cols + i], t.z[j * t.cols + i + 1], t.z[(j + 1) * t.cols + i], t.z[(j + 1) * t.cols + i + 1]];
+    if (q.some(z => z === null)) return null;
+    return q[0] * (1 - fu) * (1 - fv) + q[1] * fu * (1 - fv) + q[2] * (1 - fu) * fv + q[3] * fu * fv - floor;
+  };
+}
 
 /** Problems with the ground points: messages. */
 export function groundErrors(ground) {
@@ -73,8 +106,9 @@ function segDist(p, a, b) {
  */
 export function groundSurface(yard, { reach = 6000 } = {}) {
   const pts = (yard?.ground || []).filter(g => Array.isArray(g.pos) && Number.isFinite(g.z));
-  // no measured heights: the yard is flat at its own ground height (yard.elevation, else the ground floor's floor)
-  if (!pts.length) return yard?.boundary?.length >= 3 ? { at: () => yard.elevation ?? 0, points: [], walls: [] } : null;
+  const base = terrainSampler(yard), flat = yard?.elevation ?? 0;
+  // no measured heights: the grid, else flat at the yard's own ground height (yard.elevation, else the ground floor's floor)
+  if (!pts.length) return yard?.boundary?.length >= 3 || base ? { at: p => (base && base(p)) ?? flat, points: [], walls: [] } : null;
   const walls = (yard.lines || []).filter(l => l.kind === 'retaining' && l.points?.length >= 2 && l.drop > 0);
   // which side of a wall a point is on: +1 its high side, −1 its low side, 0 not near it
   const wallSide = (w, p) => {
@@ -98,7 +132,22 @@ export function groundSurface(yard, { reach = 6000 } = {}) {
     let s = 0, w = 0; for (const { g, d } of near) { const k = 1 / (d * d); s += g.z * k; w += k; }
     return s / w;
   };
+  // with a grid: the grid plus the points' differences to it, spread by inverse distance and fading out (decision 307)
+  const FADE = 4000, diffs = base ? pts.map(g => ({ pos: g.pos, z: g.z, r: base(g.pos) === null ? null : g.z - base(g.pos) })).filter(g => g.r !== null) : [];
+  const correction = (p, cand) => {
+    const near = cand.map(g => ({ g, d: Math.hypot(g.pos[0] - p[0], g.pos[1] - p[1]) })).sort((a, b) => a.d - b.d).slice(0, 6);
+    if (!near.length) return 0;
+    if (near[0].d < 1) return near[0].g.r;
+    let s = 0, w = 1 / (FADE * FADE); for (const { g, d } of near) { const k = 1 / (d * d); s += g.r * k; w += k; }
+    return s / w;
+  };
+  const onGrid = p => {
+    const b = base(p); if (b === null) return null;
+    for (const w of walls) { const s = wallSide(w, p); if (!s) continue; const same = diffs.filter(g => wallSide(w, g.pos) === s); if (same.length) return b + correction(p, same); }
+    return b + correction(p, diffs);
+  };
   const at = p => {
+    if (base) { const z = onGrid(p); if (z !== null) return z; }
     // near a retaining wall: only the points on this side of it count (the step stays a step)
     for (const w of walls) {
       const s = wallSide(w, p);

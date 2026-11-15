@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.31
+
+- The yard's ground follows Lantmäteriet's 1 m ground model between and beyond the measured points
+
 ## 0.8.30
 
 - Outdoor solids may start below the floor slab, for steps down to the ground

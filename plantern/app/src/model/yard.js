@@ -5,7 +5,7 @@
 // In the main building's plan coordinates. Areas are drawn in order, a later one over an earlier one (a path on the lawn needs
 // no hole). A retaining wall's `high` is the side of the line's direction where the ground is higher, `drop` the difference.
 
-import { groundErrors } from '../terrain/ground.js';
+import { groundErrors, terrainErrors } from '../terrain/ground.js';
 import { isClockwise } from '../geometry/polygon.js';
 import { PLANTINGS } from '../terrain/planting.js';
 
@@ -62,6 +62,8 @@ export function checkYard(model) {
     for (const x of y[key]) for (const m of check(x)) out.push({ severity: 'error', id: x?.id || 'yard', msg: m });
   }
   for (const m of groundErrors(y.ground)) out.push({ severity: 'error', id: 'yard', msg: m });
+  for (const m of terrainErrors(y.terrain)) out.push({ severity: 'error', id: 'yard', msg: m });
+  if (y.terrain && !(Array.isArray(model.site?.georef?.origin) && Number.isFinite(model.site?.georef?.groundFloorHeight))) out.push({ severity: 'warn', id: 'yard', msg: 'yard.terrain needs site.georef (origin and groundFloorHeight) to be placed; it is not used' });
   for (const a of y.areas || []) if (isPts(a?.polygon, 3) && !isClockwise(a.polygon)) out.push({ severity: 'warn', id: a.id, msg: 'area polygon is counter-clockwise (should be clockwise, like rooms)' });
   return out;
 }

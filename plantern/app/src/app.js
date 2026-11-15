@@ -169,7 +169,7 @@ async function main() {
   const shownLevels = () => levelStack(model, level, stackMode, exploded).map(s => ({ ...s, geo: geos.get(s.level.id) }));
   const refreshFixtures = () => shownLevels().forEach(s => s.level.fixtures?.forEach(applyFixture));
   // the yard's ground under the ground floor, with the Yard switch (docs/plans/yard.md Y11)
-  const yard3d = () => (model.yard?.boundary?.length >= 3 && readPrefs().yard !== false ? { ...model.yard, levelId: yardLevelId(model) } : null);
+  const yard3d = () => (model.yard?.boundary?.length >= 3 && readPrefs().yard !== false ? { ...model.yard, site: model.site, levelId: yardLevelId(model) } : null);
   const build3d = () => view3d.build({ level, geo: state().geo, levels: shownLevels(), settings: state().settings, fixtureLabel, ceilings, ...looks, doorStates: doors(), yard: yard3d() });
 
   async function toggleFixture(fx) {
