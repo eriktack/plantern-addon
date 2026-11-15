@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.34
+
+- Drag the corners of yard areas, lines and the outline in the Editor
+
 ## 0.8.33
 
 - Outdoor floors above the ground get sides down to it (decks, raised parts, the förstubro)

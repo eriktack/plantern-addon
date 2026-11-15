@@ -55,7 +55,7 @@ import { Ed } from './editor/state.js';
 import { addFromFile, setShown, addPoint, applyFit, revertFit, closeFit, renderUnderlays, setDraftOpacity, imageClick as underlayImageClick, planClick as underlayPlanClick, pickingPlan, stopPick as stopUnderlayPick, toggleHand as toggleUnderlayHand, typedPlace as typedUnderlayPlace, handDown as underlayHandDown, setHand as setUnderlayHand } from './editor/underlays.js';
 import { isDevice, fixtureNoun } from '../model/devices.js';
 import { bearingDown } from './editor/device-drag.js';
-import { yardDrawing, yardClick, stopDraw as stopYardDraw, startDraw as startYardDraw, finishDraw as finishYardDraw, undoPoint as undoYardPoint, setElevation as setYardElevation, importGeoFile as importYardGeo } from './editor/yard.js';
+import { yardDrawing, yardClick, stopDraw as stopYardDraw, startDraw as startYardDraw, finishDraw as finishYardDraw, undoPoint as undoYardPoint, setElevation as setYardElevation, importGeoFile as importYardGeo, editCorners as editYardCorners, cornerDown as yardCornerDown, stopCorners as stopYardCorners } from './editor/yard.js';
 
 enhanceSegmented();                  // choices of up to four: a row of buttons (UX20); before the menus, which leave these alone
 enhanceAll(document, { skip: '#preview, #tree' });     // the plan and the tree are rebuilt all the time and hold no select (PF16)
@@ -125,6 +125,7 @@ async function init() {
   $('ydAddLine').onclick = () => startYardDraw('line');
   $('ydBoundary').onclick = () => startYardDraw('boundary');
   $('ydGeo').onchange = e => importYardGeo(e.target.files?.[0]);
+  $('ydBoundaryCorners').onclick = () => editYardCorners('boundary');
   $('ydKind').onchange = () => { $('ydRetain').hidden = $('ydKind').value !== 'retaining'; };
   $('ydElev').onchange = e => setYardElevation(e.target.value);
   $('preview').addEventListener('dblclick', e => { if (yardDrawing()) { e.preventDefault(); e.stopPropagation(); finishYardDraw(); } }, true);
@@ -136,7 +137,7 @@ async function init() {
   $('ulHand').onclick = toggleUnderlayHand;
   $('ulScale').onchange = typedUnderlayPlace;
   $('ulRot').onchange = typedUnderlayPlace;
-  $('preview').parentElement.addEventListener('pointerdown', e => { if (!bearingDown(e)) underlayHandDown(e); }, true);   // before the plan's own drag and pan: a camera's bearing handle, a photo's hand handles
+  $('preview').parentElement.addEventListener('pointerdown', e => { if (!yardCornerDown(e) && !bearingDown(e)) underlayHandDown(e); }, true);   // before the plan's own drag and pan: a camera's bearing handle, a photo's hand handles
   // the House view: "Place the house" moves into it from the sidebar; its settings are wired here
   $('houseBox').querySelector('.edhead').after($('placeSect'));   // under the House header, above the settings
   $('browse').after($('houseBox'), $('levelBox'));          // the forms sit where the browse list sits, not under the top row
@@ -548,6 +549,7 @@ async function init() {
       if (Ed.placing) { stopPlacing('Placing cancelled'); return; }
       if (stopUnderlayPick('Point picking cancelled')) return;
       if (stopYardDraw('Drawing cancelled')) return;
+      if (stopYardCorners('Done with the corners')) return;
       if (Ed.ul?.hand) { setUnderlayHand(false); return; }
       if (Ed.splitPick) { $('wSplitAt').value = ''; stopSplitPick('Split cancelled'); draw(); return; }
       if (Ed.drawing) { stopDrawing(); return; }

@@ -36,10 +36,10 @@ export function renderYard() {
       + ` <select data-ydmat="area|${esc(a.id)}" data-cur="${esc(a.material || '')}" aria-label="Material of ${esc(a.name || a.id)}">${matOpts}</select>`
       + (a.surface === 'bed' ? ` <select data-ydplant="${esc(a.id)}" aria-label="What grows in ${esc(a.name || a.id)}">${PLANTINGS.map(k => `<option value="${k}"${k === plantingOf(a) ? ' selected' : ''}>${PLANTING_LABEL[k]}</option>`).join('')}</select>` : '') + '</span>'
       + `<button data-ydup="${esc(a.id)}" title="Draw it over the area above it">↑</button><button data-yddown="${esc(a.id)}" title="Draw it under the area below it">↓</button>`
-      + `<button data-ydredraw="area|${esc(a.id)}" title="Click its corners again">✎</button><button data-yddel="area|${esc(a.id)}" title="Delete it">×</button></div>`).join('')
+      + `<button data-ydcorners="area|${esc(a.id)}" title="Drag its corners">✥</button><button data-ydredraw="area|${esc(a.id)}" title="Click its corners again">✎</button><button data-yddel="area|${esc(a.id)}" title="Delete it">×</button></div>`).join('')
     + lines.map(l => `<div class="arow"><span><b>${esc(l.name || LINE_LABEL[l.kind] || l.kind)}</b> <small>${esc(l.id)} · ${l.points.length} points${l.kind === 'retaining' ? ` · ${l.drop} mm, high on its ${l.high}` : ''}</small>`
       + (['stonewall', 'retaining', 'fence', 'edging'].includes(l.kind) ? `<br><select data-ydmat="line|${esc(l.id)}" data-cur="${esc(l.material || '')}" aria-label="Material of ${esc(l.name || l.id)}">${matOpts}</select>` : '') + '</span>'
-      + `<button data-ydredraw="line|${esc(l.id)}" title="Click its points again">✎</button><button data-yddel="line|${esc(l.id)}" title="Delete it">×</button></div>`).join('')
+      + `<button data-ydcorners="line|${esc(l.id)}" title="Drag its points">✥</button><button data-ydredraw="line|${esc(l.id)}" title="Click its points again">✎</button><button data-yddel="line|${esc(l.id)}" title="Delete it">×</button></div>`).join('')
     + ground.map(g => `<div class="arow"><span><b>${esc(g.name || g.id)}</b> <small>${esc(g.id)} · ground height</small><br>`
       + `<input data-ydz="${esc(g.id)}" inputmode="numeric" value="${g.z}" aria-label="Height of ${esc(g.name || g.id)}, mm" style="width:7em"> mm</span>`
       + `<button data-ydredraw="ground|${esc(g.id)}" title="Click its spot again">✎</button><button data-yddel="ground|${esc(g.id)}" title="Delete it">×</button></div>`).join('')
@@ -52,6 +52,7 @@ export function renderYard() {
     s.onchange = () => { const [k, id] = s.dataset.ydmat.split('|'); apply((k === 'area' ? setYardArea : setYardLine)(Ed.model, id, { material: s.value || null }), 'Material changed'); };
   });
   $('ydList').querySelectorAll('[data-ydplant]').forEach(s => (s.onchange = () => apply(setYardArea(Ed.model, s.dataset.ydplant, { planting: s.value === 'flowers' ? null : s.value }), 'Planting changed')));
+  $('ydList').querySelectorAll('[data-ydcorners]').forEach(b => (b.onclick = () => { const [type, id] = b.dataset.ydcorners.split('|'); editCorners(type, id); }));
   $('ydList').querySelectorAll('[data-ydup]').forEach(b => (b.onclick = () => apply(moveYardArea(Ed.model, b.dataset.ydup, 1), 'Moved up')));
   $('ydList').querySelectorAll('[data-yddown]').forEach(b => (b.onclick = () => apply(moveYardArea(Ed.model, b.dataset.yddown, -1), 'Moved down')));
   $('ydList').querySelectorAll('[data-yddel]').forEach(b => (b.onclick = () => { const [k, id] = b.dataset.yddel.split('|'); apply(k === 'area' ? deleteYardArea(Ed.model, id) : k === 'ground' ? deleteYardGround(Ed.model, id) : deleteYardLine(Ed.model, id), 'Deleted'); }));
@@ -124,6 +125,67 @@ export function setElevation(v) {
   const t = String(v).trim(), r = setYard(Ed.model, { elevation: t === '' ? null : Number(t) });
   if (r.report.errors.length) { msg(r.report.errors.join('; ')); return; }
   commit(r.model); msg('Ground height set (not saved yet)');
+}
+
+// ---- dragging corners (Y6) ----
+// One shape at a time shows handles: its corners (drag to move, snapping like drawing, Alt: free; Shift-click: remove) and the
+// middles of its sides (drag one to add a corner there). Each drag is one undo step.
+const shapeOf = (type, id) => { const y = Ed.model.yard || {}; return type === 'boundary' ? y.boundary : type === 'area' ? y.areas?.find(a => a.id === id)?.polygon : y.lines?.find(l => l.id === id)?.points; };
+export function editCorners(type, id = null) {
+  if (!onYardLevel()) { msg('The yard is drawn on the ground floor: switch to it first.'); return; }
+  stopDraw();
+  const s = yd();
+  if (s.edit && s.edit.type === type && s.edit.id === id) { stopCorners('Done'); return; }
+  if (!shapeOf(type, id)) return;
+  s.edit = { type, id };
+  setStatus(`${type === 'boundary' ? 'The yard\'s outline' : id}: drag a corner (snaps; Alt: free), drag a side's middle to add a corner, Shift-click a corner to remove it · Esc or ✥ again: done`);
+  draw();
+}
+export function stopCorners(m = '') { if (!Ed.yd?.edit) return false; Ed.yd.edit = null; if (m) setStatus(m); draw(); return true; }
+const saveShape = (type, id, pts, what) => {
+  const r = type === 'boundary' ? setYard(Ed.model, { boundary: pts }) : type === 'area' ? setYardArea(Ed.model, id, { polygon: pts }) : setYardLine(Ed.model, id, { points: pts });
+  if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); draw(); return; }
+  commit(r.model); setStatus(`${what} (not saved yet) · Esc: done`);
+};
+/** Pointer down on a corner or side handle (listened to before the plan's own drag and pan). True when it is ours. */
+export function cornerDown(e) {
+  const h = e.button === 0 && e.target.closest?.('[data-ydc],[data-ydm]'), ed = Ed.yd?.edit;
+  if (!h || !ed) return false;
+  const pts0 = shapeOf(ed.type, ed.id); if (!pts0) return false;
+  e.preventDefault(); e.stopPropagation();
+  const closed = ed.type !== 'line', isMid = h.dataset.ydm !== undefined;
+  let pts = pts0.map(p => [...p]), i = Number(isMid ? h.dataset.ydm : h.dataset.ydc);
+  if (!isMid && e.shiftKey) {                                       // remove a corner
+    if (pts.length <= (closed ? 3 : 2)) { setStatus(`It needs at least ${closed ? 3 : 2} points`); return true; }
+    pts.splice(i, 1); saveShape(ed.type, ed.id, pts, 'Corner removed'); Ed.suppressClick = true; setTimeout(() => { Ed.suppressClick = false; }, 350); return true;
+  }
+  if (isMid) { const a = pts[i], b = pts[(i + 1) % pts.length]; pts.splice(i + 1, 0, [Math.round((a[0] + b[0]) / 2), Math.round((a[1] + b[1]) / 2)]); i += 1; }
+  let moved = false, frame = 0;
+  const move = ev => {
+    const { p, k } = planPointOf(ev), hit = ev.altKey ? null : nearestPoint(p, Ed.snaps || [], 14 * k);
+    pts[i] = (hit ? hit.pos : p).map(v => Math.round(v)); moved = true;
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => { Ed.yd.dragPts = pts; draw(); });
+  };
+  const up = () => {
+    removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
+    cancelAnimationFrame(frame); Ed.yd.dragPts = null;
+    Ed.suppressClick = true; setTimeout(() => { Ed.suppressClick = false; }, 350);
+    if (!moved) { draw(); return; }
+    saveShape(ed.type, ed.id, pts, isMid ? 'Corner added' : 'Corner moved');
+  };
+  addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
+  return true;
+}
+function cornersSvg(fs) {
+  const ed = Ed.yd?.edit; if (!ed) return '';
+  const pts0 = Ed.yd.dragPts || shapeOf(ed.type, ed.id); if (!pts0) return '';
+  const closed = ed.type !== 'line';
+  let out = `<${closed ? 'polygon' : 'polyline'} points="${pts(pts0)}" fill="none" stroke="#ffb454" stroke-width="${fs / 6}" pointer-events="none"/>`;
+  const n = closed ? pts0.length : pts0.length - 1;
+  for (let i = 0; i < n; i++) { const a = pts0[i], b = pts0[(i + 1) % pts0.length], [x, y] = toSvg([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]); out += `<circle data-ydm="${i}" cx="${x}" cy="${y}" r="${fs * 0.3}" fill="#14161a" stroke="#ffb454" stroke-width="${fs / 10}" style="cursor:copy"><title>Drag to add a corner here</title></circle>`; }
+  pts0.forEach((p, i) => { const [x, y] = toSvg(p); out += `<circle data-ydc="${i}" cx="${x}" cy="${y}" r="${fs * 0.45}" fill="#ffb454" stroke="#14161a" stroke-width="${fs / 10}" style="cursor:grab"><title>Drag to move (Alt: no snapping) · Shift-click: remove</title></circle>`; });
+  return out;
 }
 
 // ---- importing a map file (GeoJSON; decision 308) ----
@@ -201,7 +263,7 @@ export function yardSvg(fs) {
 }
 /** On top of the plan while drawing: the points so far, joined. */
 export function yardDraftSvg(fs) {
-  const t = Ed.yd?.tool, imp = onYardLevel() ? importSvg(fs) : '';
+  const t = Ed.yd?.tool, imp = onYardLevel() ? importSvg(fs) + cornersSvg(fs) : '';
   if (!t || !t.pts.length) return imp;
   const closed = t.type !== 'line' && t.pts.length >= 3;
   return `<g pointer-events="none"><${closed ? 'polygon' : 'polyline'} points="${pts(t.pts)}" fill="${closed ? '#ffb45433' : 'none'}" stroke="#ffb454" stroke-width="${fs / 6}" stroke-dasharray="${fs / 2} ${fs / 3}"/>`
