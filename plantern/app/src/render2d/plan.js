@@ -7,7 +7,7 @@ import { visibility } from '../geometry/visibility.js';
 import { roomNameLayout } from '../geometry/polygon.js';
 import { openingSymbol, arcPathSvg } from '../geometry/openings.js';
 import { sideStrips, wallCut } from '../geometry/walls.js';
-import { resolveSide } from '../model/materials.js';
+import { resolveSide, textureUrl } from '../model/materials.js';
 import { doorOpen } from '../model/doors.js';
 import { lockOf, padlockLook } from '../ha/door.js';
 import { drawPadlock } from './padlock.js';
@@ -140,10 +140,25 @@ function drawRoofs(level, g, palette) {
   }
 }
 
-function drawYard(g, yard, palette) {
+function drawYard(g, yard, palette, materials = {}, baseUrl = '', defs = null) {
+  const pats = new Map();
+  // an area of a textured material (paving stones; decision 305) is filled with its image, one repeat per uvScale mm
+  const fillOf = a => {
+    const m = a.material ? resolveSide({ material: a.material }, materials) : null;
+    if (m?.texture && defs) {
+      if (!pats.has(a.material)) {
+        const id = `ytex-${pats.size}`, s = m.uvScale || 1000;
+        const pat = el('pattern', { id, patternUnits: 'userSpaceOnUse', width: s, height: s }, defs);
+        el('image', { href: textureUrl(m.texture, baseUrl), width: s, height: s, preserveAspectRatio: 'none' }, pat);
+        pats.set(a.material, `url(#${id})`);
+      }
+      return pats.get(a.material);
+    }
+    return a.color || m?.color || palette.yardSurface[a.surface] || palette.yardSurface.other;
+  };
   for (const a of yard.areas || []) {
     if (!Array.isArray(a.polygon) || a.polygon.length < 3) continue;
-    const p = el('polygon', { points: svgPoints(a.polygon), fill: a.color || palette.yardSurface[a.surface] || palette.yardSurface.other, 'fill-opacity': palette.yardAlpha, stroke: 'none', 'data-yard': a.id }, g);
+    const p = el('polygon', { points: svgPoints(a.polygon), fill: fillOf(a), 'fill-opacity': palette.yardAlpha, stroke: 'none', 'data-yard': a.id }, g);
     el('title', {}, p).textContent = a.name ? `${a.name} (${a.surface})` : a.surface;
   }
   // what grows in the flower beds (decision 304): a dot per plant, its blossom's colour or green
@@ -215,12 +230,12 @@ export function createPlanView(svg, hooks = {}) {
     return fromSvg([q.x, q.y]);
   }
 
-  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {}, assetStatus = () => 'unknown', assetColour = () => null, doorStates = null, underlays = [], devices = null, yard = null }) {
+  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', assetStatus = () => 'unknown', assetColour = () => null, doorStates = null, underlays = [], devices = null, yard = null }) {
     svg.replaceChildren();
     fixEls = {}; lightEls = {};
     const defs = el('defs', {}, svg), layer = id => el('g', { id }, svg);
     drawUnderlays(layer('underlay'), level ? underlays : []);
-    if (level && yard) drawYard(layer('yard'), yard, palette);
+    if (level && yard) drawYard(layer('yard'), yard, palette, materials, baseUrl, defs);
     const gFloor = layer('floor'), gLight = layer('light'), gCov = layer('coverage'), gObj = layer('objects'), gWall = layer('walls'), gRoof = layer('roofs'), gFix = layer('fixtures'), gDev = layer('devices');
     overlay = layer('overlay');
     const all = [];

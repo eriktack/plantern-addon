@@ -16,7 +16,7 @@ const GLOW_MIN = 0.5, GLOW_MAX = 1.6;      // how bright a lamp's shining part i
 import { installLampMask, setLampMasks, packMasks, decayFor, MAX_MASKS } from './lamp-mask.js';
 import { DEFAULT_NIGHT_LIGHT } from '../model/night.js';
 import { assetPlacement } from '../model/assets.js';
-import { textureUrl } from '../model/materials.js';
+import { textureUrl, resolveSide } from '../model/materials.js';
 import { isDevice } from '../model/devices.js';
 
 /**
@@ -258,9 +258,10 @@ export function createView3d(container, hooks = {}) {
   const GROUND = { grass: '#5f8a45', gravel: '#a69d8c', asphalt: '#4a4c52', paving: '#9c8775', deck: '#8a6a45', bed: '#5a4632', rock: '#8a8a85', forest: '#3a6a3a', water: '#4d7fae', other: '#7a8088' };
   const LINE_LOOK = { picket: { t: 22, h: 900, color: '#ece8de' }, retaining: { t: 250, color: '#8d877b' }, stonewall: { t: 400, h: 600, color: '#8d877b' }, fence: { t: 40, h: 1000, color: '#8a6f4a' }, hedge: { t: 600, h: 1200, color: '#3f6f32' } };
   /** The ground mesh under the yard's level, its areas coloured on it, and the walls, fences and hedges standing on it. */
-  function addGround(g, level, yard) {
+  function addGround(g, level, yard, materials = {}, baseUrl = '') {
+    const matOf = id => (id ? resolveSide({ material: id }, materials) : null);
     const holes = (level.rooms || []).filter(r => !r.exterior && r.polygon?.length >= 3).map(r => r.polygon);
-    const mesh = groundMesh(yard, { cell: 400, holes, colorOf: (surface, a) => a.color || GROUND[surface] || GROUND.other, fallback: GROUND.grass });
+    const mesh = groundMesh(yard, { cell: 400, holes, colorOf: (surface, a) => a.color || matOf(a.material)?.color || GROUND[surface] || GROUND.other, fallback: GROUND.grass });
     if (!mesh) return null;
     const pos = new Float32Array(mesh.positions.length * 3), col = new Float32Array(mesh.colors.length * 3), idx = [];
     mesh.positions.forEach((p, i) => pos.set(toThree([p[0], p[1]], p[2]), i * 3));
@@ -272,6 +273,22 @@ export function createView3d(container, hooks = {}) {
     const m = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: THREE.DoubleSide }));
     m.name = 'yard:ground'; m.receiveShadow = false;                 // a large mesh: lamp shadows on it cost more than they show
     g.add(m);
+    // areas of a textured material (paving stones, cobbles; decision 305): the ground under them again, cut to the area (less
+    // what later areas cover), a little above it, the image laid flat in plan coordinates
+    const areas = yard.areas || [];
+    areas.forEach((a, k) => {
+      const t = matOf(a.material); if (!t?.texture || !(a.polygon?.length >= 3)) return;
+      const later = areas.slice(k + 1).filter(b => b.polygon?.length >= 3).map(b => b.polygon);
+      const part = groundMesh({ ...yard, boundary: a.polygon }, { cell: 400, holes: [...holes, ...later] }); if (!part?.triangles.length) return;
+      const p3 = new Float32Array(part.positions.length * 3), uv = new Float32Array(part.positions.length * 2), ix = [];
+      const s = t.uvScale || 1000;
+      part.positions.forEach((p, i) => { p3.set(toThree([p[0], p[1]], mesh.at(p) + 12 + k), i * 3); uv[i * 2] = p[0] / s; uv[i * 2 + 1] = p[1] / s; });
+      for (const tr of part.triangles) ix.push(tr[0], tr[2], tr[1]);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(p3, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); geo.setIndex(ix); geo.computeVertexNormals();
+      const mat = new THREE.MeshStandardMaterial({ map: texture(textureUrl(t.texture, baseUrl)), roughness: 0.9, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1 - k, polygonOffsetUnits: -1 - k });
+      const o = new THREE.Mesh(geo, mat); o.name = `${a.id}:yard`; o.receiveShadow = true; g.add(o);
+    });
     // retaining walls from their low side's ground up to their high side's; the others standing on the ground
     for (const l of yard.lines || []) {
       const look = LINE_LOOK[l.kind]; if (!look || !(l.points?.length >= 2)) continue;
@@ -286,7 +303,10 @@ export function createView3d(container, hooks = {}) {
         if (l.kind === 'retaining') { const hi = l.high === 'left' ? left : right, lo = l.high === 'left' ? right : left; z1 = mesh.at(hi); z0 = Math.min(mesh.at(lo), z1 - (l.drop || 0)) - 100; }
         else { z0 = mesh.at(mid) - 50; z1 = z0 + 50 + (l.height || look.h); }
         if (!Number.isFinite(z0) || !Number.isFinite(z1) || z1 <= z0) continue;
-        const w = new THREE.Mesh(prismGeometry(THREE, poly, z0, z1), new THREE.MeshStandardMaterial({ color: new THREE.Color(l.color || look.color), roughness: 0.9, metalness: 0 }));
+        const lm = matOf(l.material), geom = prismGeometry(THREE, poly, z0, z1);
+        let wm = new THREE.MeshStandardMaterial({ color: new THREE.Color(l.color || lm?.color || look.color), roughness: 0.9, metalness: 0 });
+        if (lm?.texture) wm = texturedSurface(geom, { tex: { texture: lm.texture, uvScale: lm.uvScale, along: u } }, baseUrl, wm);   // wall blocks: courses level along the face
+        const w = new THREE.Mesh(geom, wm);
         w.name = `${l.id}:yard`; w.castShadow = true; w.receiveShadow = true;
         g.add(w);
       }
@@ -434,7 +454,7 @@ export function createView3d(container, hooks = {}) {
     g.position.x = shift[0] * MM; g.position.z = -shift[1] * MM;      // plan (x, y) → three (x, -y)
     root.add(g);
     if (yard && level.id === yard.levelId) {
-      const at = addGround(g, level, yard);
+      const at = addGround(g, level, yard, materials, baseUrl);
       // an object out in the yard (in no room) with no height of its own stands on the ground there: a tree
       if (at) level = { ...level, objects: (level.objects || []).map(o => {
         if (o.z || o.attach) return o;

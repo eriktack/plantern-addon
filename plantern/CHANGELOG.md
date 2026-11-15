@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.28
+
+- Stone materials for the yard: red-mix paving, grey wall blocks and grey cobbles, on areas and walls
+
 ## 0.8.27
 
 - Flowers in flower beds: flowers, low plants or bare soil

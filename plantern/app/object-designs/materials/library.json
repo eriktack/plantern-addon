@@ -15,5 +15,8 @@
   "stone": { "color": "#a8a39a" },
   "charcoal": { "color": "#3a3d42" },
   "sage": { "color": "#8a9a7b" },
-  "navy": { "color": "#2f3b52" }
+  "navy": { "color": "#2f3b52" },
+  "paving-red-mix": { "color": "#8e5444", "texture": "textures/paving-red-mix.jpg", "uvScale": 840, "roughness": 0.9 },
+  "wall-block-grey": { "color": "#808285", "texture": "textures/wall-block-grey.jpg", "uvScale": 1000, "roughness": 0.95 },
+  "cobble-grey": { "color": "#7d7b7a", "texture": "textures/cobble-grey.jpg", "uvScale": 900, "roughness": 0.9 }
 }

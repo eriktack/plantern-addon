@@ -1537,7 +1537,8 @@
         "id": "ya_path_to_the_drive",
         "name": "Path to the drive",
         "surface": "paving",
-        "polygon": [[9400,1500],[9400,2700],[11000,2700],[11000,1500]]
+        "polygon": [[9400,1500],[9400,2700],[11000,2700],[11000,1500]],
+        "material": "paving-red-mix"
       },
       { "id": "ya_flower_bed", "name": "Flower bed", "surface": "bed", "polygon": [[-5400,4400],[-5400,6400],[-2400,6400],[-2400,4400]] },
       { "id": "ya_pond", "name": "Pond", "surface": "water", "polygon": [[6000,4600],[6400,6000],[8000,6300],[8800,5200],[8000,4400]] }
@@ -1551,7 +1552,8 @@
         "points": [[-5000,5500],[-3000,6200],[-1000,6400]],
         "thickness": 300,
         "high": "left",
-        "drop": 600
+        "drop": 600,
+        "material": "wall-block-grey"
       },
       {
         "id": "yl_picket_fence",

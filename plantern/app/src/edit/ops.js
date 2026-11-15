@@ -253,13 +253,13 @@ export function addYardArea(model, spec = {}) {
   const y = yardOf(model);
   return { ...withYard(model, { ...y, areas: [...y.areas, a] }), area: a };
 }
-/** Change an area (name, surface, polygon, color, planting; null removes name, color or planting). Returns { model, report, area }. */
+/** Change an area (name, surface, polygon, color, material, planting; null removes name, color, material or planting). Returns { model, report, area }. */
 export function setYardArea(model, id, props = {}) {
   const y = yardOf(model), old = y.areas.find(a => a.id === id);
   if (!old) return refuse(model, `no yard area "${id}"`);
   const a = { ...old };
   for (const [k, v] of Object.entries(props)) {
-    if (!['name', 'surface', 'polygon', 'color', 'planting'].includes(k)) return refuse(model, `${k} cannot be set on a yard area`);
+    if (!['name', 'surface', 'polygon', 'color', 'material', 'planting'].includes(k)) return refuse(model, `${k} cannot be set on a yard area`);
     if (v === null || v === '') { if (k === 'surface' || k === 'polygon') return refuse(model, `${k} cannot be removed`); delete a[k]; }
     else a[k] = k === 'polygon' && Array.isArray(v) ? roundPts(clockwise(v)) : v;
   }
@@ -329,7 +329,7 @@ export function setYardLine(model, id, props = {}) {
   if (!old) return refuse(model, `no yard line "${id}"`);
   const l = { ...old };
   for (const [k, v] of Object.entries(props)) {
-    if (!['name', 'kind', 'points', 'height', 'thickness', 'high', 'drop'].includes(k)) return refuse(model, `${k} cannot be set on a yard line`);
+    if (!['name', 'kind', 'points', 'height', 'thickness', 'material', 'high', 'drop'].includes(k)) return refuse(model, `${k} cannot be set on a yard line`);
     if (v === null || v === '') { if (k === 'kind' || k === 'points') return refuse(model, `${k} cannot be removed`); delete l[k]; }
     else l[k] = k === 'points' && Array.isArray(v) ? roundPts(v) : v;
   }

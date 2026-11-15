@@ -19,7 +19,7 @@ const BY_NAME = Object.freeze({
   'black-metal': 'metal', metal: 'metal',
   fabric: 'fabric', leather: 'fabric',
   glass: 'glass',
-  ceramic: 'ceramic', laminate: 'ceramic', stone: 'ceramic',
+  ceramic: 'ceramic', laminate: 'ceramic', stone: 'ceramic', 'paving-red-mix': 'ceramic', 'wall-block-grey': 'ceramic', 'cobble-grey': 'ceramic',
 });
 
 /** { kind, label } of a material: from its name, else from its library entry, else 'other'. */

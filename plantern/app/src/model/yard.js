@@ -1,6 +1,7 @@
 // The yard (docs/plans/yard.md, decision 294): the ground around the buildings. Pure.
-//   yard: { boundary?: [[x, y], …], elevation?: mm, areas: [{ id: "ya_…", name?, surface, polygon, color?, planting? }],
-//           lines: [{ id: "yl_…", name?, kind, points, height?, thickness?, high?: "left" | "right", drop? }] }
+//   yard: { boundary?: [[x, y], …], elevation?: mm, areas: [{ id: "ya_…", name?, surface, polygon, color?, material?, planting? }],
+//           lines: [{ id: "yl_…", name?, kind, points, height?, thickness?, material?, high?: "left" | "right", drop? }] }
+// `material` names a material of the house's table or the design library (paving stones, wall blocks; decision 305).
 // In the main building's plan coordinates. Areas are drawn in order, a later one over an earlier one (a path on the lawn needs
 // no hole). A retaining wall's `high` is the side of the line's direction where the ground is higher, `drop` the difference.
 
@@ -24,6 +25,7 @@ export function areaErrors(a) {
   if (!YARD_SURFACES.includes(a.surface)) e.push(`surface must be one of ${YARD_SURFACES.join(', ')}`);
   if (!isPts(a.polygon, 3)) e.push('polygon must be three or more points [x, y] in mm');
   if (a.color !== undefined && !/^#[0-9a-f]{6}$/i.test(String(a.color))) e.push('color must be #rrggbb');
+  if (a.material !== undefined && (typeof a.material !== 'string' || !a.material)) e.push('material is the name of a material');
   if (a.planting !== undefined) {
     if (a.surface !== 'bed') e.push('planting is only for a flower bed (surface bed)');
     else if (!PLANTINGS.includes(a.planting)) e.push(`planting must be one of ${PLANTINGS.join(', ')}`);
@@ -38,6 +40,7 @@ export function lineErrors(l) {
   if (typeof l.id !== 'string' || !/^yl_[a-z0-9_]+$/.test(l.id)) e.push('a line id looks like yl_fence');
   if (!YARD_LINE_KINDS.includes(l.kind)) e.push(`kind must be one of ${YARD_LINE_KINDS.join(', ')}`);
   if (!isPts(l.points, 2)) e.push('points must be two or more points [x, y] in mm');
+  if (l.material !== undefined && (typeof l.material !== 'string' || !l.material)) e.push('material is the name of a material');
   for (const k of ['height', 'thickness']) if (l[k] !== undefined && !(Number.isFinite(l[k]) && l[k] > 0)) e.push(`${k} is in mm, more than 0`);
   if (l.kind === 'retaining') {
     if (!['left', 'right'].includes(l.high)) e.push('a retaining wall needs high: "left" or "right" (the side, along the line, where the ground is higher)');
