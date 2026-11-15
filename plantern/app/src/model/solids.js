@@ -1,6 +1,6 @@
 // Solids (PLANTERN.md §6.1, §6.3): free-standing prisms such as a chimney, a pillar or a boxed-in
 // pipe. Footprint `polygon` (clockwise, like a room: measured walking round it with the solid on your
-// right), `base` (mm above the floor, default 0; negative down to the ceiling of the level below, -floorThickness, for a chimney that carries on through the slab), `height` (default: up to the ceiling), `color`.
+// right), `base` (mm above the floor, default 0; negative down to the ceiling of the level below, -floorThickness, for a chimney that carries on through the slab; outdoors any depth, for steps down to the ground), `height` (default: up to the ceiling), `color`.
 // Measured like a room: `capture` { mode, raw } with `polygon` the solved result. Its faces bound the
 // rooms around it (geometry/solids.js). `sides` paints it per room: { <roomId>: { color } | { material } }
 // applies to every stretch of its faces along that room; faces in no room and the top keep `color`.
@@ -31,18 +31,21 @@ export function checkSolid(s, level) {
   if (!(s.polygon?.length >= 3) || s.polygon.some(p => !Number.isFinite(p?.[0]) || !Number.isFinite(p?.[1]))) errors.push('footprint (polygon) needs 3 or more corners [x, y]');
   else if (!isClockwise(s.polygon)) warnings.push('footprint is counter-clockwise (should be clockwise, like rooms)');
   if (!SOLID_KINDS.includes(s.kind)) warnings.push(`kind "${s.kind}" is not one of ${SOLID_KINDS.join(', ')}`);
-  // a chimney may start below the floor, down to the ceiling of the level below (the underside of this floor's slab)
-  const lowest = -(level.floorThickness ?? 0);
-  if (s.base !== undefined && !(Number.isFinite(s.base) && s.base >= lowest)) errors.push(lowest < 0 ? `base must be ${lowest} (the ceiling of the level below) or more mm above the floor` : 'base must be 0 or more mm above the floor');
+  // outdoors (in an exterior room, or in no room: a post in the yard) there is no ceiling to stay under, and no slab to stay on:
+  // steps down to the ground may start below the floor's slab (decision 306)
+  const mid = s.polygon?.length ? s.polygon.reduce((a, p) => [a[0] + p[0] / s.polygon.length, a[1] + p[1] / s.polygon.length], [0, 0]) : null;
+  const inRoom = mid && (level.rooms || []).find(r => r.polygon?.length >= 3 && pointInPolygon(mid, r.polygon));
+  const outdoors = mid && (!inRoom || inRoom.exterior);
+  // indoors a chimney may start below the floor, down to the ceiling of the level below (the underside of this floor's slab)
+  // (a level with no rooms yet says nothing about outdoors: the indoor rule holds there)
+  const lowest = outdoors && (inRoom || (level.rooms || []).length) ? -Infinity : -(level.floorThickness ?? 0);
+  if (s.base !== undefined && !Number.isFinite(s.base)) errors.push('base must be a number of mm');
+  else if (s.base !== undefined && !(s.base >= lowest)) errors.push(lowest < 0 ? `base must be ${lowest} (the ceiling of the level below) or more mm above the floor` : 'base must be 0 or more mm above the floor');
   if (s.height !== undefined && !(Number.isFinite(s.height) && s.height > 0)) errors.push('height must be more than 0 mm');
   if (s.material !== undefined && (typeof s.material !== 'string' || !s.material)) errors.push('material is the id of a material');
   if (s.color !== undefined && !HEX.test(s.color)) errors.push(`colour "${s.color}" must look like #rrggbb`);
   if (s.cutsWalls !== undefined && typeof s.cutsWalls !== 'boolean') errors.push('cutsWalls must be true or false');
   const top = s.height !== undefined ? (s.base ?? 0) + s.height : level.ceilingHeight ?? 2400;
-  // outdoors (in an exterior room, or in no room: a post in the yard) there is no ceiling to stay under
-  const mid = s.polygon?.length ? s.polygon.reduce((a, p) => [a[0] + p[0] / s.polygon.length, a[1] + p[1] / s.polygon.length], [0, 0]) : null;
-  const inRoom = mid && (level.rooms || []).find(r => r.polygon?.length >= 3 && pointInPolygon(mid, r.polygon));
-  const outdoors = mid && (!inRoom || inRoom.exterior);
   if (s.height !== undefined && !outdoors && top > (level.ceilingHeight ?? 2400) + 1) warnings.push(`rises to ${top} mm, above the ceiling (${level.ceilingHeight ?? 2400} mm)`);
   return { errors, warnings };
 }

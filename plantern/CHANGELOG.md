@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.30
+
+- Outdoor solids may start below the floor slab, for steps down to the ground
+
 ## 0.8.29
 
 - Granite-grey paving and gravel materials; yard areas drawn as layers in 3D; darker asphalt
