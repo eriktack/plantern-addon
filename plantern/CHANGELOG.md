@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.38
+
+- Underlays can carry their own fit tolerance
+
 ## 0.8.37
 
 - Map import: robot mower safety zones and planned paths

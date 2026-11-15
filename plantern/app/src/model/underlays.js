@@ -15,6 +15,7 @@ export const UNDERLAY_DIR = 'assets/underlays/';
 export const UNDERLAY_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
 export const UNDERLAY_DEFAULT_OPACITY = 0.6;
 export const UNDERLAY_RESIDUAL_WARN = 150;          // mm: a point further than this from the fit is probably a wrong click
+// (an underlay's own `tolerance` replaces it: a drone photo of sloping ground fits only so well, decision 312)
 const FILE_NAME = /^[a-z0-9][a-z0-9._-]*$/i;
 
 /** Is this a path an underlay file may have: assets/underlays/<name>.<png|jpg|jpeg|webp>, nothing above or beside it. */
@@ -40,6 +41,7 @@ export function underlayShapeErrors(u) {
     if (!(typeof pl === 'string' && pl.includes('#')) && !(Array.isArray(pl) && pl.length === 2 && pl.every(Number.isFinite))) e.push(`point ${i + 1}: plan must be a snap ref or [x, y] in mm`);
   });
   if (u.opacity !== undefined && !(Number.isFinite(u.opacity) && u.opacity >= 0 && u.opacity <= 1)) e.push('opacity must be between 0 and 1');
+  if (u.tolerance !== undefined && !(Number.isFinite(u.tolerance) && u.tolerance > 0 && u.tolerance <= 2000)) e.push('tolerance is mm (how far a point may be from the fit before it is warned about), 1 to 2000');
   if (u.place !== undefined && !placeOk(u.place)) e.push('place must be { at: [x, y] mm, scale: mm per pixel (more than 0), rotation: degrees }');
   return e;
 }
@@ -85,7 +87,7 @@ export function checkUnderlays(model, geos) {
     if (r.error) out.push({ severity: 'warn', id, msg: `cannot be fitted: ${r.error}` });
     if (!r.fit || r.by !== 'points') continue;
     if (r.fit.mirrored) out.push({ severity: 'warn', id, msg: 'the points fit a mirrored image better: are they in the right order, on the right image?' });
-    r.fit.residuals.forEach((d, i) => { if (d > UNDERLAY_RESIDUAL_WARN) out.push({ severity: 'warn', id, msg: `point ${i + 1} (${r.pairs[i].ref || r.pairs[i].plan.map(Math.round).join(', ')}) is ${Math.round(d)} mm from where the fit puts it: a wrong click, or a point that is not on the ground?` }); });
+    r.fit.residuals.forEach((d, i) => { if (d > (u.tolerance ?? UNDERLAY_RESIDUAL_WARN)) out.push({ severity: 'warn', id, msg: `point ${i + 1} (${r.pairs[i].ref || r.pairs[i].plan.map(Math.round).join(', ')}) is ${Math.round(d)} mm from where the fit puts it: a wrong click, or a point that is not on the ground?` }); });
   }
   return out;
 }
