@@ -247,7 +247,7 @@ export async function importGeoFile(file) {
   const r = readGeoJson(text, Ed.model.site);
   $('ydGeo').value = '';
   if (!r.shapes.length) { yd().imp = null; renderImport(); msg(r.warnings.join(' ') || 'No shapes in the file'); return; }
-  yd().imp = { ...r, file: file.name, on: new Set(r.shapes.filter(s => s.geom !== 'point' || s.z !== undefined).map(s => s.n)) };
+  yd().imp = { ...r, file: file.name, on: new Set(r.shapes.filter(s => !s.skip && (s.geom !== 'point' || s.z !== undefined)).map(s => s.n)) };
   renderImport(); draw();
   msg(`${r.shapes.length} shape${r.shapes.length > 1 ? 's' : ''} in ${file.name} (${r.crs === 'WGS84' ? 'GPS coordinates' : 'SWEREF 99 TM'}), shown dashed in the plan. ${r.warnings.join(' ')}`);
 }

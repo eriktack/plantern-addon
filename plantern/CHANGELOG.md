@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.37
+
+- Map import: robot mower safety zones and planned paths
+
 ## 0.8.36
 
 - Fetch ground heights from Lantmäteriet in the Editor's Yard section

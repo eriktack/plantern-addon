@@ -45,11 +45,11 @@ export function mapToPlan([E, N], site) {
 }
 
 // what a shape probably is, from its properties' words (a mower's no-go zone, a path, a mowing area)
-const OBSTACLE = /obstacle|no.?go|forbidden|exclu|hinder|block/i, PATH = /path|channel|passage|corridor|road|route/i;
+const OBSTACLE = /obstacle|no.?go|forbidden|exclu|hinder|block|safety/i, PATH = /path|channel|passage|corridor|road|route/i, PLANNED = /planned path|mow(ing)? path|route plan/i;
 function guess(geom, props) {
   const words = Object.values(props || {}).filter(v => typeof v === 'string').join(' ');
-  if (geom === 'area') return OBSTACLE.test(words) ? { surface: 'other', note: 'no-go zone' } : PATH.test(words) ? { surface: 'gravel', note: 'path' } : { surface: 'grass' };
-  if (geom === 'line') return { kind: 'edging' };
+  if (geom === 'area') return OBSTACLE.test(words) ? { surface: 'other', note: /safety/i.test(words) ? 'a zone the mower avoids' : 'no-go zone' } : PATH.test(words) ? { surface: 'gravel', note: 'path' } : { surface: 'grass' };
+  if (geom === 'line') return PLANNED.test(words) ? { kind: 'edging', note: 'the mower\'s planned path', skip: true } : { kind: 'edging' };
   return {};
 }
 const nameOf = (props, i) => {
