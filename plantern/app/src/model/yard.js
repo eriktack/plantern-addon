@@ -1,11 +1,12 @@
 // The yard (docs/plans/yard.md, decision 294): the ground around the buildings. Pure.
-//   yard: { boundary?: [[x, y], …], elevation?: mm, areas: [{ id: "ya_…", name?, surface, polygon, color? }],
+//   yard: { boundary?: [[x, y], …], elevation?: mm, areas: [{ id: "ya_…", name?, surface, polygon, color?, planting? }],
 //           lines: [{ id: "yl_…", name?, kind, points, height?, thickness?, high?: "left" | "right", drop? }] }
 // In the main building's plan coordinates. Areas are drawn in order, a later one over an earlier one (a path on the lawn needs
 // no hole). A retaining wall's `high` is the side of the line's direction where the ground is higher, `drop` the difference.
 
 import { groundErrors } from '../terrain/ground.js';
 import { isClockwise } from '../geometry/polygon.js';
+import { PLANTINGS } from '../terrain/planting.js';
 
 export const YARD_SURFACES = ['grass', 'gravel', 'asphalt', 'paving', 'deck', 'bed', 'rock', 'forest', 'water', 'other'];
 export const YARD_LINE_KINDS = ['fence', 'picket', 'hedge', 'stonewall', 'retaining', 'edging'];
@@ -23,6 +24,10 @@ export function areaErrors(a) {
   if (!YARD_SURFACES.includes(a.surface)) e.push(`surface must be one of ${YARD_SURFACES.join(', ')}`);
   if (!isPts(a.polygon, 3)) e.push('polygon must be three or more points [x, y] in mm');
   if (a.color !== undefined && !/^#[0-9a-f]{6}$/i.test(String(a.color))) e.push('color must be #rrggbb');
+  if (a.planting !== undefined) {
+    if (a.surface !== 'bed') e.push('planting is only for a flower bed (surface bed)');
+    else if (!PLANTINGS.includes(a.planting)) e.push(`planting must be one of ${PLANTINGS.join(', ')}`);
+  }
   return e;
 }
 

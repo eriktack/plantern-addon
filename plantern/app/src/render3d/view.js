@@ -4,6 +4,7 @@ import { levelPrisms } from '../geometry/prisms.js';
 import { MM, toThree, dirToThree, prismGeometry, cylinderGeometry, barGeometry, ballGeometry } from './coords.js';
 import { groundMesh } from '../terrain/ground.js';
 import { pointInPolygon as inRoom } from '../geometry/polygon.js';
+import { yardPlantSpots } from '../terrain/planting.js';
 import { pointAlong, polylineLength } from '../geometry/strip.js';
 import { pickShadowLamps, SHADOW_COUNT, leakOfLamp } from '../model/shadows.js';
 import { lampReach } from '../geometry/leak.js';
@@ -290,7 +291,36 @@ export function createView3d(container, hooks = {}) {
         g.add(w);
       }
     }
+    const plants = flowerBeds(yard, mesh.at); if (plants) g.add(plants);
     return mesh.at;
+  }
+
+  /**
+   * What grows in the flower beds (decision 304): each spot a green clump (a squashed ball) and, for flowers, a blossom on top
+   * in its colour; two instanced meshes, so a large bed costs two draw calls.
+   */
+  function flowerBeds(yard, at) {
+    const spots = yardPlantSpots(yard).filter(s => Number.isFinite(at(s.at)));
+    if (!spots.length) return null;
+    const grp = new THREE.Group(); grp.name = 'yard:plants';
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+    const leaves = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0 }), spots.length);
+    spots.forEach((s, i) => {
+      const z = at(s.at), leafH = s.blossom ? s.h * 0.6 : s.h;
+      v.fromArray(toThree(s.at, z + leafH / 2)); sc.set(s.r * MM, leafH / 2 * MM, s.r * MM);
+      leaves.setMatrixAt(i, m4.compose(v, q, sc)); leaves.setColorAt(i, new THREE.Color(s.blossom ? '#4f7f3a' : '#5d8f45'));
+    });
+    leaves.castShadow = true; leaves.receiveShadow = true; grp.add(leaves);
+    const fl = spots.filter(s => s.blossom);
+    if (fl.length) {
+      const heads = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0 }), fl.length);
+      fl.forEach((s, i) => {
+        const r = s.r * 0.6; v.fromArray(toThree(s.at, at(s.at) + s.h - r * 0.4)); sc.set(r * MM, r * 0.6 * MM, r * MM);
+        heads.setMatrixAt(i, m4.compose(v, q, sc)); heads.setColorAt(i, new THREE.Color(s.blossom));
+      });
+      heads.castShadow = true; grp.add(heads);
+    }
+    return grp;
   }
 
   /** A picket fence: two rails and a picket every 120 mm (70 wide, 22 thick, pointed tops), on the ground, as one mesh. */

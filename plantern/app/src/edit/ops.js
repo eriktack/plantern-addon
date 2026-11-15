@@ -253,16 +253,17 @@ export function addYardArea(model, spec = {}) {
   const y = yardOf(model);
   return { ...withYard(model, { ...y, areas: [...y.areas, a] }), area: a };
 }
-/** Change an area (name, surface, polygon, color; null removes name or color). Returns { model, report, area }. */
+/** Change an area (name, surface, polygon, color, planting; null removes name, color or planting). Returns { model, report, area }. */
 export function setYardArea(model, id, props = {}) {
   const y = yardOf(model), old = y.areas.find(a => a.id === id);
   if (!old) return refuse(model, `no yard area "${id}"`);
   const a = { ...old };
   for (const [k, v] of Object.entries(props)) {
-    if (!['name', 'surface', 'polygon', 'color'].includes(k)) return refuse(model, `${k} cannot be set on a yard area`);
+    if (!['name', 'surface', 'polygon', 'color', 'planting'].includes(k)) return refuse(model, `${k} cannot be set on a yard area`);
     if (v === null || v === '') { if (k === 'surface' || k === 'polygon') return refuse(model, `${k} cannot be removed`); delete a[k]; }
     else a[k] = k === 'polygon' && Array.isArray(v) ? roundPts(clockwise(v)) : v;
   }
+  if (a.surface !== 'bed') delete a.planting;                    // a lawn has no planting: dropped when a bed becomes something else
   const bad = areaErrors(a);
   if (bad.length) return refuse(model, ...bad);
   return { ...withYard(model, { ...y, areas: y.areas.map(x => (x.id === id ? a : x)) }), area: a };

@@ -7,6 +7,7 @@ import { toSvg } from '../../render2d/coords.js';
 import { nearestPoint } from '../../tools/measure-core.js';
 import { DARK_PALETTE } from '../../render2d/palette.js';
 import { YARD_SURFACES, SURFACE_LABEL, LINE_LABEL, yardLevelId } from '../../model/yard.js';
+import { PLANTINGS, PLANTING_LABEL, plantingOf } from '../../terrain/planting.js';
 import { setYard, addYardArea, setYardArea, moveYardArea, deleteYardArea, addYardLine, setYardLine, deleteYardLine, addYardGround, setYardGround, deleteYardGround } from '../../edit/ops.js';
 import { $, commit, esc } from './core.js';
 import { setStatus } from './session.js';
@@ -28,7 +29,8 @@ export function renderYard() {
   $('ydBoundaryState').textContent = y.boundary ? `outline drawn (${y.boundary.length} corners)` : 'no outline yet';
   const surfOpts = cur => YARD_SURFACES.map(s => `<option value="${s}"${s === cur ? ' selected' : ''}>${SURFACE_LABEL[s]}</option>`).join('');
   $('ydList').innerHTML = [...areas].reverse().map(a => `<div class="arow"><span><b>${esc(a.name || SURFACE_LABEL[a.surface] || a.surface)}</b> <small>${esc(a.id)} · ${a.polygon.length} corners</small><br>`
-      + `<select data-ydsurf="${esc(a.id)}" aria-label="Surface of ${esc(a.name || a.id)}">${surfOpts(a.surface)}</select></span>`
+      + `<select data-ydsurf="${esc(a.id)}" aria-label="Surface of ${esc(a.name || a.id)}">${surfOpts(a.surface)}</select>`
+      + (a.surface === 'bed' ? ` <select data-ydplant="${esc(a.id)}" aria-label="What grows in ${esc(a.name || a.id)}">${PLANTINGS.map(k => `<option value="${k}"${k === plantingOf(a) ? ' selected' : ''}>${PLANTING_LABEL[k]}</option>`).join('')}</select>` : '') + '</span>'
       + `<button data-ydup="${esc(a.id)}" title="Draw it over the area above it">↑</button><button data-yddown="${esc(a.id)}" title="Draw it under the area below it">↓</button>`
       + `<button data-ydredraw="area|${esc(a.id)}" title="Click its corners again">✎</button><button data-yddel="area|${esc(a.id)}" title="Delete it">×</button></div>`).join('')
     + lines.map(l => `<div class="arow"><span><b>${esc(l.name || LINE_LABEL[l.kind] || l.kind)}</b> <small>${esc(l.id)} · ${l.points.length} points${l.kind === 'retaining' ? ` · ${l.drop} mm, high on its ${l.high}` : ''}</small></span>`
@@ -39,6 +41,7 @@ export function renderYard() {
     || '<small>Nothing yet. Areas listed top first: the top one is drawn over the others.</small>';
   const apply = (r, what) => { if (r.report.errors.length) { msg(r.report.errors.join('; ')); return; } commit(r.model); msg(`${what} (not saved yet)`); };
   $('ydList').querySelectorAll('[data-ydsurf]').forEach(s => (s.onchange = () => apply(setYardArea(Ed.model, s.dataset.ydsurf, { surface: s.value }), 'Surface changed')));
+  $('ydList').querySelectorAll('[data-ydplant]').forEach(s => (s.onchange = () => apply(setYardArea(Ed.model, s.dataset.ydplant, { planting: s.value === 'flowers' ? null : s.value }), 'Planting changed')));
   $('ydList').querySelectorAll('[data-ydup]').forEach(b => (b.onclick = () => apply(moveYardArea(Ed.model, b.dataset.ydup, 1), 'Moved up')));
   $('ydList').querySelectorAll('[data-yddown]').forEach(b => (b.onclick = () => apply(moveYardArea(Ed.model, b.dataset.yddown, -1), 'Moved down')));
   $('ydList').querySelectorAll('[data-yddel]').forEach(b => (b.onclick = () => { const [k, id] = b.dataset.yddel.split('|'); apply(k === 'area' ? deleteYardArea(Ed.model, id) : k === 'ground' ? deleteYardGround(Ed.model, id) : deleteYardLine(Ed.model, id), 'Deleted'); }));

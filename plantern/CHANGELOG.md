@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.27
+
+- Flowers in flower beds: flowers, low plants or bare soil
+
 ## 0.8.26
 
 - Bushes, picket fences and raised beds (pallkrage) in the yard; flower beds and ponds

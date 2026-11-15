@@ -1,4 +1,5 @@
 import { toSvg, fromSvg, svgPoints } from './coords.js';
+import { yardPlantSpots } from '../terrain/planting.js';
 import { holeOutlines } from '../model/assets.js';
 import { DARK_PALETTE } from './palette.js';
 import { occluders, labelObstacles } from '../geometry/level.js';
@@ -145,6 +146,8 @@ function drawYard(g, yard, palette) {
     const p = el('polygon', { points: svgPoints(a.polygon), fill: a.color || palette.yardSurface[a.surface] || palette.yardSurface.other, 'fill-opacity': palette.yardAlpha, stroke: 'none', 'data-yard': a.id }, g);
     el('title', {}, p).textContent = a.name ? `${a.name} (${a.surface})` : a.surface;
   }
+  // what grows in the flower beds (decision 304): a dot per plant, its blossom's colour or green
+  for (const s of yardPlantSpots(yard)) el('circle', { cx: toSvg(s.at)[0], cy: toSvg(s.at)[1], r: Math.round(s.r * 0.55), fill: s.blossom || palette.yardPlant, 'fill-opacity': 0.85, 'pointer-events': 'none' }, g);
   for (const l of yard.lines || []) {
     if (!Array.isArray(l.points) || l.points.length < 2) continue;
     const colour = palette.yardLine[l.kind] || palette.yardLine.edging;
