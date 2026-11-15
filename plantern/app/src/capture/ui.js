@@ -121,6 +121,7 @@ async function init() {
   $('ulImg').onclick = underlayImageClick;
   // the yard (yard.js)
   $('ydAddArea').onclick = () => startYardDraw('area');
+  $('ydAddGround').onclick = () => startYardDraw('ground');
   $('ydAddLine').onclick = () => startYardDraw('line');
   $('ydBoundary').onclick = () => startYardDraw('boundary');
   $('ydKind').onchange = () => { $('ydRetain').hidden = $('ydKind').value !== 'retaining'; };

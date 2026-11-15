@@ -4,6 +4,7 @@
 // In the main building's plan coordinates. Areas are drawn in order, a later one over an earlier one (a path on the lawn needs
 // no hole). A retaining wall's `high` is the side of the line's direction where the ground is higher, `drop` the difference.
 
+import { groundErrors } from '../terrain/ground.js';
 import { isClockwise } from '../geometry/polygon.js';
 
 export const YARD_SURFACES = ['grass', 'gravel', 'asphalt', 'paving', 'deck', 'bed', 'rock', 'forest', 'water', 'other'];
@@ -52,12 +53,13 @@ export function checkYard(model) {
     if (!Array.isArray(y[key])) { out.push({ severity: 'error', id: 'yard', msg: `${key} must be a list` }); continue; }
     for (const x of y[key]) for (const m of check(x)) out.push({ severity: 'error', id: x?.id || 'yard', msg: m });
   }
+  for (const m of groundErrors(y.ground)) out.push({ severity: 'error', id: 'yard', msg: m });
   for (const a of y.areas || []) if (isPts(a?.polygon, 3) && !isClockwise(a.polygon)) out.push({ severity: 'warn', id: a.id, msg: 'area polygon is counter-clockwise (should be clockwise, like rooms)' });
   return out;
 }
 
 /** The ids the yard uses (for unique ids across the model file). */
-export const yardIds = model => [...(model.yard?.areas || []), ...(model.yard?.lines || [])].map(x => x?.id).filter(Boolean);
+export const yardIds = model => [...(model.yard?.areas || []), ...(model.yard?.lines || []), ...(Array.isArray(model.yard?.ground) ? model.yard.ground : [])].map(x => x?.id).filter(Boolean);
 
 /** A new id from a name: "Front lawn" → ya_front_lawn (prefix ya_ or yl_), unique among `used`. */
 export function newYardId(prefix, name, used) {

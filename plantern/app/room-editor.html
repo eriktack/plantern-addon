@@ -180,7 +180,7 @@
     <div class="mt6"><button type="button" class="primary" id="placeApply">Apply</button> <button type="button" id="placeRevert">Revert</button> <span id="placeMsg" class="help"></span></div>
   </details>
   <details class="sect" id="yardSect"><summary>Yard <span id="ydCount"></span></summary>
-    <p class="help">The ground around the house, on the ground floor: surfaces (lawn, gravel, asphalt, paving…) drawn as areas, and fences, hedges and walls as lines. Click the corners on the plan; they snap to the house's corners, Alt for a free point. Enter or a double-click finishes. The photo under the plan helps to trace.</p>
+    <p class="help">The ground around the house, on the ground floor: surfaces (lawn, gravel, asphalt, paving…) drawn as areas, fences, hedges and walls as lines, and measured ground heights (the 3D ground runs through them). Click the corners on the plan; they snap to the house's corners, Alt for a free point. Enter or a double-click finishes. The photo under the plan helps to trace.</p>
     <p id="ydHere" class="help" hidden>The yard is drawn on the ground floor: switch to it to draw.</p>
     <div id="ydList"></div>
     <div id="ydTools">
@@ -198,7 +198,11 @@
       </div>
       <div class="row btns"><button type="button" id="ydAddLine">+ Line</button></div>
       <div class="row btns"><button type="button" id="ydBoundary">Draw the yard's outline</button> <span id="ydBoundaryState" class="help"></span></div>
-      <label>Ground height <small>mm relative to this floor, until the terrain exists</small><input id="ydElev" inputmode="numeric" autocomplete="off" placeholder="0"></label>
+      <div class="grid2">
+        <label>Measured ground height <small>mm from this floor's floor (− below)</small><input id="ydGroundZ" inputmode="numeric" autocomplete="off" placeholder="−570"></label>
+        <div class="row btns"><button type="button" id="ydAddGround">+ Ground height (click its spot)</button></div>
+      </div>
+      <label>Flat ground height <small>mm relative to this floor, used where no heights are measured</small><input id="ydElev" inputmode="numeric" autocomplete="off" placeholder="0"></label>
     </div>
     <div id="ydMsg" class="help"></div>
   </details>

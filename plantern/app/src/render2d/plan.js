@@ -161,6 +161,15 @@ function drawYard(g, yard, palette) {
       }
     }
   }
+  // measured ground heights (yard.ground): a small cross and the height in metres from the ground floor's floor
+  for (const p of yard.ground || []) {
+    if (!Array.isArray(p.pos) || !Number.isFinite(p.z)) continue;
+    const [x, y] = toSvg(p.pos), r = 120;
+    el('path', { d: `M${x - r} ${y}H${x + r}M${x} ${y - r}V${y + r}`, stroke: palette.label, 'stroke-width': 1.2, 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none' }, g);
+    const t = el('text', { x: x + 160, y: y - 80, 'font-size': 260, fill: palette.label, 'data-ground': p.id || '' }, g);
+    t.textContent = `${p.z >= 0 ? '+' : '−'}${(Math.abs(p.z) / 1000).toFixed(2)}`;
+    if (p.name) el('title', {}, t).textContent = `${p.name}: ${p.z >= 0 ? '+' : '−'}${Math.abs(p.z)} mm from the ground floor's floor`;
+  }
 }
 
 /** The lamp symbol in the plan: a light bulb about 220 mm tall, centred on the lamp (globe, neck, two lines for the base). */

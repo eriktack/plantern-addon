@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { levelPrisms } from '../geometry/prisms.js';
 import { MM, toThree, dirToThree, prismGeometry, cylinderGeometry, barGeometry, ballGeometry } from './coords.js';
+import { groundMesh } from '../terrain/ground.js';
 import { pointAlong, polylineLength } from '../geometry/strip.js';
 import { pickShadowLamps, SHADOW_COUNT, leakOfLamp } from '../model/shadows.js';
 import { lampReach } from '../geometry/leak.js';
@@ -251,6 +252,44 @@ export function createView3d(container, hooks = {}) {
     return m;
   }
 
+  // ---- the yard's ground (docs/plans/yard.md Y11; src/terrain/ground.js) ----
+  const GROUND = { grass: '#5f8a45', gravel: '#a69d8c', asphalt: '#4a4c52', paving: '#9c8775', deck: '#8a6a45', bed: '#5a4632', rock: '#8a8a85', forest: '#3a6a3a', water: '#4d7fae', other: '#7a8088' };
+  const LINE_LOOK = { retaining: { t: 250, color: '#8d877b' }, stonewall: { t: 400, h: 600, color: '#8d877b' }, fence: { t: 40, h: 1000, color: '#8a6f4a' }, hedge: { t: 600, h: 1200, color: '#3f6f32' } };
+  /** The ground mesh under the yard's level, its areas coloured on it, and the walls, fences and hedges standing on it. */
+  function addGround(g, level, yard) {
+    const holes = (level.rooms || []).filter(r => !r.exterior && r.polygon?.length >= 3).map(r => r.polygon);
+    const mesh = groundMesh(yard, { cell: 400, holes, colorOf: (surface, a) => a.color || GROUND[surface] || GROUND.other, fallback: GROUND.grass });
+    if (!mesh) return;
+    const pos = new Float32Array(mesh.positions.length * 3), col = new Float32Array(mesh.colors.length * 3), idx = [];
+    mesh.positions.forEach((p, i) => pos.set(toThree([p[0], p[1]], p[2]), i * 3));
+    mesh.colors.forEach((c, i) => col.set(c, i * 3));
+    for (const t of mesh.triangles) idx.push(t[0], t[2], t[1]);                        // three's winding (plan y is flipped)
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geom.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geom.setIndex(idx); geom.computeVertexNormals();
+    const m = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: THREE.DoubleSide }));
+    m.name = 'yard:ground'; m.receiveShadow = false;                 // a large mesh: lamp shadows on it cost more than they show
+    g.add(m);
+    // retaining walls from their low side's ground up to their high side's; the others standing on the ground
+    for (const l of yard.lines || []) {
+      const look = LINE_LOOK[l.kind]; if (!look || !(l.points?.length >= 2)) continue;
+      const t = l.thickness || look.t;
+      for (let i = 0; i + 1 < l.points.length; i++) {
+        const a = l.points[i], b = l.points[i + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1) continue;
+        const u = [(b[0] - a[0]) / L, (b[1] - a[1]) / L], n = [-u[1], u[0]], h = t / 2;
+        const poly = [[a[0] + n[0] * h, a[1] + n[1] * h], [b[0] + n[0] * h, b[1] + n[1] * h], [b[0] - n[0] * h, b[1] - n[1] * h], [a[0] - n[0] * h, a[1] - n[1] * h]];
+        const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], left = [mid[0] + n[0] * 600, mid[1] + n[1] * 600], right = [mid[0] - n[0] * 600, mid[1] - n[1] * 600];
+        let z0, z1;
+        if (l.kind === 'retaining') { const hi = l.high === 'left' ? left : right, lo = l.high === 'left' ? right : left; z1 = mesh.at(hi); z0 = Math.min(mesh.at(lo), z1 - (l.drop || 0)) - 100; }
+        else { z0 = mesh.at(mid) - 50; z1 = z0 + 50 + (l.height || look.h); }
+        if (!Number.isFinite(z0) || !Number.isFinite(z1) || z1 <= z0) continue;
+        const w = new THREE.Mesh(prismGeometry(THREE, poly, z0, z1), new THREE.MeshStandardMaterial({ color: new THREE.Color(l.color || look.color), roughness: 0.9, metalness: 0 }));
+        w.name = `${l.id}:yard`; w.castShadow = true; w.receiveShadow = true;
+        g.add(w);
+      }
+    }
+  }
+
   function clear() {
     root.traverse(o => { o.geometry?.dispose(); [].concat(o.material || []).forEach(m => m.dispose()); });
     root.clear();
@@ -264,7 +303,7 @@ export function createView3d(container, hooks = {}) {
    * a level up, shift [dx, dy] sideways in the plan, for the exploded view). Lamps and switches of every shown level are live; the number of lamps casting
    * shadows is shared between them.
    */
-  function build({ level, geo, levels, settings: s, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', ceilings = false, assets = null, doorStates = null, keepView = false, dim = null }) {
+  function build({ level, geo, levels, settings: s, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', ceilings = false, assets = null, doorStates = null, keepView = false, dim = null, yard = null }) {
     const gen = ++buildGen;     // asset models that finish loading after a newer build are dropped
     clear();
     settings = s;
@@ -323,6 +362,7 @@ export function createView3d(container, hooks = {}) {
     g.position.y = ((level.elevation || 0) + lift) * MM;
     g.position.x = shift[0] * MM; g.position.z = -shift[1] * MM;      // plan (x, y) → three (x, -y)
     root.add(g);
+    if (yard && level.id === yard.levelId) addGround(g, level, yard);
 
     // the shadows go to the lamps whose light the walls would otherwise let through (a shadowless lamp lights through walls)
     const reachOptions = { cutPlane: settings?.cutPlane ?? 1200, doorStates, leaves: false };

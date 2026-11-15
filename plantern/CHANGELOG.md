@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.24
+
+- The yard's ground in 3D from measured heights, with the lawn, paving and walls on it
+
 ## 0.8.23
 
 - Glass walls, textured floors and posts (materials), roofs that meet cut each other

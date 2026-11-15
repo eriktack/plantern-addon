@@ -3,6 +3,7 @@
 // reconcile()'s moves and `report.issues` from validateModel(). A refused operation returns the
 // model unchanged with `report.errors`.
 
+import { groundErrors } from '../terrain/ground.js';
 import { checkCheck, checkCorners, solveExtra } from '../model/checks.js';
 import { freedPlacement } from '../model/hosted.js';
 import { solveCapture } from '../capture/solve.js';
@@ -281,6 +282,37 @@ export function deleteYardArea(model, id) {
 }
 
 /** A new yard line: spec = { name?, kind, points, height?, thickness?, high?, drop? }. Returns { model, report, line }. */
+/** A measured ground height: spec = { pos: [x, y], z, name? } (mm; z relative to the datum). Returns { model, report, point }. */
+export function addYardGround(model, spec = {}) {
+  const used = yardUsed(model), id = spec.id ?? newYardId('yg_', spec.name || 'mark', used);
+  if (used.has(id)) return refuse(model, `the id ${id} is already used`);
+  const g = { id, ...(spec.name ? { name: String(spec.name).trim() } : {}), pos: Array.isArray(spec.pos) ? spec.pos.map(v => Math.round(v)) : spec.pos, z: spec.z };
+  const bad = groundErrors([g]);
+  if (bad.length) return refuse(model, ...bad);
+  const y = yardOf(model);
+  return { ...withYard(model, { ...y, ground: [...(y.ground || []), g] }), point: g };
+}
+export function setYardGround(model, id, props = {}) {
+  const y = yardOf(model), old = (y.ground || []).find(g => g.id === id);
+  if (!old) return refuse(model, `no ground height "${id}"`);
+  const g = { ...old };
+  for (const [k, v] of Object.entries(props)) {
+    if (!['name', 'pos', 'z'].includes(k)) return refuse(model, `${k} cannot be set on a ground height`);
+    if (v === null || v === '') { if (k !== 'name') return refuse(model, `${k} cannot be removed`); delete g.name; }
+    else g[k] = k === 'pos' && Array.isArray(v) ? v.map(x => Math.round(x)) : v;
+  }
+  const bad = groundErrors([g]);
+  if (bad.length) return refuse(model, ...bad);
+  return { ...withYard(model, { ...y, ground: y.ground.map(x => (x.id === id ? g : x)) }), point: g };
+}
+export function deleteYardGround(model, id) {
+  const y = yardOf(model);
+  if (!(y.ground || []).some(g => g.id === id)) return refuse(model, `no ground height "${id}"`);
+  const ground = y.ground.filter(g => g.id !== id);
+  const { ground: _, ...rest } = y;
+  return withYard(model, ground.length ? { ...y, ground } : rest);
+}
+
 export function addYardLine(model, spec = {}) {
   const used = yardUsed(model), id = spec.id ?? newYardId('yl_', spec.name || spec.kind, used);
   if (used.has(id)) return refuse(model, `the id ${id} is already used`);

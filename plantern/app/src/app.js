@@ -168,7 +168,9 @@ async function main() {
   let stackMode = STACK_MODES.includes(readPrefs().stack) ? readPrefs().stack : 'this', exploded = !!readPrefs().exploded, ceilings = !!readPrefs().ceilings;
   const shownLevels = () => levelStack(model, level, stackMode, exploded).map(s => ({ ...s, geo: geos.get(s.level.id) }));
   const refreshFixtures = () => shownLevels().forEach(s => s.level.fixtures?.forEach(applyFixture));
-  const build3d = () => view3d.build({ level, geo: state().geo, levels: shownLevels(), settings: state().settings, fixtureLabel, ceilings, ...looks, doorStates: doors() });
+  // the yard's ground under the ground floor, with the Yard switch (docs/plans/yard.md Y11)
+  const yard3d = () => (model.yard?.ground?.length && readPrefs().yard !== false ? { ...model.yard, levelId: yardLevelId(model) } : null);
+  const build3d = () => view3d.build({ level, geo: state().geo, levels: shownLevels(), settings: state().settings, fixtureLabel, ceilings, ...looks, doorStates: doors(), yard: yard3d() });
 
   async function toggleFixture(fx) {
     const why = canPreview(bindings, id => ha.getState(id), fx);
@@ -228,7 +230,7 @@ async function main() {
     $('yardRow').hidden = !here;
     $('yardOn').checked = readPrefs().yard !== false;
   }
-  $('yardOn').addEventListener('change', e => { writePrefs({ yard: e.target.checked ? undefined : false }); drawPlan(); });
+  $('yardOn').addEventListener('change', e => { writePrefs({ yard: e.target.checked ? undefined : false }); drawPlan(); if (view3d) build3d(); });
   // the Devices layers (docs/plans/devices.md DV4): off / icons / coverage per subject, this browser's choice
   const devLayers = () => normalizeLayers(readPrefs().devices);
   const wifiBand = () => (['2.4', '5'].includes(readPrefs().wifiBand) ? readPrefs().wifiBand : '2.4');

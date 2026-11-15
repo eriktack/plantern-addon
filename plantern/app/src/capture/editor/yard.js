@@ -7,7 +7,7 @@ import { toSvg } from '../../render2d/coords.js';
 import { nearestPoint } from '../../tools/measure-core.js';
 import { DARK_PALETTE } from '../../render2d/palette.js';
 import { YARD_SURFACES, SURFACE_LABEL, LINE_LABEL, yardLevelId } from '../../model/yard.js';
-import { setYard, addYardArea, setYardArea, moveYardArea, deleteYardArea, addYardLine, setYardLine, deleteYardLine } from '../../edit/ops.js';
+import { setYard, addYardArea, setYardArea, moveYardArea, deleteYardArea, addYardLine, setYardLine, deleteYardLine, addYardGround, setYardGround, deleteYardGround } from '../../edit/ops.js';
 import { $, commit, esc } from './core.js';
 import { setStatus } from './session.js';
 import { Ed } from './state.js';
@@ -19,8 +19,8 @@ const msg = t => { $('ydMsg').textContent = t; };
 
 /** The section: the yard's areas and lines, and the controls to draw new ones. */
 export function renderYard() {
-  const y = Ed.model.yard || {}, areas = y.areas || [], lines = y.lines || [];
-  $('ydCount').textContent = areas.length + lines.length ? `(${areas.length + lines.length})` : '';
+  const y = Ed.model.yard || {}, areas = y.areas || [], lines = y.lines || [], ground = y.ground || [];
+  $('ydCount').textContent = areas.length + lines.length + ground.length ? `(${areas.length + lines.length + ground.length})` : '';
   $('ydHere').hidden = onYardLevel();
   $('ydTools').hidden = !onYardLevel();
   $('ydRetain').hidden = $('ydKind').value !== 'retaining';
@@ -33,12 +33,16 @@ export function renderYard() {
       + `<button data-ydredraw="area|${esc(a.id)}" title="Click its corners again">✎</button><button data-yddel="area|${esc(a.id)}" title="Delete it">×</button></div>`).join('')
     + lines.map(l => `<div class="arow"><span><b>${esc(l.name || LINE_LABEL[l.kind] || l.kind)}</b> <small>${esc(l.id)} · ${l.points.length} points${l.kind === 'retaining' ? ` · ${l.drop} mm, high on its ${l.high}` : ''}</small></span>`
       + `<button data-ydredraw="line|${esc(l.id)}" title="Click its points again">✎</button><button data-yddel="line|${esc(l.id)}" title="Delete it">×</button></div>`).join('')
+    + ground.map(g => `<div class="arow"><span><b>${esc(g.name || g.id)}</b> <small>${esc(g.id)} · ground height</small><br>`
+      + `<input data-ydz="${esc(g.id)}" inputmode="numeric" value="${g.z}" aria-label="Height of ${esc(g.name || g.id)}, mm" style="width:7em"> mm</span>`
+      + `<button data-ydredraw="ground|${esc(g.id)}" title="Click its spot again">✎</button><button data-yddel="ground|${esc(g.id)}" title="Delete it">×</button></div>`).join('')
     || '<small>Nothing yet. Areas listed top first: the top one is drawn over the others.</small>';
   const apply = (r, what) => { if (r.report.errors.length) { msg(r.report.errors.join('; ')); return; } commit(r.model); msg(`${what} (not saved yet)`); };
   $('ydList').querySelectorAll('[data-ydsurf]').forEach(s => (s.onchange = () => apply(setYardArea(Ed.model, s.dataset.ydsurf, { surface: s.value }), 'Surface changed')));
   $('ydList').querySelectorAll('[data-ydup]').forEach(b => (b.onclick = () => apply(moveYardArea(Ed.model, b.dataset.ydup, 1), 'Moved up')));
   $('ydList').querySelectorAll('[data-yddown]').forEach(b => (b.onclick = () => apply(moveYardArea(Ed.model, b.dataset.yddown, -1), 'Moved down')));
-  $('ydList').querySelectorAll('[data-yddel]').forEach(b => (b.onclick = () => { const [k, id] = b.dataset.yddel.split('|'); apply(k === 'area' ? deleteYardArea(Ed.model, id) : deleteYardLine(Ed.model, id), 'Deleted'); }));
+  $('ydList').querySelectorAll('[data-yddel]').forEach(b => (b.onclick = () => { const [k, id] = b.dataset.yddel.split('|'); apply(k === 'area' ? deleteYardArea(Ed.model, id) : k === 'ground' ? deleteYardGround(Ed.model, id) : deleteYardLine(Ed.model, id), 'Deleted'); }));
+  $('ydList').querySelectorAll('[data-ydz]').forEach(i => (i.onchange = () => { const v = Number(String(i.value).replace('−', '-').trim()); if (!Number.isFinite(v)) { msg('The height is a number of mm'); return; } apply(setYardGround(Ed.model, i.dataset.ydz, { z: v }), 'Height changed'); }));
   $('ydList').querySelectorAll('[data-ydredraw]').forEach(b => (b.onclick = () => { const [k, id] = b.dataset.ydredraw.split('|'); startDraw(k, { redraw: id }); }));
 }
 
@@ -46,7 +50,9 @@ export function renderYard() {
 export function startDraw(type, { redraw = null } = {}) {
   if (!onYardLevel()) { msg('The yard is drawn on the ground floor: switch to it first.'); return; }
   const s = yd();
-  s.tool = { type, pts: [], redraw, surface: $('ydSurface').value, kind: $('ydKind').value, high: $('ydHigh').value, drop: Number($('ydDrop').value), name: $('ydName').value.trim() };
+  const gz = Number(String($('ydGroundZ').value).replace('−', '-').trim());
+  if (type === 'ground' && !redraw && ($('ydGroundZ').value.trim() === '' || !Number.isFinite(gz))) { msg('Type the measured height (mm from this floor) first, then click its spot.'); return; }
+  s.tool = { type, pts: [], redraw, surface: $('ydSurface').value, kind: $('ydKind').value, high: $('ydHigh').value, drop: Number($('ydDrop').value), name: $('ydName').value.trim(), z: gz };
   if (type === 'line' && !redraw && s.tool.kind === 'retaining' && !(s.tool.drop > 0)) { s.tool = null; msg('Give the retaining wall its height difference (mm) first.'); return; }
   $('preview').classList.add('placing');
   status();
@@ -54,6 +60,7 @@ export function startDraw(type, { redraw = null } = {}) {
 }
 function status() {
   const t = yd().tool, need = t.type === 'line' ? 2 : 3;
+  if (t.type === 'ground') { setStatus(`${t.redraw ? `Move ${t.redraw}` : `Ground height ${t.z} mm`}: click its spot (snaps to corners; Alt: free) · Esc: cancel`); return; }
   setStatus(`${t.type === 'boundary' ? 'The yard\'s outline' : t.redraw ? `Redraw ${t.redraw}` : t.type === 'area' ? SURFACE_LABEL[t.surface] : LINE_LABEL[t.kind]}: click ${t.pts.length ? 'the next point' : 'the first point'} (snaps to corners; Alt: free) · ${t.pts.length >= need ? 'Enter or double-click: done · ' : ''}Backspace: undo a point · Esc: cancel`);
 }
 export const yardDrawing = () => !!Ed.yd?.tool;
@@ -76,6 +83,7 @@ export function yardClick(e) {
   const last = t.pts[t.pts.length - 1];
   if (last && Math.hypot(q[0] - last[0], q[1] - last[1]) < 1) return;              // the second click of a double-click
   t.pts.push(q);
+  if (t.type === 'ground') { finishDraw(); return; }                 // a ground height is one click
   status(); draw();
 }
 export function undoPoint() { const t = yd().tool; if (!t?.pts.length) return false; t.pts.pop(); status(); draw(); return true; }
@@ -84,10 +92,11 @@ export function undoPoint() { const t = yd().tool; if (!t?.pts.length) return fa
 export function finishDraw() {
   const t = yd().tool;
   if (!t) return false;
-  const need = t.type === 'line' ? 2 : 3;
+  const need = t.type === 'ground' ? 1 : t.type === 'line' ? 2 : 3;
   if (t.pts.length < need) { setStatus(`It needs at least ${need} points (Esc cancels)`); return true; }
   let r;
-  if (t.type === 'boundary') r = setYard(Ed.model, { boundary: t.pts });
+  if (t.type === 'ground') r = t.redraw ? setYardGround(Ed.model, t.redraw, { pos: t.pts[0] }) : addYardGround(Ed.model, { pos: t.pts[0], z: t.z, ...(t.name ? { name: t.name } : {}) });
+  else if (t.type === 'boundary') r = setYard(Ed.model, { boundary: t.pts });
   else if (t.type === 'area') r = t.redraw ? setYardArea(Ed.model, t.redraw, { polygon: t.pts }) : addYardArea(Ed.model, { surface: t.surface, polygon: t.pts, ...(t.name ? { name: t.name } : {}) });
   else r = t.redraw ? setYardLine(Ed.model, t.redraw, { points: t.pts }) : addYardLine(Ed.model, { kind: t.kind, points: t.pts, ...(t.name ? { name: t.name } : {}), ...(t.kind === 'retaining' ? { high: t.high, drop: t.drop } : {}) });
   if (r.report.errors.length) { setStatus(r.report.errors.join('; ')); return true; }
@@ -95,7 +104,7 @@ export function finishDraw() {
   $('preview').classList.remove('placing');
   $('ydName').value = '';
   commit(r.model);
-  setStatus(`${t.type === 'boundary' ? 'The yard\'s outline' : (r.area || r.line)?.id ?? 'It'} ${t.redraw ? 'redrawn' : 'added'} (not saved yet)`);
+  setStatus(`${t.type === 'boundary' ? 'The yard\'s outline' : (r.area || r.line || r.point)?.id ?? 'It'} ${t.redraw ? 'redrawn' : 'added'} (not saved yet)`);
   return true;
 }
 export function setElevation(v) {
@@ -114,6 +123,7 @@ export function yardSvg(fs) {
   let out = '';
   if (y.boundary) out += `<polygon points="${pts(y.boundary)}" fill="none" stroke="#8b93a1" stroke-width="${fs / 10}" stroke-dasharray="${fs} ${fs / 2}" pointer-events="none"/>`;
   for (const a of y.areas || []) out += `<polygon points="${pts(a.polygon)}" fill="${a.color || P.yardSurface[a.surface] || P.yardSurface.other}" fill-opacity="${P.yardAlpha}" stroke="none" pointer-events="none"><title>${esc(a.name || a.surface)}</title></polygon>`;
+  for (const g of y.ground || []) { if (!Array.isArray(g.pos)) continue; const [x, yy] = toSvg(g.pos); out += `<g pointer-events="none"><path d="M${x - fs * 0.4} ${yy}H${x + fs * 0.4}M${x} ${yy - fs * 0.4}V${yy + fs * 0.4}" stroke="#e8e2d0" stroke-width="${fs / 12}"/><text x="${x + fs * 0.5}" y="${yy - fs * 0.3}" font-size="${fs * 0.9}" fill="#e8e2d0">${g.z >= 0 ? '+' : '−'}${(Math.abs(g.z) / 1000).toFixed(2)}</text></g>`; }
   for (const l of y.lines || []) out += `<polyline points="${pts(l.points)}" fill="none" stroke="${P.yardLine[l.kind] || P.yardLine.edging}" stroke-width="${fs / (l.kind === 'hedge' ? 2 : 5)}" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"${l.kind === 'fence' ? ` stroke-dasharray="${fs / 2} ${fs / 3}"` : ''}/>`;
   return out;
 }
