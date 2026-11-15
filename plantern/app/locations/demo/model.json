@@ -937,6 +937,28 @@
           "rotationDeg": 0,
           "size": [4000,4000,11000],
           "z": 0
+        },
+        {
+          "id": "ob_bush_lilac",
+          "kind": "asset",
+          "blueprint": "tree",
+          "name": "Lilac",
+          "params": { "variant": "bush", "height": 2000, "crownDiameter": 2200, "crownBase": 0, "trunkDiameter": 60 },
+          "pos": [-1800,4700],
+          "rotationDeg": 0,
+          "size": [2200,2200,2000],
+          "z": 0
+        },
+        {
+          "id": "ob_raised_bed",
+          "kind": "asset",
+          "blueprint": "raised-bed",
+          "name": "Pallkrage",
+          "params": { "variant": "collar", "layers": 2, "board": 20 },
+          "pos": [1000,4600],
+          "rotationDeg": 0,
+          "size": [1200,800,390],
+          "z": 0
         }
       ],
       "fixtures": [
@@ -1516,7 +1538,9 @@
         "name": "Path to the drive",
         "surface": "paving",
         "polygon": [[9400,1500],[9400,2700],[11000,2700],[11000,1500]]
-      }
+      },
+      { "id": "ya_flower_bed", "name": "Flower bed", "surface": "bed", "polygon": [[-5400,4400],[-5400,6400],[-2400,6400],[-2400,4400]] },
+      { "id": "ya_pond", "name": "Pond", "surface": "water", "polygon": [[6000,4600],[6400,6000],[8000,6300],[8800,5200],[8000,4400]] }
     ],
     "lines": [
       { "id": "yl_fence", "name": "Fence", "kind": "fence", "points": [[-5800,-4800],[10800,-4800]], "height": 1000 },
@@ -1528,6 +1552,13 @@
         "thickness": 300,
         "high": "left",
         "drop": 600
+      },
+      {
+        "id": "yl_picket_fence",
+        "name": "Picket fence",
+        "kind": "picket",
+        "points": [[-5800,-4600],[-5800,6800],[10800,6800]],
+        "height": 900
       }
     ],
     "boundary": [[-6000,-5000],[-6000,7000],[13000,7000],[13000,-5000]],

@@ -148,7 +148,7 @@ function drawYard(g, yard, palette) {
   for (const l of yard.lines || []) {
     if (!Array.isArray(l.points) || l.points.length < 2) continue;
     const colour = palette.yardLine[l.kind] || palette.yardLine.edging;
-    const look = { fence: { w: 2, dash: '6 4' }, hedge: { w: 9, op: 0.8 }, stonewall: { w: 6 }, retaining: { w: 5 }, edging: { w: 1.5 } }[l.kind] || { w: 2 };
+    const look = { fence: { w: 2, dash: '6 4' }, picket: { w: 2.5, dash: '2 3' }, hedge: { w: 9, op: 0.8 }, stonewall: { w: 6 }, retaining: { w: 5 }, edging: { w: 1.5 } }[l.kind] || { w: 2 };
     const pl = el('polyline', { points: svgPoints(l.points), fill: 'none', stroke: colour, 'stroke-width': look.w, 'stroke-opacity': look.op ?? 1, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'vector-effect': 'non-scaling-stroke', ...(look.dash ? { 'stroke-dasharray': look.dash } : {}), 'data-yard': l.id }, g);
     el('title', {}, pl).textContent = l.name || l.kind + (l.kind === 'retaining' && l.drop ? `, ${l.drop} mm` : '');
     if (l.kind === 'retaining' && (l.high === 'left' || l.high === 'right')) {
@@ -310,7 +310,7 @@ export function createPlanView(svg, hooks = {}) {
     for (const o of level.objects || []) {
       const fp = geo.objectFootprint(o);
       if (!fp) continue;
-      if (o.blueprint === 'tree') {                                   // a tree: its crown as a circle, the trunk a dot (yard plan Y10)
+      if (o.blueprint === 'tree') {                                   // a tree or a bush: its crown as a circle, the trunk a dot (yard plan Y10)
         const c = fp.reduce((s, p) => [s[0] + p[0] / fp.length, s[1] + p[1] / fp.length], [0, 0]), [cx, cy] = toSvg(c);
         const r = (o.params?.crownDiameter ?? o.size?.[0] ?? 4000) / 2, col = o.color || palette.yardSurface.forest;
         const circle = el('circle', { cx, cy, r, fill: col, 'fill-opacity': 0.35, stroke: col, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, gObj);

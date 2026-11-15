@@ -49,6 +49,7 @@ const DRAWN = {
   rug: '<rect x="3" y="7" width="18" height="10"/><rect x="6" y="10" width="12" height="4"/>',
   planter: '<path d="M6 13h12l-2 8H8z"/><path d="M12 13V6M12 6c-2-2-3-1-3 0M12 6c2-2 3-1 3 0"/>',
   tree: '<circle cx="12" cy="9" r="6"/><path d="M12 15v6M9 21h6"/>',
+  raisedBed: '<rect x="3" y="9" width="18" height="9"/><path d="M3 13.5h18M8 9V6M12 9V5M16 9V6"/>',
   waterHeater: '<rect x="7" y="3" width="10" height="18" rx="5"/><path d="M12 7v4"/>',
   sauna: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M8 19h8M7 11h10"/>',
   tv: '<rect x="2" y="4" width="20" height="13" rx="1"/><path d="M8 21h8M12 17v4"/>',
@@ -77,7 +78,7 @@ const TABLE = {
   'heat-pump-indoor': ['Heating & other', 'heatPump'], rug: ['Heating & other', 'rug'], planter: ['Heating & other', 'planter'],
   'water-heater': ['Heating & other', 'waterHeater'], 'sauna-heater': ['Heating & other', 'sauna'],
   tv: ['Electronics', 'tv'], 'desk-setup': ['Electronics', 'deskSetup'],
-  tree: ['Yard', 'tree'], 'cat-tree': ['Miscellaneous', 'catTree'], chest: ['Miscellaneous', 'chest'], 'waste-bin': ['Miscellaneous', 'wasteBin'], 'radiator-cover': ['Heating & other', 'radiatorCover'], 'hook-rack': ['Storage', 'hookRack'],
+  tree: ['Yard', 'tree'], 'raised-bed': ['Yard', 'raisedBed'], 'cat-tree': ['Miscellaneous', 'catTree'], chest: ['Miscellaneous', 'chest'], 'waste-bin': ['Miscellaneous', 'wasteBin'], 'radiator-cover': ['Heating & other', 'radiatorCover'], 'hook-rack': ['Storage', 'hookRack'],
 };
 
 /** { group, icon } of a model: from the table, else a guess from its id, else Other with a cube. icon is a name in ICONS (`kind:…`). */

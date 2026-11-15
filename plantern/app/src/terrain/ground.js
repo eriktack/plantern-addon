@@ -73,7 +73,8 @@ function segDist(p, a, b) {
  */
 export function groundSurface(yard, { reach = 6000 } = {}) {
   const pts = (yard?.ground || []).filter(g => Array.isArray(g.pos) && Number.isFinite(g.z));
-  if (!pts.length) return null;
+  // no measured heights: the yard is flat at its own ground height (yard.elevation, else the ground floor's floor)
+  if (!pts.length) return yard?.boundary?.length >= 3 ? { at: () => yard.elevation ?? 0, points: [], walls: [] } : null;
   const walls = (yard.lines || []).filter(l => l.kind === 'retaining' && l.points?.length >= 2 && l.drop > 0);
   // which side of a wall a point is on: +1 its high side, −1 its low side, 0 not near it
   const wallSide = (w, p) => {

@@ -255,7 +255,7 @@ export function createView3d(container, hooks = {}) {
 
   // ---- the yard's ground (docs/plans/yard.md Y11; src/terrain/ground.js) ----
   const GROUND = { grass: '#5f8a45', gravel: '#a69d8c', asphalt: '#4a4c52', paving: '#9c8775', deck: '#8a6a45', bed: '#5a4632', rock: '#8a8a85', forest: '#3a6a3a', water: '#4d7fae', other: '#7a8088' };
-  const LINE_LOOK = { retaining: { t: 250, color: '#8d877b' }, stonewall: { t: 400, h: 600, color: '#8d877b' }, fence: { t: 40, h: 1000, color: '#8a6f4a' }, hedge: { t: 600, h: 1200, color: '#3f6f32' } };
+  const LINE_LOOK = { picket: { t: 22, h: 900, color: '#ece8de' }, retaining: { t: 250, color: '#8d877b' }, stonewall: { t: 400, h: 600, color: '#8d877b' }, fence: { t: 40, h: 1000, color: '#8a6f4a' }, hedge: { t: 600, h: 1200, color: '#3f6f32' } };
   /** The ground mesh under the yard's level, its areas coloured on it, and the walls, fences and hedges standing on it. */
   function addGround(g, level, yard) {
     const holes = (level.rooms || []).filter(r => !r.exterior && r.polygon?.length >= 3).map(r => r.polygon);
@@ -274,6 +274,7 @@ export function createView3d(container, hooks = {}) {
     // retaining walls from their low side's ground up to their high side's; the others standing on the ground
     for (const l of yard.lines || []) {
       const look = LINE_LOOK[l.kind]; if (!look || !(l.points?.length >= 2)) continue;
+      if (l.kind === 'picket') { const f = picketFence(l, look, mesh.at); if (f) g.add(f); continue; }
       const t = l.thickness || look.t;
       for (let i = 0; i + 1 < l.points.length; i++) {
         const a = l.points[i], b = l.points[i + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1) continue;
@@ -290,6 +291,44 @@ export function createView3d(container, hooks = {}) {
       }
     }
     return mesh.at;
+  }
+
+  /** A picket fence: two rails and a picket every 120 mm (70 wide, 22 thick, pointed tops), on the ground, as one mesh. */
+  function picketFence(l, look, at) {
+    const H = l.height || look.h, pos = [], idx = [];
+    const box = (a, b, w, z0, z1, peak = 0) => {          // a box from plan point a to b, w thick, z0..z1 (a pointed top adds peak)
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1) return;
+      const u = [(b[0] - a[0]) / L, (b[1] - a[1]) / L], n = [-u[1] * w / 2, u[0] * w / 2], base = pos.length / 3;
+      const c = [[a[0] + n[0], a[1] + n[1]], [b[0] + n[0], b[1] + n[1]], [b[0] - n[0], b[1] - n[1]], [a[0] - n[0], a[1] - n[1]]];
+      for (const z of [z0, z1]) for (const p of c) pos.push(...toThree(p, z));
+      const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      if (peak) { pos.push(...toThree([m[0] + n[0], m[1] + n[1]], z1 + peak), ...toThree([m[0] - n[0], m[1] - n[1]], z1 + peak)); }
+      const q = (i, j, k, l2) => idx.push(base + i, base + j, base + k, base + i, base + k, base + l2);
+      q(0, 1, 2, 3); q(4, 7, 6, 5); q(0, 4, 5, 1); q(1, 5, 6, 2); q(2, 6, 7, 3); q(3, 7, 4, 0);
+      if (peak) { idx.push(base + 4, base + 5, base + 8, base + 7, base + 9, base + 6, base + 4, base + 8, base + 9, base + 4, base + 9, base + 7, base + 5, base + 6, base + 9, base + 5, base + 9, base + 8); }
+    };
+    for (let i = 0; i + 1 < l.points.length; i++) {
+      const a = l.points[i], b = l.points[i + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1) continue;
+      const u = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
+      for (const h of [0.25, 0.75]) {                          // the rails, following the ground along the run
+        const steps = Math.max(1, Math.ceil(L / 1000));
+        for (let k = 0; k < steps; k++) {
+          const p = [a[0] + u[0] * L * k / steps, a[1] + u[1] * L * k / steps], q2 = [a[0] + u[0] * L * (k + 1) / steps, a[1] + u[1] * L * (k + 1) / steps];
+          const z = (at(p) + at(q2)) / 2 + H * h; box(p, q2, 22, z - 35, z + 35);
+        }
+      }
+      for (let s = 35; s < L; s += 120) {                       // the pickets, each on the ground where it stands
+        const c = [a[0] + u[0] * s, a[1] + u[1] * s], z = at(c);
+        if (!Number.isFinite(z)) continue;
+        box([c[0] - u[0] * 35, c[1] - u[1] * 35], [c[0] + u[0] * 35, c[1] + u[1] * 35], 22, z - 50, z + H - 60, 60);
+      }
+    }
+    if (!idx.length) return null;
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3)); geom.setIndex(idx); geom.computeVertexNormals();
+    const m = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ color: new THREE.Color(l.color || look.color), roughness: 0.8, metalness: 0, side: THREE.DoubleSide }));
+    m.name = `${l.id}:yard`; m.castShadow = true; m.receiveShadow = true;
+    return m;
   }
 
   function clear() {

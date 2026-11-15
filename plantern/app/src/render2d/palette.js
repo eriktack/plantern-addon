@@ -24,7 +24,7 @@ export const DARK_PALETTE = Object.freeze({
   yardAlpha: 0.55,
   roof: '#e0a35a',
   wallGlass: '#7fb7d9',
-  yardLine: { fence: '#c9b48a', hedge: '#4f8f3f', stonewall: '#a7a49c', retaining: '#d9d2c3', edging: '#bdb6a8' },
+  yardLine: { picket: '#e8e4da', fence: '#c9b48a', hedge: '#4f8f3f', stonewall: '#a7a49c', retaining: '#d9d2c3', edging: '#bdb6a8' },
 });
 
 /** The light plan: dark walls and labels on pale floors; lamp glow is laid on with `multiply`, which shows on white. */
@@ -46,7 +46,7 @@ export const LIGHT_PALETTE = Object.freeze({
   yardAlpha: 0.6,
   roof: '#9a5b1e',
   wallGlass: '#5a9cc4',
-  yardLine: { fence: '#8a6f3e', hedge: '#3f7a32', stonewall: '#77746c', retaining: '#5d5a52', edging: '#8d867a' },
+  yardLine: { picket: '#9a958a', fence: '#8a6f3e', hedge: '#3f7a32', stonewall: '#77746c', retaining: '#5d5a52', edging: '#8d867a' },
 });
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;

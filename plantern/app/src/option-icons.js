@@ -87,7 +87,7 @@ const DRAWN = {
 
 // the names the batches list, mapped to their family's drawing (ND5 batches 1 to 4)
 const BY_NAME = {
-  leafy: 'leafy', conifer: 'conifer', armchair: 'armchair', office: 'office', lounge: 'lounge', kitchen_sofa: 'sofa', two_seat: 'sofa', three_seat: 'sofaLong',
+  leafy: 'leafy', conifer: 'conifer', bush: 'bush', collar: 'collar', box: 'raisedBox', armchair: 'armchair', office: 'office', lounge: 'lounge', kitchen_sofa: 'sofa', two_seat: 'sofa', three_seat: 'sofaLong',
   corner_l: 'sofaL', corner_u: 'sofaU', sofa_bed: 'sofaBed',
   bun: 'bun', rectangular: 'table', round: 'round', oval: 'oval', square: 'square', pedestal: 'pedestal', trestle: 'trestle',
   nesting_pair: 'nesting', l_shaped: 'lShape', standing: 'standing', dining: 'table',
@@ -120,6 +120,9 @@ export function optionIcon(key, option, own = null) {
 Object.assign(DRAWN, {
   leafy: '<circle cx="12" cy="9" r="6"/><path d="M12 15v6"/>',
   conifer: '<path d="M12 3l6 9h-3l4 6H5l4-6H6z"/><path d="M12 18v3"/>',
+  bush: '<path d="M4 19c-1-4 2-7 5-6 0-3 6-4 7 0 3-1 5 2 4 6z"/>',
+  collar: '<rect x="4" y="13" width="16" height="4"/><rect x="4" y="9" width="16" height="4"/>',
+  raisedBox: '<rect x="3" y="10" width="18" height="8"/><path d="M3 13h18"/>',
   alcoveBath: '<path d="M3 3v16M21 3v16M3 19h18"/><path d="M6 11h12v5H6z"/>',
   arrowLeft: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
   arrowRight: '<path d="M5 12h14M13 6l6 6-6 6"/>',

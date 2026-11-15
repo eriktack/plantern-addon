@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.26
+
+- Bushes, picket fences and raised beds (pallkrage) in the yard; flower beds and ponds
+
 ## 0.8.25
 
 - Trees, a Daylight button in 3D, and a smooth edge on the yard's ground

@@ -8,9 +8,9 @@ import { groundErrors } from '../terrain/ground.js';
 import { isClockwise } from '../geometry/polygon.js';
 
 export const YARD_SURFACES = ['grass', 'gravel', 'asphalt', 'paving', 'deck', 'bed', 'rock', 'forest', 'water', 'other'];
-export const YARD_LINE_KINDS = ['fence', 'hedge', 'stonewall', 'retaining', 'edging'];
-export const SURFACE_LABEL = { grass: 'Grass', gravel: 'Gravel', asphalt: 'Asphalt', paving: 'Paving', deck: 'Deck', bed: 'Bed', rock: 'Rock', forest: 'Trees', water: 'Water', other: 'Other' };
-export const LINE_LABEL = { fence: 'Fence', hedge: 'Hedge', stonewall: 'Stone wall', retaining: 'Retaining wall', edging: 'Edging' };
+export const YARD_LINE_KINDS = ['fence', 'picket', 'hedge', 'stonewall', 'retaining', 'edging'];
+export const SURFACE_LABEL = { grass: 'Grass', gravel: 'Gravel', asphalt: 'Asphalt', paving: 'Paving', deck: 'Deck', bed: 'Flower bed', rock: 'Rock', forest: 'Trees', water: 'Water, a pond', other: 'Other' };
+export const LINE_LABEL = { fence: 'Fence', picket: 'Picket fence', hedge: 'Hedge', stonewall: 'Stone wall', retaining: 'Retaining wall', edging: 'Edging' };
 
 const isPt = p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite);
 const isPts = (a, n) => Array.isArray(a) && a.length >= n && a.every(isPt);

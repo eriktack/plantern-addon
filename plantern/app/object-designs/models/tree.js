@@ -10,17 +10,19 @@ import { primitives, booleans, transforms, geometries } from '../lib/jscad.js';
 // ASSUMED: Spheres use 16 segments, cones and the trunk 12: a tree is seen from afar, and a yard may have many.
 // ASSUMED: A crown base above 80 % of the height is held at 80 %, and a trunk wider than half the crown at half the crown
 // (kept in proportion, never an error).
+// ASSUMED: A bush is built like a leafy tree with its crown down to the ground (crown base 0) and a short stem inside it;
+// default 1.2 m high, 1.5 m wide, #55803f.
 // UNSURE: Real crowns are irregular; this is a readable symbol at the tree's real size, not a botanical model.
 
 export const meta = {
   id: 'tree',
   name: 'Tree',
-  summary: 'A tree in the yard: a leafy tree or a conifer, at its height and crown width.',
+  summary: 'A tree or a bush in the yard: leafy, conifer or a low bush, at its height and width.',
   description:
-    'A simple tree for the yard plan and 3D view: a trunk and a crown of the given height and width. Assumed: a leafy crown is a large sphere with four smaller ones above it, a conifer three stacked cones ending in a point; the trunk reaches into the crown; bark #5a4632, leafy crown #4f7a3a, conifer #2f5a3a; 16 segments for spheres and 12 for cones and the trunk; the crown starts at most at 80 % of the height and the trunk is at most half the crown.',
+    'A simple tree or bush for the yard plan and 3D view: a trunk and a crown of the given height and width (a bush\'s crown reaches the ground). Assumed: a leafy crown is a large sphere with four smaller ones above it, a conifer three stacked cones ending in a point; the trunk reaches into the crown; bark #5a4632, leafy crown #4f7a3a, conifer #2f5a3a; 16 segments for spheres and 12 for cones and the trunk; the crown starts at most at 80 % of the height and the trunk is at most half the crown.',
   frontView: [],
   params: [
-    { key: 'variant', label: 'Kind', type: 'enum', options: ['leafy', 'conifer'], labels: { leafy: 'Leafy tree', conifer: 'Conifer' }, default: 'leafy' },
+    { key: 'variant', label: 'Kind', type: 'enum', options: ['leafy', 'conifer', 'bush'], labels: { leafy: 'Leafy tree', conifer: 'Conifer', bush: 'Bush' }, default: 'leafy' },
     { key: 'height', label: 'Height', unit: 'mm', default: 8000, min: 1000, max: 40000, step: 100 },
     { key: 'crownDiameter', label: 'Crown width', unit: 'mm', default: 5000, min: 500, max: 25000, step: 100 },
     { key: 'crownBase', label: 'Crown starts at', unit: 'mm', default: 2000, min: 0, max: 30000, step: 100, hint: 'height above the ground of the crown\'s lowest point' },
@@ -33,6 +35,7 @@ export const meta = {
   ],
   variantDefaults: {
     conifer: { height: 12000, crownDiameter: 4000, crownBase: 500, trunkDiameter: 350, material: '#2f5a3a' },
+    bush: { height: 1200, crownDiameter: 1500, crownBase: 0, trunkDiameter: 60, material: '#55803f' },
   },
   sizeParams: { x: 'crownDiameter', y: 'crownDiameter', z: 'height' },
   placement: { mount: 'floor', hosts: ['room'] },
@@ -40,7 +43,7 @@ export const meta = {
 
 function resolve(p) {
   const variant = p.variant ?? 'leafy';
-  if (!meta.params[0].options.includes(variant)) throw new Error('Unknown tree kind; choose leafy or conifer.');
+  if (!meta.params[0].options.includes(variant)) throw new Error('Unknown kind; choose leafy, conifer or bush.');
   const d = meta.variantDefaults[variant] ?? {};
   const q = { variant };
   for (const def of meta.params) {

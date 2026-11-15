@@ -20,6 +20,8 @@ import { resolveParams, appliesTo } from '../../object-designs/lib/params.js';
 import { materialOptions, materialAllowed } from '../blueprints/options.js';
 
 export const OBJECT_KINDS = ['box', 'asset'];
+// library models that stand out in the yard (docs/plans/yard.md): no room around them, no ceiling over them
+export const YARD_BLUEPRINTS = new Set(['tree', 'raised-bed']);
 export const OBJECT_DEFAULTS = Object.freeze({
   free: { size: [800, 800, 800], z: 0 },
   wall: { size: [900, 350, 700], z: 1400 },
@@ -133,10 +135,10 @@ export function checkObject(o, level, blueprints) {
   } else if (o.pos) {
     if (!(Array.isArray(o.pos) && o.pos.length === 2 && o.pos.every(Number.isFinite))) errors.push('pos must be [x, y]');
     // a tree stands in the yard, outside the rooms (docs/plans/yard.md Y10)
-    else if (o.blueprint !== 'tree' && !(level.rooms || []).some(r => r.polygon?.length >= 3 && pointInPolygon(o.pos, r.polygon))) warnings.push('is not inside any room');
+    else if (!YARD_BLUEPRINTS.has(o.blueprint) && !(level.rooms || []).some(r => r.polygon?.length >= 3 && pointInPolygon(o.pos, r.polygon))) warnings.push('is not inside any room');
     if (o.rotationDeg !== undefined && !Number.isFinite(o.rotationDeg)) errors.push('rotationDeg must be a number');
   }
-  if (o.blueprint !== 'tree' && Number.isFinite(o.z) && Array.isArray(o.size) && Number.isFinite(o.size[2]) && o.z + o.size[2] > (level.ceilingHeight ?? 2400) + 1) warnings.push(`reaches ${Math.round(o.z + o.size[2])} mm, above the ceiling (${level.ceilingHeight ?? 2400} mm)`);
+  if (!YARD_BLUEPRINTS.has(o.blueprint) && Number.isFinite(o.z) && Array.isArray(o.size) && Number.isFinite(o.size[2]) && o.z + o.size[2] > (level.ceilingHeight ?? 2400) + 1) warnings.push(`reaches ${Math.round(o.z + o.size[2])} mm, above the ceiling (${level.ceilingHeight ?? 2400} mm)`);
   return { errors, warnings };
 }
 
