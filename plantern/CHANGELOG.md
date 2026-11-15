@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.29
+
+- Granite-grey paving and gravel materials; yard areas drawn as layers in 3D; darker asphalt
+
 ## 0.8.28
 
 - Stone materials for the yard: red-mix paving, grey wall blocks and grey cobbles, on areas and walls

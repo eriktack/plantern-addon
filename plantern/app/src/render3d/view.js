@@ -255,7 +255,7 @@ export function createView3d(container, hooks = {}) {
   }
 
   // ---- the yard's ground (docs/plans/yard.md Y11; src/terrain/ground.js) ----
-  const GROUND = { grass: '#5f8a45', gravel: '#a69d8c', asphalt: '#4a4c52', paving: '#9c8775', deck: '#8a6a45', bed: '#5a4632', rock: '#8a8a85', forest: '#3a6a3a', water: '#4d7fae', other: '#7a8088' };
+  const GROUND = { grass: '#5f8a45', gravel: '#a69d8c', asphalt: '#26272a', paving: '#9c8775', deck: '#8a6a45', bed: '#5a4632', rock: '#8a8a85', forest: '#3a6a3a', water: '#4d7fae', other: '#7a8088' };
   const LINE_LOOK = { picket: { t: 22, h: 900, color: '#ece8de' }, retaining: { t: 250, color: '#8d877b' }, stonewall: { t: 400, h: 600, color: '#8d877b' }, fence: { t: 40, h: 1000, color: '#8a6f4a' }, hedge: { t: 600, h: 1200, color: '#3f6f32' } };
   /** The ground mesh under the yard's level, its areas coloured on it, and the walls, fences and hedges standing on it. */
   function addGround(g, level, yard, materials = {}, baseUrl = '') {
@@ -266,27 +266,28 @@ export function createView3d(container, hooks = {}) {
     const pos = new Float32Array(mesh.positions.length * 3), col = new Float32Array(mesh.colors.length * 3), idx = [];
     mesh.positions.forEach((p, i) => pos.set(toThree([p[0], p[1]], p[2]), i * 3));
     mesh.colors.forEach((c, i) => col.set(c, i * 3));
-    for (const t of mesh.triangles) idx.push(t[0], t[2], t[1]);                        // three's winding (plan y is flipped)
+    for (const t of mesh.triangles) idx.push(t[0], t[1], t[2]);                        // anticlockwise in the plan is anticlockwise from above in three too
     const geom = new THREE.BufferGeometry();
     geom.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geom.setAttribute('color', new THREE.BufferAttribute(col, 3));
     geom.setIndex(idx); geom.computeVertexNormals();
     const m = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: THREE.DoubleSide }));
     m.name = 'yard:ground'; m.receiveShadow = false;                 // a large mesh: lamp shadows on it cost more than they show
     g.add(m);
-    // areas of a textured material (paving stones, cobbles; decision 305): the ground under them again, cut to the area (less
-    // what later areas cover), a little above it, the image laid flat in plan coordinates
+    // each area again as its own layer on the ground (decision 305): a textured material's image laid flat in plan coordinates,
+    // else its colour; later areas a little higher, so a path on the cobbles lies on top without cutting a hole in them
     const areas = yard.areas || [];
-    areas.forEach((a, k) => {
-      const t = matOf(a.material); if (!t?.texture || !(a.polygon?.length >= 3)) return;
-      const later = areas.slice(k + 1).filter(b => b.polygon?.length >= 3).map(b => b.polygon);
-      const part = groundMesh({ ...yard, boundary: a.polygon }, { cell: 400, holes: [...holes, ...later] }); if (!part?.triangles.length) return;
+    if (areas.some(a => matOf(a.material)?.texture)) areas.forEach((a, k) => {
+      if (!(a.polygon?.length >= 3)) return;
+      const t = matOf(a.material);
+      const part = groundMesh({ ...yard, boundary: a.polygon }, { cell: 400, holes }); if (!part?.triangles.length) return;
       const p3 = new Float32Array(part.positions.length * 3), uv = new Float32Array(part.positions.length * 2), ix = [];
-      const s = t.uvScale || 1000;
-      part.positions.forEach((p, i) => { p3.set(toThree([p[0], p[1]], mesh.at(p) + 12 + k), i * 3); uv[i * 2] = p[0] / s; uv[i * 2 + 1] = p[1] / s; });
-      for (const tr of part.triangles) ix.push(tr[0], tr[2], tr[1]);
+      const s = t?.uvScale || 1000;
+      part.positions.forEach((p, i) => { p3.set(toThree([p[0], p[1]], mesh.at(p) + 10 + 2 * k), i * 3); uv[i * 2] = p[0] / s; uv[i * 2 + 1] = p[1] / s; });
+      for (const tr of part.triangles) ix.push(tr[0], tr[1], tr[2]);
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(p3, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); geo.setIndex(ix); geo.computeVertexNormals();
-      const mat = new THREE.MeshStandardMaterial({ map: texture(textureUrl(t.texture, baseUrl)), roughness: 0.9, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1 - k, polygonOffsetUnits: -1 - k });
+      const look = t?.texture ? { map: texture(textureUrl(t.texture, baseUrl)) } : { color: new THREE.Color(a.color || t?.color || GROUND[a.surface] || GROUND.other) };
+      const mat = new THREE.MeshStandardMaterial({ ...look, roughness: 0.9, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1 - k, polygonOffsetUnits: -1 - k });
       const o = new THREE.Mesh(geo, mat); o.name = `${a.id}:yard`; o.receiveShadow = true; g.add(o);
     });
     // retaining walls from their low side's ground up to their high side's; the others standing on the ground

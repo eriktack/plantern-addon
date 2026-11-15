@@ -18,5 +18,7 @@
   "navy": { "color": "#2f3b52" },
   "paving-red-mix": { "color": "#8e5444", "texture": "textures/paving-red-mix.jpg", "uvScale": 840, "roughness": 0.9 },
   "wall-block-grey": { "color": "#808285", "texture": "textures/wall-block-grey.jpg", "uvScale": 1000, "roughness": 0.95 },
-  "cobble-grey": { "color": "#7d7b7a", "texture": "textures/cobble-grey.jpg", "uvScale": 900, "roughness": 0.9 }
+  "cobble-grey": { "color": "#7d7b7a", "texture": "textures/cobble-grey.jpg", "uvScale": 900, "roughness": 0.9 },
+  "paving-granite-grey": { "color": "#5e5d5a", "texture": "textures/paving-granite-grey.jpg", "uvScale": 840, "roughness": 0.85 },
+  "gravel-grey": { "color": "#8f887c", "texture": "textures/gravel-grey.jpg", "uvScale": 600, "roughness": 1 }
 }

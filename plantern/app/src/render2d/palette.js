@@ -21,7 +21,7 @@ export const DARK_PALETTE = Object.freeze({
   wifi: { good: '#3fbf5f', fair: '#e8c33a', weak: '#e8713a', alpha: 0.32 },   // the Wi-Fi estimate's bands (DV7)
   // the yard (docs/plans/yard.md): a fill per surface, a colour per kind of line
   yardPlant: '#6f9e4f',
-  yardSurface: { grass: '#4f7a3a', gravel: '#9c9283', asphalt: '#3c3f45', paving: '#8a6f5c', deck: '#8a6a45', bed: '#5a4632', rock: '#7d7d78', forest: '#2f5a2f', water: '#3d6f9e', other: '#6d7480' },
+  yardSurface: { grass: '#4f7a3a', gravel: '#9c9283', asphalt: '#232427', paving: '#8a6f5c', deck: '#8a6a45', bed: '#5a4632', rock: '#7d7d78', forest: '#2f5a2f', water: '#3d6f9e', other: '#6d7480' },
   yardAlpha: 0.55,
   roof: '#e0a35a',
   wallGlass: '#7fb7d9',
@@ -44,7 +44,7 @@ export const LIGHT_PALETTE = Object.freeze({
   deviceInk: '#ffffff',
   wifi: { good: '#1f9c3f', fair: '#c99410', weak: '#d0561c', alpha: 0.30 },
   yardPlant: '#4f8a3a',
-  yardSurface: { grass: '#a9cf8f', gravel: '#d8d2c6', asphalt: '#8e9199', paving: '#d2b9a6', deck: '#caa97f', bed: '#a88e72', rock: '#b9b9b3', forest: '#7fae74', water: '#9cc3e6', other: '#c4c9d2' },
+  yardSurface: { grass: '#a9cf8f', gravel: '#d8d2c6', asphalt: '#55575c', paving: '#d2b9a6', deck: '#caa97f', bed: '#a88e72', rock: '#b9b9b3', forest: '#7fae74', water: '#9cc3e6', other: '#c4c9d2' },
   yardAlpha: 0.6,
   roof: '#9a5b1e',
   wallGlass: '#5a9cc4',

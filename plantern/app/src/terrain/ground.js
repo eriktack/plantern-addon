@@ -207,5 +207,10 @@ export function groundMesh(yard, { cell = 400, holes = [], colorOf = () => '#6f8
     const ids = piece.map(free);
     for (const [a, b, d] of earClip(piece)) triangles.push([ids[a], ids[b], ids[d]]);
   }
+  // every triangle anticlockwise in the plan (the grid's and the cut cells' own orders differ), so faces and normals all point up
+  for (const t of triangles) {
+    const [a, b, c] = t.map(i => positions[i]);
+    if ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) < 0) [t[1], t[2]] = [t[2], t[1]];
+  }
   return { positions, triangles, colors, at: surf.at };
 }
