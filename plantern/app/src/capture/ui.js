@@ -55,7 +55,7 @@ import { Ed } from './editor/state.js';
 import { addFromFile, setShown, addPoint, applyFit, revertFit, closeFit, renderUnderlays, setDraftOpacity, imageClick as underlayImageClick, planClick as underlayPlanClick, pickingPlan, stopPick as stopUnderlayPick, toggleHand as toggleUnderlayHand, typedPlace as typedUnderlayPlace, handDown as underlayHandDown, setHand as setUnderlayHand } from './editor/underlays.js';
 import { isDevice, fixtureNoun } from '../model/devices.js';
 import { bearingDown } from './editor/device-drag.js';
-import { yardDrawing, yardClick, stopDraw as stopYardDraw, startDraw as startYardDraw, finishDraw as finishYardDraw, undoPoint as undoYardPoint, setElevation as setYardElevation } from './editor/yard.js';
+import { yardDrawing, yardClick, stopDraw as stopYardDraw, startDraw as startYardDraw, finishDraw as finishYardDraw, undoPoint as undoYardPoint, setElevation as setYardElevation, importGeoFile as importYardGeo } from './editor/yard.js';
 
 enhanceSegmented();                  // choices of up to four: a row of buttons (UX20); before the menus, which leave these alone
 enhanceAll(document, { skip: '#preview, #tree' });     // the plan and the tree are rebuilt all the time and hold no select (PF16)
@@ -124,6 +124,7 @@ async function init() {
   $('ydAddGround').onclick = () => startYardDraw('ground');
   $('ydAddLine').onclick = () => startYardDraw('line');
   $('ydBoundary').onclick = () => startYardDraw('boundary');
+  $('ydGeo').onchange = e => importYardGeo(e.target.files?.[0]);
   $('ydKind').onchange = () => { $('ydRetain').hidden = $('ydKind').value !== 'retaining'; };
   $('ydElev').onchange = e => setYardElevation(e.target.value);
   $('preview').addEventListener('dblclick', e => { if (yardDrawing()) { e.preventDefault(); e.stopPropagation(); finishYardDraw(); } }, true);

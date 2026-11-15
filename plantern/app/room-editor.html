@@ -198,6 +198,8 @@
       </div>
       <div class="row btns"><button type="button" id="ydAddLine">+ Line</button></div>
       <div class="row btns"><button type="button" id="ydBoundary">Draw the yard's outline</button> <span id="ydBoundaryState" class="help"></span></div>
+      <label>Import a map file <small>GeoJSON, e.g. a robot mower's map or a drawing from a map site; placed with the house's map position</small><input type="file" id="ydGeo" accept=".geojson,.json,application/geo+json,application/json"></label>
+      <div id="ydImport" hidden></div>
       <div class="grid2">
         <label>Measured ground height <small>mm from this floor's floor (− below)</small><input id="ydGroundZ" inputmode="numeric" autocomplete="off" placeholder="−570"></label>
         <div class="row btns"><button type="button" id="ydAddGround">+ Ground height (click its spot)</button></div>

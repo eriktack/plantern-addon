@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.32
+
+- Import a GeoJSON map file (e.g. a robot mower's map) into the yard
+
 ## 0.8.31
 
 - The yard's ground follows Lantmäteriet's 1 m ground model between and beyond the measured points

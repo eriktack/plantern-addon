@@ -14,6 +14,7 @@ import { $, commit, esc } from './core.js';
 import { setStatus } from './session.js';
 import { Ed } from './state.js';
 import { draw } from './plan-draw.js';
+import { readGeoJson } from '../../terrain/geojson.js';
 
 const yd = () => (Ed.yd ??= { tool: null });
 const onYardLevel = () => Ed.levelId === yardLevelId(Ed.model);
@@ -125,6 +126,65 @@ export function setElevation(v) {
   commit(r.model); msg('Ground height set (not saved yet)');
 }
 
+// ---- importing a map file (GeoJSON; decision 308) ----
+const IMPORT_LINES = ['edging', 'fence', 'picket', 'hedge', 'stonewall'];
+/** Read a GeoJSON file and list its shapes for picking; nothing changes until "Add". */
+export async function importGeoFile(file) {
+  if (!file) return;
+  let text;
+  try { text = await file.text(); } catch { msg('The file could not be read'); return; }
+  const r = readGeoJson(text, Ed.model.site);
+  $('ydGeo').value = '';
+  if (!r.shapes.length) { yd().imp = null; renderImport(); msg(r.warnings.join(' ') || 'No shapes in the file'); return; }
+  yd().imp = { ...r, file: file.name, on: new Set(r.shapes.filter(s => s.geom !== 'point' || s.z !== undefined).map(s => s.n)) };
+  renderImport(); draw();
+  msg(`${r.shapes.length} shape${r.shapes.length > 1 ? 's' : ''} in ${file.name} (${r.crs === 'WGS84' ? 'GPS coordinates' : 'SWEREF 99 TM'}), shown dashed in the plan. ${r.warnings.join(' ')}`);
+}
+function renderImport() {
+  const box = $('ydImport'), imp = yd().imp;
+  box.hidden = !imp;
+  if (!imp) { box.innerHTML = ''; return; }
+  const surfOpts = cur => YARD_SURFACES.map(s => `<option value="${s}"${s === cur ? ' selected' : ''}>${SURFACE_LABEL[s]}</option>`).join('');
+  const lineOpts = cur => IMPORT_LINES.map(k => `<option value="${k}"${k === cur ? ' selected' : ''}>${LINE_LABEL[k]}</option>`).join('');
+  box.innerHTML = `<p class="help">From <b>${esc(imp.file)}</b>: tick what to add, pick what each area is. Areas are added on top of the yard's areas.</p>`
+    + imp.shapes.map(s => `<div class="arow"><label><input type="checkbox" data-ydimp="${s.n}"${imp.on.has(s.n) ? ' checked' : ''}${s.geom === 'point' && s.z === undefined ? ' disabled' : ''}> <b>${esc(s.name)}</b></label>`
+      + ` <small>${s.geom === 'area' ? `area, ${s.points.length} corners` : s.geom === 'line' ? `line, ${s.points.length} points` : s.z !== undefined ? `ground height ${(s.z / 1000).toFixed(2)} m` : 'point without a height (skipped)'}${s.note ? `, ${esc(s.note)}` : ''}</small>`
+      + (s.geom === 'area' ? ` <select data-ydimpsurf="${s.n}" aria-label="Surface of ${esc(s.name)}">${surfOpts(s.surface)}</select>` : s.geom === 'line' ? ` <select data-ydimpkind="${s.n}" aria-label="Kind of ${esc(s.name)}">${lineOpts(s.kind)}</select>` : '') + '</div>').join('')
+    + `<div class="row btns"><button type="button" id="ydImpAdd">Add the ticked shapes</button> <button type="button" id="ydImpCancel">Cancel</button></div>`;
+  box.querySelectorAll('[data-ydimp]').forEach(c => (c.onchange = () => { const n = Number(c.dataset.ydimp); c.checked ? imp.on.add(n) : imp.on.delete(n); draw(); }));
+  box.querySelectorAll('[data-ydimpsurf]').forEach(s => (s.onchange = () => { imp.shapes[Number(s.dataset.ydimpsurf)].surface = s.value; }));
+  box.querySelectorAll('[data-ydimpkind]').forEach(s => (s.onchange = () => { imp.shapes[Number(s.dataset.ydimpkind)].kind = s.value; }));
+  $('ydImpCancel').onclick = () => { yd().imp = null; renderImport(); draw(); msg('Import cancelled'); };
+  $('ydImpAdd').onclick = addImported;
+}
+/** Add the ticked shapes: areas, lines and ground heights, as one undo step. */
+function addImported() {
+  const imp = yd().imp; if (!imp) return;
+  let m = Ed.model, n = 0;
+  for (const s of imp.shapes) {
+    if (!imp.on.has(s.n)) continue;
+    const name = s.name.startsWith('Shape ') ? undefined : s.name;
+    const r = s.geom === 'area' ? addYardArea(m, { surface: s.surface || 'grass', polygon: s.points, ...(name ? { name } : {}) })
+      : s.geom === 'line' ? addYardLine(m, { kind: s.kind || 'edging', points: s.points, ...(name ? { name } : {}) })
+      : s.z !== undefined ? addYardGround(m, { pos: s.points[0], z: s.z, ...(name ? { name } : {}) }) : null;
+    if (!r) continue;
+    if (r.report.errors.length) { msg(`${s.name}: ${r.report.errors.join('; ')} (nothing added)`); return; }
+    m = r.model; n++;
+  }
+  if (!n) { msg('Nothing ticked'); return; }
+  yd().imp = null; renderImport();
+  commit(m); msg(`${n} shape${n > 1 ? 's' : ''} added from the file (not saved yet)`);
+}
+/** The shapes of a file being imported, dashed in the plan (the ticked ones bolder). */
+function importSvg(fs) {
+  const imp = Ed.yd?.imp; if (!imp) return '';
+  return '<g pointer-events="none">' + imp.shapes.map(s => {
+    const on = imp.on.has(s.n), st = `stroke="#4fd1e8" stroke-width="${fs / (on ? 5 : 10)}" stroke-dasharray="${fs / 2} ${fs / 3}" stroke-opacity="${on ? 1 : 0.5}"`;
+    if (s.geom === 'point') { const [x, y] = toSvg(s.points[0]); return `<circle cx="${x}" cy="${y}" r="${fs * 0.35}" fill="none" ${st}/>`; }
+    return `<${s.geom === 'area' ? 'polygon' : 'polyline'} points="${pts(s.points)}" fill="${s.geom === 'area' && on ? '#4fd1e822' : 'none'}" ${st}/>`;
+  }).join('') + '</g>';
+}
+
 // ---- in the plan ----
 const P = DARK_PALETTE;
 const pts = a => a.map(p => toSvg(p).join(',')).join(' ');
@@ -141,9 +201,9 @@ export function yardSvg(fs) {
 }
 /** On top of the plan while drawing: the points so far, joined. */
 export function yardDraftSvg(fs) {
-  const t = Ed.yd?.tool;
-  if (!t || !t.pts.length) return '';
+  const t = Ed.yd?.tool, imp = onYardLevel() ? importSvg(fs) : '';
+  if (!t || !t.pts.length) return imp;
   const closed = t.type !== 'line' && t.pts.length >= 3;
   return `<g pointer-events="none"><${closed ? 'polygon' : 'polyline'} points="${pts(t.pts)}" fill="${closed ? '#ffb45433' : 'none'}" stroke="#ffb454" stroke-width="${fs / 6}" stroke-dasharray="${fs / 2} ${fs / 3}"/>`
-    + t.pts.map(p => { const [x, y] = toSvg(p); return `<circle cx="${x}" cy="${y}" r="${fs * 0.35}" fill="#ffb454" stroke="#14161a" stroke-width="${fs / 10}"/>`; }).join('') + '</g>';
+    + t.pts.map(p => { const [x, y] = toSvg(p); return `<circle cx="${x}" cy="${y}" r="${fs * 0.35}" fill="#ffb454" stroke="#14161a" stroke-width="${fs / 10}"/>`; }).join('') + '</g>' + imp;
 }
