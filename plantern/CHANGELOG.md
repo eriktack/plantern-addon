@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.40
+
+- 3D view: opening it, switching floor and coming back to the tab no longer freeze the browser while shaders compile
+
 ## 0.8.39
 
 - Map import can move a file that sits off; the yard remembers the shift

@@ -64,7 +64,8 @@ export function createView3d(container, hooks = {}) {
   let sunlight = 0;                          // how much daylight the house has now, 0 to 1 (setSunlight, geometry/sun.js)
   let ambientMax = 1;                        // the ambient light at full sun with daylight off (setLight)
   let buildGen = 0;
-  let disposed = false;                      // dispose(): nothing is drawn after it, a callback that is still queued does nothing
+  let sized = [0, 0];                        // the canvas size last set (resize)
+  let disposed = false;                     // dispose(): nothing is drawn after it, a callback that is still queued does nothing
 
   // Light counts stay the same whatever is on. Three compiles a shader for every material for every number of lights and of
   // shadow casters, so lamps that were switched off and on (visible = false / true) recompiled every shader the first time each new
@@ -76,6 +77,8 @@ export function createView3d(container, hooks = {}) {
   let steadyLights = true;
   const shadowDirty = new Set();             // lamp ids whose shadow map is out of date
   let sunShadowDirty = true;
+  // a model that arrived in one level's group: that level's lamps and the sun (the other floors' lamps do not reach it)
+  const markShadowsDirtyIn = g => { for (const [k, f] of fixtures) if (f.kind === 'lamp') { let x = f.light; while (x && x !== g) x = x.parent; if (x) shadowDirty.add(k); } sunShadowDirty = true; };
   const markShadowsDirty = id => { if (id === undefined) { for (const [k, f] of fixtures) if (f.kind === 'lamp') shadowDirty.add(k); sunShadowDirty = true; } else shadowDirty.add(id); };
   // the shadow maps that are out of date, for the lamps that are on and cast one: a few per frame, the rest on the next
   function flushShadows() {
@@ -91,7 +94,65 @@ export function createView3d(container, hooks = {}) {
     if (sunShadowDirty) { sun.shadow.needsUpdate = true; sunShadowDirty = false; }
     if (waiting) renderSoon();
   }
-  const render = () => { if (disposed) return; flushShadows(); renderer.render(scene, camera); };
+  // timing (perf.js, the viewer's ?perf=1): each build and each frame is reported to hooks.perf; without it no clock is read
+  const perf = hooks.perf || null;
+  let framesSinceBuild = 0;
+  const draw = () => {
+    if (!perf) { renderer.render(scene, camera); return; }
+    const t = performance.now(), before = renderer.info.programs.length;
+    renderer.render(scene, camera);
+    perf({ type: 'render', n: buildGen, nth: ++framesSinceBuild, ms: performance.now() - t, programs: [before, renderer.info.programs.length] });
+  };
+  // A new set of lights (another floor, more floors, another number of shadows) is a new shader for every kind of material, and the browser
+  // compiles a shader the first time it is drawn with: seconds in which the page answers nothing (measured on the demo: 3.7 s for the ground
+  // floor, 8.2 s for all three floors). So a build draws nothing itself. It asks for the shaders to be compiled beside the page
+  // (compileAhead) and draws one frame when they are there; until then every frame asked for waits, and the last frame stays on screen.
+  // hooks.onBusy(true / false) tells the page, so it can say that the view is being built.
+  let waiting = false, presentToken = 0;
+  const render = () => { if (disposed || waiting) return; flushShadows(); draw(); };
+  // three's own compileAsync waits on every material it compiled, and fails for good when one of them is given back meanwhile (a newer build
+  // replaced it). So the wait is done here: the shaders are started (compile), and the promise settles when each is ready, when `alive()` says
+  // nobody waits for them any more, or after COMPILE_MAX_MS (a lost graphics context never gets ready). Without parallel compiling in the
+  // browser there is nothing to wait for: the first frame compiles, as it always did.
+  const COMPILE_MAX_MS = 60000;
+  function compileAhead(object, target, alive) {
+    let materials;
+    try { materials = new Set(renderer.compile(object, camera, target)); } catch (e) { console.warn('3D: the shaders could not be compiled ahead:', e); return Promise.resolve(); }
+    if (!renderer.extensions.has('KHR_parallel_shader_compile')) return Promise.resolve();
+    const from = performance.now();
+    return new Promise(resolve => {
+      const check = () => {
+        if (!alive() || performance.now() - from > COMPILE_MAX_MS) { resolve(); return; }
+        for (const m of materials) { const program = renderer.properties.get(m).currentProgram; if (!program || program.isReady()) materials.delete(m); }
+        if (materials.size) setTimeout(check, 10); else resolve();
+      };
+      check();
+    });
+  }
+  const hold = () => { if (!waiting) { waiting = true; hooks.onBusy?.(true); } };
+  function present() {
+    if (disposed) return;
+    hold();
+    const token = ++presentToken, t = perf ? performance.now() : 0, before = perf ? renderer.info.programs.length : 0;
+    const done = () => {
+      if (disposed || token !== presentToken) return;                    // a newer build or change is being compiled: it draws
+      waiting = false;
+      perf?.({ type: 'compile', n: buildGen, ms: performance.now() - t, parallel: renderer.extensions.has('KHR_parallel_shader_compile'), programs: [before, renderer.info.programs.length] });
+      render();
+      releaseRetired();
+      hooks.onBusy?.(false);
+    };
+    compileAhead(scene, null, () => !disposed && token === presentToken).then(done, done);
+  }
+  // What a build replaced is given back only after the new scene's first frame: a shader both scenes use then never loses its last
+  // user, so it is not thrown away and compiled again. A model's own geometries and materials belong to the page's model cache (every copy
+  // of a model shares them, and the next build uses them again), so they are kept; `all` gives those back too (dispose()).
+  const retired = [];
+  const release = (o, all = false) => o.traverse(x => {
+    if (x.geometry && (all || !x.geometry.userData.cached)) x.geometry.dispose();
+    for (const m of [].concat(x.material || [])) if (all || !m.userData.cached) m.dispose();
+  });
+  const releaseRetired = (all = false) => { for (const o of retired.splice(0)) release(o, all); };
   // a change of state (a lamp, the shadows, the light) asks for one frame, not one each: a loop that sets 30 lamps draws once.
   // A frame per lamp was the slow start of a house with many lights: each frame compiled the shaders for the lights on so far.
   let frameQueued = false;
@@ -127,7 +188,7 @@ export function createView3d(container, hooks = {}) {
 
   function resize() {
     const w = container.clientWidth || 1, h = container.clientHeight || 1, aspect = w / h;
-    renderer.setSize(w, h, false);
+    if (w !== sized[0] || h !== sized[1]) { renderer.setSize(w, h, false); sized = [w, h]; }   // setting a canvas's size empties it: only when it changed, so the last frame stays while a build waits
     persp.aspect = aspect;
     persp.updateProjectionMatrix();
     const size = ortho.userData.size || 10;
@@ -416,7 +477,7 @@ export function createView3d(container, hooks = {}) {
   }
 
   function clear() {
-    root.traverse(o => { o.geometry?.dispose(); [].concat(o.material || []).forEach(m => m.dispose()); });
+    retired.push(...root.children);          // given back after the next frame (releaseRetired)
     root.clear();
     fixtures.clear();
     pickables = [];
@@ -428,46 +489,79 @@ export function createView3d(container, hooks = {}) {
    * a level up, shift [dx, dy] sideways in the plan, for the exploded view). Lamps and switches of every shown level are live; the number of lamps casting
    * shadows is shared between them.
    */
-  function build({ level, geo, levels, settings: s, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', ceilings = false, assets = null, doorStates = null, keepView = false, dim = null, yard = null }) {
+  function build({ level, geo, levels, settings: s, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', ceilings = false, assets = null, doorStates = null, keepView = false, dim = null, yard = null, cause = null, shadows = null }) {
     const gen = ++buildGen;     // asset models that finish loading after a newer build are dropped
+    const perfStart = perf ? performance.now() : 0, perfPrograms = perf ? renderer.info.programs.length : 0;
+    framesSinceBuild = 0;
+    hold();                     // nothing is drawn until the shaders of this build are there (present)
+    const placeNow = [];        // the models that are already loaded: put in before the build is finished (placeAsset)
     clear();
     settings = s;
+    if (shadows != null) shadowBudget = shadows;   // how many lamps cast shadows is part of every shader: known before the first frame, not changed after it
     const shown = levels ?? (level ? [{ level, geo, lift: 0 }] : []);
-    if (!shown.length) { bounds.set(new THREE.Vector3(-2, 0, -2), new THREE.Vector3(2, 1, 2)); resetView(); return; }
-    for (const sh of shown) buildLevel(sh.level, sh.geo, sh.lift || 0, sh.shift || [0, 0]);
-    finishBuild(keepView);
+    if (!shown.length) { bounds.set(new THREE.Vector3(-2, 0, -2), new THREE.Vector3(2, 1, 2)); resetView(); present(); return; }
+    // whatever goes wrong while building, the view is let go again (present): it must not stay waiting, with the note up and no frame drawn
+    try {
+      for (const sh of shown) buildLevel(sh.level, sh.geo, sh.lift || 0, sh.shift || [0, 0]);
+      finishBuild(keepView);
+      for (const place of placeNow) place();   // after the framing: the default view, the ground and the sun follow the house, not which models had loaded
+      perf?.({ type: 'build', n: gen, cause, ms: performance.now() - perfStart, programs: [perfPrograms, renderer.info.programs.length] });
+    } finally {
+      present();
+    }
 
     // An asset object: its model replaces the object's box once loaded, at its footprint's centre and heading (the
     // model's own x axis is the object's width). A missing model leaves the box, in red with a red outline.
-    const seeThrough = m => (Array.isArray(m) ? m : [m]).some(x => x && x.transparent && x.opacity < 1);
+    function seeThrough(m) { return (Array.isArray(m) ? m : [m]).some(x => x && x.transparent && x.opacity < 1); }
     function placeAsset(o, geo, g, box, lit) {
       const fp = geo.objectFootprint(o);
       if (!fp) return;
       const { centre, z, heading } = assetPlacement(o, fp, geo.objectZ(o));   // a hosted object has no z of its own: its opening gives the height
       const entry = assets.loadFor(o);
+      // the copy of a loaded model that stands for this object
+      const copyOf = source => {
+        // the model's own geometries and materials stay the cache's (release)
+        if (!source.userData.cached) { source.userData.cached = true; source.traverse(c => { if (c.geometry) c.geometry.userData.cached = true; for (const mat of [].concat(c.material || [])) mat.userData.cached = true; }); }
+        const m = source.clone(true);
+        m.name = `${o.id}:asset`;
+        m.userData = { id: o.id, kind: 'asset' };
+        m.position.set(...toThree(centre, z));
+        m.rotation.y = heading;
+        // a lit object does not shadow its own light: the light sits inside its shade, so its stem, base and shade would throw dark wedges across the room
+        m.traverse(c => { if (c.isMesh) { c.castShadow = !lit && !seeThrough(c.material); c.receiveShadow = true; } });   // glass and other see-through parts let the light pass
+        // the part that shines (the model's `glows` part: a shade, a globe) lights up while the lamp is on, as a strip does;
+        // its material is this object's own copy, since every copy of a model shares the cached one
+        if (lit) m.traverse(c => { if (c.isMesh && c.geometry?.userData?.glows) { c.material = c.material.clone(); c.material.userData.cached = false; c.userData.glow = true; } });
+        return m;
+      };
+      let shownSource = null, shown = null;
+      const attach = (source, m) => {
+        if (shown) { g.remove(shown); pickables = pickables.filter(p => { let x = p; while (x && x !== shown) x = x.parent; return !x; }); retired.push(shown); }
+        g.add(m);
+        shownSource = source; shown = m;
+        if (box) box.visible = false;
+        // a lit object is its lamp (lit.js): its model is what is clicked to switch the light, not a ball at the light
+        if (lit) {
+          if (box) { const k = pickables.indexOf(box); if (k >= 0) pickables.splice(k, 1); }
+          const f = fixtures.get(lit.id), glow = [];
+          m.traverse(c => { if (c.isMesh) { c.userData = { ...c.userData, fixture: lit, label: fixtureLabel(lit) }; pickables.push(c); if (c.userData.glow) glow.push(c.material); } });
+          if (f && glow.length) { f.glow = glow; if (f.state) glowLamp(f, f.state); }
+        }
+      };
+      // a model that is already there is part of the build (and of its one compile); one that arrives later is compiled beside the page with
+      // the lights of the scene, and put in when its shaders are there
+      if (entry.scene) { const source = entry.scene; placeNow.push(() => attach(source, copyOf(source))); }   // once the level's lamps exist: a lit object's glow is its lamp's
       entry.ready.then(() => {
         if (gen !== buildGen) return;
         if (entry.scene) {
-          const m = entry.scene.clone(true);
-          m.name = `${o.id}:asset`;
-          m.userData = { id: o.id, kind: 'asset' };
-          m.position.set(...toThree(centre, z));
-          m.rotation.y = heading;
-          // a lit object does not shadow its own light: the light sits inside its shade, so its stem, base and shade would throw dark wedges across the room
-          m.traverse(c => { if (c.isMesh) { c.castShadow = !lit && !seeThrough(c.material); c.receiveShadow = true; } });   // glass and other see-through parts let the light pass
-          g.add(m);
-          if (box) box.visible = false;
-          // a lit object is its lamp (lit.js): its model is what is clicked to switch the light, not a ball at the light
-          if (lit) {
-            if (box) { const k = pickables.indexOf(box); if (k >= 0) pickables.splice(k, 1); }
-            m.traverse(c => { if (c.isMesh) { c.userData = { ...c.userData, fixture: lit, label: fixtureLabel(lit) }; pickables.push(c); } });
-            // the part that shines (the model's `glows` part: a shade, a globe) lights up while the lamp is on, as a strip does;
-            // its material is this object's own copy, since every copy of a model shares the cached one
-            const f = fixtures.get(lit.id), glow = [];
-            m.traverse(c => { if (c.isMesh && c.geometry?.userData?.glows) { c.material = c.material.clone(); glow.push(c.material); } });
-            if (f && glow.length) { f.glow = glow; if (f.state) glowLamp(f, f.state); }
-          }
+          if (entry.scene === shownSource) return;
+          const source = entry.scene, m = copyOf(source);
+          const put = () => { if (gen !== buildGen || disposed) return; attach(source, m); markShadowsDirtyIn(g); renderSoon(); };
+          compileAhead(m, scene, () => !disposed && gen === buildGen).then(put, put);
+          return;
         } else {
+          // a kept copy was put in and the server then said the model is missing or broken: the marked box stands for it again
+          if (shown) { g.remove(shown); pickables = pickables.filter(p => { let x = p; while (x && x !== shown) x = x.parent; return !x; }); retired.push(shown); shown = shownSource = null; if (box) box.visible = true; }
           if (box) box.material.color.set(0xb00020);
           const [w, d, h] = o.size;
           const outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w * MM, h * MM, d * MM)), new THREE.LineBasicMaterial({ color: 0xff2a2a }));
@@ -684,8 +778,10 @@ export function createView3d(container, hooks = {}) {
   }
 
   /** How many lamps may cast shadows (shadows.js); the lit ones get them, brightest first. */
-  function setShadows(count) { shadowBudget = count; assignShadows(); requestRender(); }
+  function setShadows(count) { shadowBudget = count; if (assignShadows()) present(); else requestRender(); }   // another number of shadows is another shader: compiled beside the page
+  /** Returns whether a lamp started or stopped casting a shadow. */
   function assignShadows() {
+    let changed = false;
     // steady: the lamps that cast shadows are the ones with the most to hide behind walls, whatever is on (the count never changes);
     // otherwise only the lamps that are on count
     const lamps = [...fixtures].filter(([, f]) => f.kind === 'lamp').map(([id, f]) => ({ id, f, on: steadyLights || !!f.state?.on, brightness: steadyLights ? 1 : (f.state?.brightness ?? 1), leak: leakOf.get(id) ?? 1 }));
@@ -693,9 +789,10 @@ export function createView3d(container, hooks = {}) {
     const chosen = pickShadowLamps(lamps, Math.min(shadowBudget, Math.max(0, renderer.capabilities.maxTextures - 6)));
     for (const l of lamps) {
       const cast = chosen.has(l.id);
-      if (l.f.light.castShadow !== cast) { l.f.light.castShadow = cast; if (cast) shadowDirty.add(l.id); }   // changes only: each one rebuilds shaders
+      if (l.f.light.castShadow !== cast) { l.f.light.castShadow = cast; changed = true; if (cast) shadowDirty.add(l.id); }   // changes only: each one rebuilds shaders
       l.f.light.shadow.autoUpdate = !steadyLights;
     }
+    return changed;
   }
 
   /** A lit object's shining part (its `glows` meshes) in the light's colour while it is on, dimmer when dimmed; its own colour when off. */
@@ -835,6 +932,7 @@ export function createView3d(container, hooks = {}) {
     if (disposed) return;
     disposed = true;
     clear();
+    releaseRetired(true);
     for (const t of textures.values()) t.dispose();
     textures.clear();
     ground.geometry.dispose();

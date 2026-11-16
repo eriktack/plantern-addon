@@ -55,6 +55,13 @@ export function doorStates(model, bindings, getState) {
 }
 
 /**
+ * What the doors look like now, as one string: the same string means nothing about them has to be drawn again. Home Assistant sends every
+ * state again each time its connection (re)opens, and a sensor reports changes that are not open or closed (its battery, its signal): neither
+ * is a reason to build the house again.
+ */
+export const doorKey = (model, bindings, getState) => JSON.stringify([...doorStates(model, bindings, getState)]);
+
+/**
  * How a door's lock is drawn, from `lockOf()`: { colour (the whole padlock), open, label }. Locked is a closed padlock in green, unlocked an open one in red, a jammed
  * lock an open one in amber; an unknown state (unavailable, missing entity) is a closed, grey padlock, never a guess.
  */

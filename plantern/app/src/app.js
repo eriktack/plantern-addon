@@ -5,18 +5,20 @@ import { validateModel, validateBindings, validateEntities } from './model/valid
 import { materialTable, setDesignLibrary } from './model/materials.js';
 import { buildModelGeometry } from './geometry/level.js';
 import { levelStack, STACK_MODES } from './geometry/stack.js';
-import { addLitLamps } from './model/lit.js';
+import { addLitLamps, rebuildForLights } from './model/lit.js';
+import { assetKey } from './model/assets.js';
 import { collectSnapPoints } from './tools/snap.js';
 import { createMeasureTool } from './tools/measure.js';
 import { addCheck, deleteCheck } from './edit/ops.js';
 import { createPlanView } from './render2d/plan.js';
 import { createAssetCache } from './render3d/assets.js';
 import { coalesce } from './coalesce.js';
+import { createPerf3d } from './render3d/perf.js';
 import { createHaClient, resolveConnection, boundEntities } from './ha/client.js';
 import { appearance } from './ha/appearance.js';
 import { lampGroups, isControllable, readOnlyStatus } from './ha/lamp-list.js';
 import { fixtureAppearance as fixtureAppearanceOf, toggleCalls, canPreview, previewLook } from './ha/fixture.js';
-import { doorStates, doorEntities } from './ha/door.js';
+import { doorStates, doorEntities, doorKey } from './ha/door.js';
 import { exportSvg } from './export/svg.js';
 
 const $ = id => document.getElementById(id);
@@ -42,6 +44,8 @@ import { yardLevelId } from './model/yard.js';
 enhanceAll();
 
 const params = new URLSearchParams(location.search);
+// ?perf=1: the 3D view's builds, frames and the page's long tasks are timed and logged (render3d/perf.js); window.__perf3d holds them
+const perf3d = params.get('perf') === '1' ? (globalThis.__perf3d = createPerf3d()) : null;
 const status = t => ($('status').textContent = t);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
@@ -78,10 +82,17 @@ async function main() {
   // (the 3D view builds its lights and what is clicked from the lamps it is given), otherwise the plan alone.
   const litKey = () => model.levels.flatMap(l => (l.fixtures || []).filter(f => f.derived).map(f => `${f.id}@${f.pos}@${f.z}`)).join('|');
   let litShown = '';
+  // Lights that arrive while models are still loading are taken together (rebuildForLights): each build for them is a new set of shaders.
+  const modelsLoading = () => model.levels.some(l => (l.objects || []).some(o => o.kind === 'asset' && assets.status(o.blueprint ? assetKey(o) : o.asset) === 'loading'));
+  let litWaitFrom = null;
   const planAfterAssets = coalesce(() => {
     if (!planReady) return;
     refreshLit();
-    if (litKey() !== litShown) showLevel(); else drawPlan();
+    const changed = litKey() !== litShown, now = performance.now();
+    if (changed) litWaitFrom ??= now;
+    if (rebuildForLights({ changed, loading: modelsLoading(), waitedMs: now - (litWaitFrom ?? now) })) { litWaitFrom = null; showLevel('lit'); return; }
+    drawPlan();
+    if (changed) setTimeout(planAfterAssets, 1000);                // looked at again, also when no further model arrives
   });
   const assets = createAssetCache({ houseBase: baseUrl, sharedBase: '', house: house.id, onChange: planAfterAssets });
   for (const lv of model.levels) for (const o of lv.objects || []) if (o.kind === 'asset') assets.loadFor(o);
@@ -173,7 +184,9 @@ async function main() {
   const refreshFixtures = () => shownLevels().forEach(s => s.level.fixtures?.forEach(applyFixture));
   // the yard's ground under the ground floor, with the Yard switch (docs/plans/yard.md Y11)
   const yard3d = () => (model.yard?.boundary?.length >= 3 && readPrefs().yard !== false ? { ...model.yard, site: model.site, levelId: yardLevelId(model) } : null);
-  const build3d = () => view3d.build({ level, geo: state().geo, levels: shownLevels(), settings: state().settings, fixtureLabel, ceilings, ...looks, doorStates: doors(), yard: yard3d() });
+  // how many lamps cast shadows goes in with the build: it is part of every shader, so it is not changed after the first frame
+  const shadowCount = () => { const dev = globalThis.matchMedia?.('(pointer: coarse)').matches ? 'mobile' : 'desktop'; return SHADOW_COUNT[shadowLevel(state().settings?.render3d, dev, readPrefs().shadows?.[dev])]; };
+  const build3d = (cause = 'view') => view3d.build({ cause, shadows: shadowCount(), level, geo: state().geo, levels: shownLevels(), settings: state().settings, fixtureLabel, ceilings, ...looks, doorStates: doors(), yard: yard3d() });
 
   async function toggleFixture(fx) {
     const why = canPreview(bindings, id => ha.getState(id), fx);
@@ -233,7 +246,7 @@ async function main() {
     $('yardRow').hidden = !here;
     $('yardOn').checked = readPrefs().yard !== false;
   }
-  $('yardOn').addEventListener('change', e => { writePrefs({ yard: e.target.checked ? undefined : false }); drawPlan(); if (view3d) build3d(); });
+  $('yardOn').addEventListener('change', e => { writePrefs({ yard: e.target.checked ? undefined : false }); drawPlan(); if (view3d) build3d('yard'); });
   // the Devices layers (docs/plans/devices.md DV4): off / icons / coverage per subject, this browser's choice
   const devLayers = () => normalizeLayers(readPrefs().devices);
   const wifiBand = () => (['2.4', '5'].includes(readPrefs().wifiBand) ? readPrefs().wifiBand : '2.4');
@@ -302,17 +315,21 @@ async function main() {
   $('underlayOpacity').addEventListener('input', e => setUnderlayPref({ opacity: Number(e.target.value) }));
   $('underlayReset').addEventListener('click', () => { writePrefs({ underlay: {} }); updateUnderlayRow(); drawPlan(); });
   // the 2D plan alone, with the lamps as they are (a render draws every lamp as unavailable until they are applied again)
+  let drawnDoors = null;                                           // the door and lock states the plan and the 3D view were drawn with (doorKey)
+  const doorsNow = () => doorKey(model, bindings, id => ha.getState(id));
   function drawPlan() {
     refreshLit();                                                  // a light that has just arrived from the server shows now
+    if (view3d && drawnDoors !== null && doorsNow() !== drawnDoors) { showLevel('door'); return; }   // the plan alone would leave 3D with the old doors
     view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown(), yard: yardShown(), yardView });
     refreshFixtures();
   }
-  function showLevel() {
+  function showLevel(cause = 'level') {
     refreshLit();
-    litShown = litKey();
+    litShown = litKey(); litWaitFrom = null;
+    drawnDoors = doorsNow();
     planAfterAssets.cancel();                                      // this draws the plan now
     view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown(), yard: yardShown(), yardView });
-    if (view3d) build3d();
+    if (view3d) build3d(cause);
     restoreCamera();
     refreshFixtures();
     measure.reset();
@@ -327,9 +344,15 @@ async function main() {
   let loading3d = null;
   function ensure3d() {
     loading3d ??= import('./render3d/view.js').then(m => {
-      $('view3d').replaceChildren();
-      view3d = m.createView3d($('view3d'), { onFixtureClick: toggleFixture, onView: keepCamera });
-      build3d();
+      // while the shaders of a build are compiled the last frame stays on screen (view.js present): a note says so, after a moment
+      const busy = document.createElement('div');
+      busy.className = 'busy'; busy.textContent = 'Building the 3D view…'; busy.hidden = true;
+      let busyTimer = 0;
+      const onBusy = on => { clearTimeout(busyTimer); if (on) busyTimer = setTimeout(() => { busy.hidden = false; }, 250); else busy.hidden = true; };
+      $('view3d').replaceChildren(busy);
+      view3d = m.createView3d($('view3d'), { onFixtureClick: toggleFixture, onView: keepCamera, perf: perf3d, onBusy });
+      if (perf3d) perf3d.view = view3d;                             // ?perf=1: the view can be looked at from the console
+      build3d('open');
       // the 3D choices last made in this browser: daylight, projection, and the camera for this house and level
       const p = readPrefs();
       applyShadows();
@@ -377,7 +400,7 @@ async function main() {
   document.querySelectorAll('#viewbar button[data-view]').forEach(b => (b.onclick = () => setView(b.dataset.view)));
   $('stackRow').hidden = model.levels.length < 2;
   $('stackMode').value = stackMode; $('exploded').checked = exploded; $('ceilings').checked = ceilings;
-  const restack = () => { stackMode = $('stackMode').value; exploded = $('exploded').checked; ceilings = $('ceilings').checked; writePrefs({ stack: stackMode, exploded, ceilings }); updateFloorSwitch(); if (!view3d) return; build3d(); view3d.resetView(); refreshFixtures(); };
+  const restack = () => { stackMode = $('stackMode').value; exploded = $('exploded').checked; ceilings = $('ceilings').checked; writePrefs({ stack: stackMode, exploded, ceilings }); updateFloorSwitch(); if (!view3d) return; build3d('stack'); view3d.resetView(); refreshFixtures(); };
   $('stackMode').onchange = restack; $('exploded').onchange = restack; $('ceilings').onchange = restack;
   // shadows: a level per kind of device (the house's settings), changed with the slider and remembered in this browser
   const device = globalThis.matchMedia?.('(pointer: coarse)').matches ? 'mobile' : 'desktop';
@@ -494,6 +517,7 @@ async function main() {
     const ents = b.entity ? [b.entity] : (b.controls || []).map(c => bindings[c]?.entity).filter(Boolean);
     for (const e of ents) affected.set(e, [...(affected.get(e) || []), fxId]);
   }
+  const doorsChanged = coalesce(() => { if (level && doorsNow() !== drawnDoors) showLevel('door'); }, { quiet: 50, max: 300 });
   ha.subscribe(id => {
     refreshRow(id);
     // every level on show, not only the selected one: the 3D view can show the floors below and above too (stack setting)
@@ -501,7 +525,9 @@ async function main() {
     for (const fxId of affected.get(id) || []) { const fx = fxs.find(f => f.id === fxId); if (fx) applyFixture(fx); }
     // a door sensor changed: the leaf and the light through the door follow. The whole level is drawn again the way a level change does it, so the
     // lamps keep their state and the 3D camera stays where it was (a render alone draws every lamp as unavailable)
-    if (level && doorIds.has(id)) showLevel();
+    // Only when a door's state really is another: Home Assistant sends every state again each time its connection (re)opens (coming back to the
+    // tab), and several doors changing together are one drawing, not one each.
+    if (level && doorIds.has(id) && doorsNow() !== drawnDoors) doorsChanged();
   });
 
   ha.connect().then(() => {

@@ -29,7 +29,7 @@ import { createAssetCache } from '../render3d/assets.js';
 import { HassHA } from '../ha/hass.js';
 import { boundEntities } from '../ha/client.js';
 import { fixtureAppearance, toggleCalls } from '../ha/fixture.js';
-import { doorStates, doorEntities } from '../ha/door.js';
+import { doorStates, doorEntities, doorKey as doorKeyOf } from '../ha/door.js';
 import { coalesce } from '../coalesce.js';
 import { createFloorSwitch, showFloorSwitch } from '../floor-switch.js';
 import { materialTable, setDesignLibrary, setLibraryTextureBase } from '../model/materials.js';
@@ -239,7 +239,7 @@ class PlanternCard extends HTMLElement {
     this._themeChanged = () => { const next = pickPalette(); if (next !== palette) { palette = next; renderPlans(); } };
     const deviceKind = () => (globalThis.matchMedia?.('(pointer: coarse)').matches ? 'mobile' : 'desktop');
     const stackChoice = () => (STACK_CHOICES.includes(readPrefs().stack) ? readPrefs().stack : undefined);
-    const doorKey = () => JSON.stringify([...doorStates(model, bindings, getState)]);
+    const doorKey = () => doorKeyOf(model, bindings, getState);
     let drawnDoors = null;                                          // the door states the plans were drawn with
     const refresh = () => shown().forEach(l => l.fixtures?.forEach(fx => {
       const a = fixtureAppearance(bindings, getState, fx);
@@ -250,8 +250,8 @@ class PlanternCard extends HTMLElement {
       const list = shown();
       // several floors at once are pulled apart, so the lower ones are not hidden under the upper ones; the header's stack switch (CD4) chooses otherwise
       const levels = cardStack(model, list, stackChoice(), pool);
-      view3d.build({ level: list[0], geo: list[0] && geos.get(list[0].id), levels: levels.map(st => ({ ...st, geo: geos.get(st.level.id) })), settings: resolveSettings(loc, list[0]), fixtureLabel, ...looks, doorStates: doorStates(model, bindings, getState) });
-      view3d.setShadows(SHADOW_COUNT[shadowLevel(resolveSettings(loc, list[0]).render3d, deviceKind(), cfg.shadows)]);
+      view3d.build({ level: list[0], geo: list[0] && geos.get(list[0].id), levels: levels.map(st => ({ ...st, geo: geos.get(st.level.id) })), settings: resolveSettings(loc, list[0]), fixtureLabel, ...looks, doorStates: doorStates(model, bindings, getState),
+        shadows: SHADOW_COUNT[shadowLevel(resolveSettings(loc, list[0]).render3d, deviceKind(), cfg.shadows)] });   // with the build: the number of shadows is part of every shader
     };
 
     // the 3D light (decision 283): the card's mode and range, with the sun at the house; the sun moves, so it is worked out again
@@ -346,7 +346,14 @@ class PlanternCard extends HTMLElement {
 
     // ---- 2D / 3D; three.js loads only when 3D is first asked for (the add-on mirrors it next to the card, with plain relative imports) ----
     const ensure3d = () => this._loading3d ??= import('../render3d/view.js').then(m => {
-      view3d = this._view3d = m.createView3d(this._v3dEl, hooks);
+      // while the shaders of a build are compiled the last frame stays (view.js present): the card says so after a moment
+      let busyTimer = 0, busySaid = false;
+      const onBusy = on => {
+        clearTimeout(busyTimer);
+        if (on) busyTimer = setTimeout(() => { if (this._mode === '3d') { busySaid = true; this._say('Building the 3D view…', false, true); } }, 250);
+        else if (busySaid) { busySaid = false; this._say(''); }
+      };
+      view3d = this._view3d = m.createView3d(this._v3dEl, { ...hooks, onBusy });
       view3d.setProjection('persp');                                // the card opens in perspective (issue #3)
       view3d.setBackground(cfg.background && cfg.background !== 'dark' ? 'transparent' : 'dark');
       build3d(); refresh();

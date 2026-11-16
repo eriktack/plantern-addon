@@ -8,6 +8,13 @@ import { unitSpan } from '../geometry/fittings.js';
 import { fallbackName } from './names.js';
 import { turnedToWall } from './assets.js';
 
+/**
+ * Whether the 3D view is built again now for lights that arrived with their models (the viewer). Each such build is a new set of shaders, since
+ * the number of lights changed, so the lights that arrive while models are still loading are taken together: built when nothing is loading any
+ * more, or when the wait has lasted `maxMs`. Pure.
+ */
+export const rebuildForLights = ({ changed, loading, waitedMs, maxMs = 5000 }) => !!changed && (!loading || waitedMs >= maxMs);
+
 /** Plan radius of a lit object’s light (mm) when it has none of its own. */
 export const LIT_RADIUS = 3000;
 /** The default radius per kind of lit model (openings-and-lit-objects LA5; proposed values, to check on the house). */
