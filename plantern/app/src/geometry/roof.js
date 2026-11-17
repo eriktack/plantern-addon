@@ -5,8 +5,9 @@
 //                 fall?: edge index (single: the roof falls towards that edge of the room), overhang?: mm (default 300), color?,
 //                 outline?: [[x, y], …] the roof's own outline in plan mm (an L roof over a room of another shape; replaces the
 //                 rectangle and the overhang; a gable takes the outline's rectangle), cover?: "solid" | "translucent" | "glass",
-//                 parts?: [{ outline, fall, slope? }] (single: several planes, each falling to edge `fall` of its own outline; an L
-//                 roof that falls to both its outer sides, meeting in a valley) }
+//                 parts?: [{ outline, fall, slope?, eaves? }] (single: several planes, each falling to edge `fall` of its own outline; an L
+//                 roof that falls to both its outer sides, meeting in a valley; a hipped or pyramid roof as one triangle per side;
+//                 a part's own `eaves` lets a plane run on down past the others' eave line, over a lower extension) }
 // The roof is the room's outline turned to the roof's axes, as a rectangle, grown by the overhang. Heights are mm above the
 // level's floor (the room's floorOffset counted). A slab ROOF_T thick, sloped with the prisms' `slope` (prisms.js).
 
@@ -47,6 +48,7 @@ export function roofErrors(roof, room) {
       if (!(Array.isArray(p?.outline) && p.outline.length >= 3 && p.outline.every(q => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite)))) e.push(`roof.parts[${i}].outline is 3 or more plan points`);
       else if (!(Number.isInteger(p.fall) && p.fall >= 0 && p.fall < p.outline.length)) e.push(`roof.parts[${i}].fall is the index of an edge of its outline`);
       if (p?.slope !== undefined && !(Number.isFinite(p.slope) && p.slope >= 0 && p.slope < 80)) e.push(`roof.parts[${i}].slope is degrees, 0 to 80`);
+      if (p?.eaves !== undefined && !(Number.isFinite(p.eaves) && p.eaves >= 0)) e.push(`roof.parts[${i}].eaves is mm, 0 or more`);
     });
   }
   if (roof.cover !== undefined && !ROOF_COVERS.includes(roof.cover)) e.push(`roof.cover is ${ROOF_COVERS.join(', ')}`);
@@ -71,6 +73,7 @@ export function roofPieces(room) {
     return [{ poly: rect(u, v, [su[0] - over, su[1] + over], [sv[0] - over, sv[1] + over]), z0: base, z1: base + ROOF_T, ridge: null, fallTo: null }];
   }
   if (r.shape === 'single' && r.parts) return r.parts.map(pt => {
+    const base = (room.floorOffset ?? 0) + (pt.eaves ?? r.eaves ?? ROOF_DEFAULTS.eaves);   // a part may have its own eave height
     const o = pt.outline, p = o[pt.fall], q = o[(pt.fall + 1) % o.length], e = unit(sub(q, p));
     const n = signedArea(o) < 0 ? [-e[1], e[0]] : [e[1], -e[0]], up = [-n[0], -n[1]];         // outward of its low edge; up the slope
     const L = Math.max(...o.map(x => dot(sub(x, p), up))), t = Math.tan(((pt.slope ?? r.slope ?? ROOF_DEFAULTS.slope.single) * Math.PI) / 180), high = base + L * t;

@@ -230,7 +230,7 @@ export function createPlanView(svg, hooks = {}) {
     return fromSvg([q.x, q.y]);
   }
 
-  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', assetStatus = () => 'unknown', assetColour = () => null, doorStates = null, underlays = [], devices = null, yard = null, yardView = false }) {
+  function render({ level, geo, settings, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', assetStatus = () => 'unknown', assetColour = () => null, doorStates = null, underlays = [], devices = null, yard = null, yardView = false, roofs = [] }) {
     svg.replaceChildren();
     fixEls = {}; lightEls = {};
     const defs = el('defs', {}, svg), layer = id => el('g', { id }, svg);
@@ -353,6 +353,10 @@ export function createPlanView(svg, hooks = {}) {
     }
 
     drawRoofs(level, gRoof, palette);
+    // the Yard view: the roofs of the floors above, filled, so the house is seen from above (decision 314)
+    for (const r of roofs) for (const pc of roofPieces(r)) {
+      el('polygon', { points: svgPoints(pc.poly), fill: palette.roofFill, 'fill-opacity': r.roof.cover === 'translucent' || r.roof.cover === 'glass' ? 0.45 : 0.95, stroke: palette.roofEdge, 'stroke-width': 1.2, 'vector-effect': 'non-scaling-stroke', 'stroke-linejoin': 'round', 'pointer-events': 'none' }, gRoof);
+    }
     const occ = occluders(geo, { cutPlane: settings.cutPlane, doorStates });
     // a camera hangs above the doors: an open door's leaf (2D, no height) must not cut its view, as it does a lamp's light
     if (devices) drawDevices(level, geo, occ, devices, gCov, gDev, fixtureLabel, palette, occluders(geo, { cutPlane: settings.cutPlane, doorStates, leaves: false }));

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.42
+
+- The ground floor shows the house; the Yard view shows the whole house with its roof; hipped and pyramid roofs
+
 ## 0.8.41
 
 - Fix: saving no longer doubles a facade wall's room links

@@ -21,7 +21,7 @@ import { shadowLevel, SHADOW_COUNT, SHADOW_LEVELS, SHADOW_LABEL } from '../model
 import { lightFor, lightPercents, LIGHT_MODES, LIGHT_LABELS } from '../model/light.js';
 import { houseDaylight } from '../geometry/sun.js';
 import { createDualSlider } from '../dual-slider.js';
-import { buildModelGeometry } from '../geometry/level.js';
+import { buildModelGeometry, buildLevelGeometry } from '../geometry/level.js';
 import { addLitLamps } from '../model/lit.js';
 import { resolveSettings } from '../model/settings.js';
 import { createPlanView } from '../render2d/plan.js';
@@ -35,6 +35,7 @@ import { createFloorSwitch, showFloorSwitch } from '../floor-switch.js';
 import { materialTable, setDesignLibrary, setLibraryTextureBase } from '../model/materials.js';
 import { placedUnderlays } from '../model/underlays.js';
 import { yardLevelId } from '../model/yard.js';
+import { houseOnly } from '../model/house-part.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const getText = async url => {
@@ -277,7 +278,9 @@ class PlanternCard extends HTMLElement {
         const svg = block.querySelector('svg');
         const view = createPlanView(svg, { interactive: false, palette, ...hooks });   // the page keeps its scroll; only taps on lamps and switches act
         const underlays = cfg.underlay && l ? placedUnderlays(model, l.id, geos.get(l.id)).map(u => ({ ...u, href: baseUrl + u.file })) : [];   // the house's photo under the plan (underlay: true)
-        view.render({ level: l, geo: l && geos.get(l.id), settings: resolveSettings(loc, l), fixtureLabel, ...looks, doorStates: doorStates(model, bindings, getState), underlays, yard: l && model.yard && l.id === yardLevelId(model) ? model.yard : null });
+        // the ground floor shows the house only, as in the viewer (decision 314); the card's Yard view is still to come (Y12)
+        const hv = l && model.yard?.boundary && l.id === yardLevelId(model) ? houseOnly(l, geos.get(l.id)) : l;
+        view.render({ level: hv, geo: hv && (hv === l ? geos.get(l.id) : buildLevelGeometry(hv)), settings: resolveSettings(loc, l), fixtureLabel, ...looks, doorStates: doorStates(model, bindings, getState), underlays, yard: null });
         this._plans.push({ level: l, svg, view });
         this._ro?.observe(svg);
       }

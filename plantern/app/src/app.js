@@ -3,7 +3,8 @@ import { listHouses, openHouse, houseOptions } from './model/house.js';
 import { resolveSettings } from './model/settings.js';
 import { validateModel, validateBindings, validateEntities } from './model/validate.js';
 import { materialTable, setDesignLibrary } from './model/materials.js';
-import { buildModelGeometry } from './geometry/level.js';
+import { buildModelGeometry, buildLevelGeometry } from './geometry/level.js';
+import { houseOnly } from './model/house-part.js';
 import { levelStack, STACK_MODES } from './geometry/stack.js';
 import { addLitLamps, rebuildForLights } from './model/lit.js';
 import { assetKey } from './model/assets.js';
@@ -146,8 +147,16 @@ async function main() {
     floorSwitch.set(floorsUp, yardView ? YARD : level?.id);
     floorSwitch.show(!!level && showFloorSwitch(floorsUp.length, viewMode === '3d' ? shownLevels().length : 1));
   };
+  // the ground floor's own view shows the house only; the Yard view shows the yard's outbuildings, trees and posts too (decision 314)
+  const houseMemo = new Map();
+  const viewOf = lv => {
+    if (!lv || yardView || !model.yard?.boundary || lv.id !== yardLevelId(model)) return { level: lv, geo: lv && geos.get(lv.id) };
+    if (!houseMemo.has(lv.id)) { const l2 = houseOnly(lv, geos.get(lv.id)); houseMemo.set(lv.id, { level: l2, geo: l2 === lv ? geos.get(lv.id) : buildLevelGeometry(l2) }); }
+    return houseMemo.get(lv.id);
+  };
+  const shownLevel = () => viewOf(level).level;
   const state = () => ({
-    geo: level && geos.get(level.id),
+    geo: viewOf(level).geo,
     snaps: level ? allSnaps.filter(s => s.level === level.id) : [],
     index: snapIndex,
     settings: resolveSettings(loc, level),
@@ -180,13 +189,16 @@ async function main() {
   }
   // the 3D view can show several levels: their lamps and switches are all live
   let stackMode = STACK_MODES.includes(readPrefs().stack) ? readPrefs().stack : 'this', exploded = !!readPrefs().exploded, ceilings = !!readPrefs().ceilings;
-  const shownLevels = () => levelStack(model, level, stackMode, exploded).map(s => ({ ...s, geo: geos.get(s.level.id) }));
+  // the Yard view: the whole house from outside (every floor, the roof) on the yard
+  const shownLevels = () => levelStack(model, level, yardView ? 'all' : stackMode, yardView ? false : exploded).map(s => ({ ...s, ...viewOf(s.level) }));
+  // the roofs of the floors above, drawn over the plan in the Yard view (the house seen from above)
+  const roofsAbove = () => model.levels.filter(l => level && l.elevation > level.elevation && (l.building ?? null) === (level.building ?? null)).flatMap(l => (l.rooms || []).filter(r => r.roof));
   const refreshFixtures = () => shownLevels().forEach(s => s.level.fixtures?.forEach(applyFixture));
   // the yard's ground under the ground floor, with the Yard switch (docs/plans/yard.md Y11)
-  const yard3d = () => (model.yard?.boundary?.length >= 3 && readPrefs().yard !== false ? { ...model.yard, site: model.site, levelId: yardLevelId(model) } : null);
+  const yard3d = () => (yardView && model.yard?.boundary?.length >= 3 ? { ...model.yard, site: model.site, levelId: yardLevelId(model) } : null);
   // how many lamps cast shadows goes in with the build: it is part of every shader, so it is not changed after the first frame
   const shadowCount = () => { const dev = globalThis.matchMedia?.('(pointer: coarse)').matches ? 'mobile' : 'desktop'; return SHADOW_COUNT[shadowLevel(state().settings?.render3d, dev, readPrefs().shadows?.[dev])]; };
-  const build3d = (cause = 'view') => view3d.build({ cause, shadows: shadowCount(), level, geo: state().geo, levels: shownLevels(), settings: state().settings, fixtureLabel, ceilings, ...looks, doorStates: doors(), yard: yard3d() });
+  const build3d = (cause = 'view') => view3d.build({ cause, shadows: shadowCount(), level: shownLevel(), geo: state().geo, levels: shownLevels(), settings: state().settings, fixtureLabel, ceilings: ceilings || yardView, ...looks, doorStates: doors(), yard: yard3d() });   // the Yard view sees the house from outside: closed, its roof solid
 
   async function toggleFixture(fx) {
     const why = canPreview(bindings, id => ha.getState(id), fx);
@@ -240,10 +252,9 @@ async function main() {
     return `${fx.name ? `${fx.name} (${fx.id})` : fx.id} → ${b?.entity || (b?.controls ? 'controls ' + b.controls.join(', ') : 'unbound')}`;
   };
   // the yard (docs/plans/yard.md): on the ground floor, unless this browser switched it off
-  const yardShown = () => (model.yard && level && level.id === yardLevelId(model) && (yardView || readPrefs().yard !== false) ? model.yard : null);
+  const yardShown = () => (yardView && model.yard && level && level.id === yardLevelId(model) ? model.yard : null);
   function updateYardRow() {
-    const here = !!model.yard && !!level && level.id === yardLevelId(model);
-    $('yardRow').hidden = !here;
+    $('yardRow').hidden = true;                                   // the yard has its own view now (decision 314): no switch on the ground floor
     $('yardOn').checked = readPrefs().yard !== false;
   }
   $('yardOn').addEventListener('change', e => { writePrefs({ yard: e.target.checked ? undefined : false }); drawPlan(); if (view3d) build3d('yard'); });
@@ -291,7 +302,7 @@ async function main() {
   }
   // images under the plan of this level (docs/plans/underlay.md), from the house's own folder
   // on or off, and how strongly, are this browser's choice (prefs.js): { on: false } hides them, opacity overrides the house's
-  const underlaysHere = () => (level ? placedUnderlays(model, level.id, state().geo) : []);
+  const underlaysHere = () => (level ? placedUnderlays(model, level.id, geos.get(level.id)) : []);
   const underlayPref = () => readPrefs().underlay || {};
   const underlaysShown = () => (underlayPref().on === false ? [] : underlaysHere().map(u => ({ ...u, href: baseUrl + u.file, opacity: underlayPref().opacity ?? u.opacity })));
   function updateUnderlayRow() {
@@ -320,7 +331,7 @@ async function main() {
   function drawPlan() {
     refreshLit();                                                  // a light that has just arrived from the server shows now
     if (view3d && drawnDoors !== null && doorsNow() !== drawnDoors) { showLevel('door'); return; }   // the plan alone would leave 3D with the old doors
-    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown(), yard: yardShown(), yardView });
+    view.render({ level: shownLevel(), geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown(), yard: yardShown(), yardView, roofs: yardView ? roofsAbove() : [] });
     refreshFixtures();
   }
   function showLevel(cause = 'level') {
@@ -328,7 +339,7 @@ async function main() {
     litShown = litKey(); litWaitFrom = null;
     drawnDoors = doorsNow();
     planAfterAssets.cancel();                                      // this draws the plan now
-    view.render({ level, geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown(), yard: yardShown(), yardView });
+    view.render({ level: shownLevel(), geo: state().geo, settings: state().settings, fixtureLabel, ...looks, doorStates: doors(), underlays: underlaysShown(), devices: devicesShown(), yard: yardShown(), yardView, roofs: yardView ? roofsAbove() : [] });
     if (view3d) build3d(cause);
     restoreCamera();
     refreshFixtures();

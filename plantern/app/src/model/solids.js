@@ -46,6 +46,7 @@ export function checkSolid(s, level) {
   if (s.color !== undefined && !HEX.test(s.color)) errors.push(`colour "${s.color}" must look like #rrggbb`);
   if (s.cutsWalls !== undefined && typeof s.cutsWalls !== 'boolean') errors.push('cutsWalls must be true or false');
   const top = s.height !== undefined ? (s.base ?? 0) + s.height : level.ceilingHeight ?? 2400;
-  if (s.height !== undefined && !outdoors && top > (level.ceilingHeight ?? 2400) + 1) warnings.push(`rises to ${top} mm, above the ceiling (${level.ceilingHeight ?? 2400} mm)`);
+  // a chimney goes on up through the roof: it may rise above the ceiling
+  if (s.height !== undefined && !outdoors && s.kind !== 'chimney' && top > (level.ceilingHeight ?? 2400) + 1) warnings.push(`rises to ${top} mm, above the ceiling (${level.ceilingHeight ?? 2400} mm)`);
   return { errors, warnings };
 }
