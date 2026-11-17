@@ -54,6 +54,7 @@ export function checkYard(model) {
   const y = model.yard, out = [];
   if (y === undefined) return out;
   if (!y || typeof y !== 'object' || Array.isArray(y)) return [{ severity: 'error', id: 'yard', msg: 'yard must be an object' }];
+  if (y.name !== undefined && !(typeof y.name === 'string' && y.name.trim() && y.name.length <= 60)) out.push({ severity: 'error', id: 'yard', msg: 'name is a text of 1 to 60 characters' });
   if (y.boundary !== undefined && !isPts(y.boundary, 3)) out.push({ severity: 'error', id: 'yard', msg: 'boundary must be three or more points [x, y] in mm' });
   if (y.elevation !== undefined && !Number.isFinite(y.elevation)) out.push({ severity: 'error', id: 'yard', msg: 'elevation is mm relative to the ground floor, a number' });
   for (const [key, check] of [['areas', areaErrors], ['lines', lineErrors]]) {
@@ -70,6 +71,9 @@ export function checkYard(model) {
 }
 
 /** The ids the yard uses (for unique ids across the model file). */
+/** What the yard is called in the floor switch and menus: its own name, else "Yard". */
+export const yardName = model => model?.yard?.name || 'Yard';
+
 export const yardIds = model => [...(model.yard?.areas || []), ...(model.yard?.lines || []), ...(Array.isArray(model.yard?.ground) ? model.yard.ground : [])].map(x => x?.id).filter(Boolean);
 
 /** A new id from a name: "Front lawn" → ya_front_lawn (prefix ya_ or yl_), unique among `used`. */

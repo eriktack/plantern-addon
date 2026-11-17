@@ -1,5 +1,6 @@
 // Editor page: levels. Split from ui.js (ui-consistency plan, UX34): no behaviour change, only where the code lives.
 
+import { yardLevelId, yardName } from '../../model/yard.js';
 import { levelHint } from '../option-hints.js';
 import { createMenu } from '../../menu.js';
 import { levelMenuEntries, levelMenuLabel } from '../level-menu.js';
@@ -20,8 +21,18 @@ import { refresh } from './refresh.js';
 import { draw } from './plan-draw.js';
 import { Ed } from './state.js';
 
+export const YARD_CHOICE = '@yard';
+/** The yard in the level menu: its level (the ground floor), with the Yard section opened and shown. */
+export async function goToYard() {
+  const id = yardLevelId(Ed.model);
+  if (id !== Ed.levelId && !(await goToLevel(id))) return false;
+  $('level').value = Ed.levelId;
+  const sect = $('yardSect'); sect.open = true; sect.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  return true;
+}
 export function fillLevels() {
-  $('level').innerHTML = Ed.model.levels.map(l => `<option value="${esc(l.id)}" data-hint="${esc(levelHint(l, Ed.model.levels))}">${esc(levelLabel(l))}${l.elevationFrom ? ' ⇅' : ''}</option>`).join('') + `<option value="${NEW_LEVEL}">+ New level…</option>`;
+  const y = Ed.model.yard, yardOpt = y ? `<option value="${YARD_CHOICE}" data-hint="the yard: drawn on the ground floor">${esc(yardName(Ed.model))} (yard)</option>` : '';
+  $('level').innerHTML = Ed.model.levels.map(l => `<option value="${esc(l.id)}" data-hint="${esc(levelHint(l, Ed.model.levels))}">${esc(levelLabel(l))}${l.elevationFrom ? ' ⇅' : ''}</option>`).join('') + yardOpt + `<option value="${NEW_LEVEL}">+ New level…</option>`;
   $('level').value = Ed.levelId;
 }
 /** Show another level (leaving what is edited first, asked when changed); false when the user stays. */

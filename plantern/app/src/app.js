@@ -41,7 +41,7 @@ import { placedUnderlays } from './model/underlays.js';
 import { normalizeLayers, setLayerStep, layersInModel } from './model/device-layers.js';
 import { DARK_PALETTE } from './render2d/palette.js';
 import { wifiInputs } from './model/wifi.js';
-import { yardLevelId } from './model/yard.js';
+import { yardLevelId, yardName } from './model/yard.js';
 enhanceAll();
 
 const params = new URLSearchParams(location.search);
@@ -130,9 +130,9 @@ async function main() {
   const YARD = '@yard', hasYard = () => model.yard?.boundary?.length >= 3;
   let yardView = params.get('level') === 'yard' && hasYard();
   let level = model.levels.find(l => l.id === (yardView ? yardLevelId(model) : chooseLevel(model, locId, params.get('level')))) || null;
-  linkPages(locId, level?.id);
+  linkPages(locId, yardView ? 'yard' : level?.id);
   const levelSel = $('level');
-  levelSel.innerHTML = model.levels.map(l => `<option value="${esc(l.id)}">${esc(l.name || l.id)}</option>`).join('') + (hasYard() ? `<option value="${YARD}">Yard</option>` : '');
+  levelSel.innerHTML = model.levels.map(l => `<option value="${esc(l.id)}">${esc(l.name || l.id)}</option>`).join('') + (hasYard() ? `<option value="${YARD}">${esc(yardName(model))}</option>` : '');
   levelSel.hidden = model.levels.length + (hasYard() ? 1 : 0) < 2;
   if (level) levelSel.value = yardView ? YARD : level.id;
   // the floor switch on the map (in addition to the select above): buttons where they fit beside the 2D / 3D bar, else a dropdown;
@@ -141,7 +141,7 @@ async function main() {
     onPick: id => { levelSel.value = id; levelSel.onchange(); },
     reserve: () => $('viewbar').offsetWidth + 10,
   });
-  const floorsUp = [...(hasYard() ? [{ id: YARD, name: 'Yard' }] : []), ...model.levels.slice().sort((a, b) => (a.elevation || 0) - (b.elevation || 0))];
+  const floorsUp = [...(hasYard() ? [{ id: YARD, name: yardName(model) }] : []), ...model.levels.slice().sort((a, b) => (a.elevation || 0) - (b.elevation || 0))];
   let viewMode = '2d';
   const updateFloorSwitch = () => {
     floorSwitch.set(floorsUp, yardView ? YARD : level?.id);
@@ -463,7 +463,7 @@ async function main() {
     level = model.levels.find(l => l.id === (yardView ? yardLevelId(model) : levelSel.value));
     params.set('level', yardView ? 'yard' : level.id);
     history.replaceState(null, '', '?' + params);
-    remember(locId, level.id); linkPages(locId, level.id);
+    remember(locId, level.id); linkPages(locId, yardView ? 'yard' : level.id);
     showLevel();
   };
   planReady = true;

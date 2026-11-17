@@ -28,6 +28,7 @@ export function renderYard() {
   $('ydTools').hidden = !onYardLevel();
   $('ydRetain').hidden = $('ydKind').value !== 'retaining';
   $('ydElev').value = y.elevation ?? '';
+  if (document.activeElement !== $('ydYardName')) $('ydYardName').value = y.name ?? '';
   $('ydBoundaryState').textContent = y.boundary ? `outline drawn (${y.boundary.length} corners)` : 'no outline yet';
   renderTerrain();
   const matOpts = materialOptionsHtml('<option value="">Material: the surface\'s colour</option>');
@@ -121,6 +122,12 @@ export function finishDraw() {
   commit(r.model);
   setStatus(`${t.type === 'boundary' ? 'The yard\'s outline' : (r.area || r.line || r.point)?.id ?? 'It'} ${t.redraw ? 'redrawn' : 'added'} (not saved yet)`);
   return true;
+}
+/** The yard's own name (empty: "Yard"). */
+export function setYardName(v) {
+  const r = setYard(Ed.model, { name: String(v).trim() === '' ? null : String(v) });
+  if (r.report.errors.length) { msg(r.report.errors.join('; ')); return; }
+  commit(r.model); msg('Name set (not saved yet)');
 }
 export function setElevation(v) {
   const t = String(v).trim(), r = setYard(Ed.model, { elevation: t === '' ? null : Number(t) });

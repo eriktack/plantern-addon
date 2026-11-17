@@ -10,8 +10,9 @@ import { primitives, booleans, transforms, geometries } from '../lib/jscad.js';
 // ASSUMED: Spheres use 16 segments, cones and the trunk 12: a tree is seen from afar, and a yard may have many.
 // ASSUMED: A crown base above 80 % of the height is held at 80 %, and a trunk wider than half the crown at half the crown
 // (kept in proportion, never an error).
-// ASSUMED: A bush is built like a leafy tree with its crown down to the ground (crown base 0) and a short stem inside it;
-// default 1.2 m high, 1.5 m wide, #55803f.
+// ASSUMED: A bush is a low mound: a large sphere in the middle and seven smaller ones around it lower down, overlapping, scaled
+// to the bush's width and height (from its crown base up), with a short stem hidden inside; default 1.2 m high, 1.5 m wide, #55803f.
+// ASSUMED: Heights and widths go down to 200 mm (a small bush, a young tree); the trunk to 20 mm.
 // UNSURE: Real crowns are irregular; this is a readable symbol at the tree's real size, not a botanical model.
 
 export const meta = {
@@ -23,10 +24,10 @@ export const meta = {
   frontView: [],
   params: [
     { key: 'variant', label: 'Kind', type: 'enum', options: ['leafy', 'conifer', 'bush'], labels: { leafy: 'Leafy tree', conifer: 'Conifer', bush: 'Bush' }, default: 'leafy' },
-    { key: 'height', label: 'Height', unit: 'mm', default: 8000, min: 1000, max: 40000, step: 100 },
-    { key: 'crownDiameter', label: 'Crown width', unit: 'mm', default: 5000, min: 500, max: 25000, step: 100 },
+    { key: 'height', label: 'Height', unit: 'mm', default: 8000, min: 200, max: 40000, step: 50 },
+    { key: 'crownDiameter', label: 'Crown width', unit: 'mm', default: 5000, min: 200, max: 25000, step: 50 },
     { key: 'crownBase', label: 'Crown starts at', unit: 'mm', default: 2000, min: 0, max: 30000, step: 100, hint: 'height above the ground of the crown\'s lowest point' },
-    { key: 'trunkDiameter', label: 'Trunk', unit: 'mm', default: 300, min: 50, max: 2000, step: 10 },
+    { key: 'trunkDiameter', label: 'Trunk', unit: 'mm', default: 300, min: 20, max: 2000, step: 10 },
     { key: 'material', label: 'Material (whole object)', type: 'material', default: '#4f7a3a' },
   ],
   parts: [
@@ -64,7 +65,19 @@ export function size(p = {}) {
 export function build(p = {}) {
   const q = resolve(p), R = q.crownDiameter / 2, H = q.height, B = q.crownBase, span = H - B;
   let crown, trunkTop;
-  if (q.variant === 'conifer') {
+  if (q.variant === 'bush') {
+    // a mound: one sphere in the middle and seven lower ones around it, each a little different (fixed, so every bush looks the
+    // same for the same options); built at unit size, then scaled to the bush's width and height
+    const lumps = [[0, 0.68, 0.62], [52, 0.6, 0.66], [103, 0.7, 0.58], [154, 0.62, 0.64], [206, 0.66, 0.6], [257, 0.58, 0.66], [308, 0.68, 0.6]];
+    const parts = [transforms.translate([0, 0, 1], primitives.sphere({ radius: 1, segments: 16 }))];
+    for (const [deg, off, r] of lumps) { const a = deg * Math.PI / 180; parts.push(transforms.translate([Math.cos(a) * off, Math.sin(a) * off, r], primitives.sphere({ radius: r, segments: 14 }))); }
+    // fitted to its real extents (faceted spheres fall a little short of their radius), centred, standing on the crown base
+    const mound = booleans.union(parts), vs = geometries.geom3.toPolygons(mound).flatMap(pl => pl.vertices);
+    const lo = [0, 1, 2].map(k => Math.min(...vs.map(v => v[k]))), hi = [0, 1, 2].map(k => Math.max(...vs.map(v => v[k])));
+    const sc = [q.crownDiameter / (hi[0] - lo[0]), q.crownDiameter / (hi[1] - lo[1]), span / (hi[2] - lo[2])];
+    crown = transforms.translate([-(lo[0] + hi[0]) / 2 * sc[0], -(lo[1] + hi[1]) / 2 * sc[1], B - lo[2] * sc[2]], transforms.scale(sc, mound));
+    trunkTop = B + span * 0.4;
+  } else if (q.variant === 'conifer') {
     // three cones: each a fraction of the crown, overlapping, the top one ending at H
     const tiers = [[0, 1, 0.55], [0.3, 0.72, 0.5], [0.58, 0.45, 0.42]];
     crown = booleans.union(tiers.map(([at, w, h], i) => {

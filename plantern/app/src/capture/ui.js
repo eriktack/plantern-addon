@@ -2,6 +2,7 @@
 // and residuals; undo/redo; save. All logic lives in solve.js, src/edit/ (operations, reconcile, inspect, history), save.js and the modules
 // in editor/ (one per concern, ui-consistency plan UX34); this file starts the page.
 
+import { yardLevelId } from '../model/yard.js';
 import { enhanceSegmented } from '../segmented.js';
 import { enhanceAll } from '../select.js';
 import { enhanceNumbers } from '../number-input.js';
@@ -33,7 +34,7 @@ import { $, FIELDS, NEW_LEVEL, addSlidersAndDials, commit, esc, level, loadDesig
 import { applyObjectForm, assetCache, placeObject, showPlacedChoice } from './editor/panel-object.js';
 import { apply, changedElsewhere, deleteRoom, save } from './editor/room-apply.js';
 import { BAR, FRESH_ERR, PANEL_MSG, SELECT, afterLeave, closeEdit, confirmItem, decideLeave, dropFresh, editDraft, enterEdit, isDirty, isDoubleClick, isFresh, leaveEdit, mayLeave, mayRefill, renameEditing, revertEdit, selected, setStatus, settleFresh, showEditBar, startFresh, syncEdMsg, undoRedo } from './editor/session.js';
-import { endPeek, fillLevels, goToLevel, showPeekCard, showUnderlayMode } from './editor/levels.js';
+import { endPeek, fillLevels, goToLevel, goToYard, YARD_CHOICE, showPeekCard, showUnderlayMode } from './editor/levels.js';
 import { HS_FIELDS, applyHouse, applyPlace, editLevel, fillHouse, fillPlace, fillPlaceWalls, hideHouseView, newLevel, previewPlace, showHouseView, useWallBearing } from './editor/house.js';
 import { draw, moveViewBox } from './editor/plan-draw.js';
 import { wireLivePreview } from './editor/live-preview.js';
@@ -55,7 +56,7 @@ import { Ed } from './editor/state.js';
 import { addFromFile, setShown, addPoint, applyFit, revertFit, closeFit, renderUnderlays, setDraftOpacity, imageClick as underlayImageClick, planClick as underlayPlanClick, pickingPlan, stopPick as stopUnderlayPick, toggleHand as toggleUnderlayHand, typedPlace as typedUnderlayPlace, handDown as underlayHandDown, setHand as setUnderlayHand } from './editor/underlays.js';
 import { isDevice, fixtureNoun } from '../model/devices.js';
 import { bearingDown } from './editor/device-drag.js';
-import { yardDrawing, yardClick, stopDraw as stopYardDraw, startDraw as startYardDraw, finishDraw as finishYardDraw, undoPoint as undoYardPoint, setElevation as setYardElevation, importGeoFile as importYardGeo, editCorners as editYardCorners, cornerDown as yardCornerDown, stopCorners as stopYardCorners, saveLmLogin, forgetLmLogin, fetchTerrainHeights, removeTerrain } from './editor/yard.js';
+import { yardDrawing, yardClick, stopDraw as stopYardDraw, startDraw as startYardDraw, finishDraw as finishYardDraw, undoPoint as undoYardPoint, setElevation as setYardElevation, setYardName, importGeoFile as importYardGeo, editCorners as editYardCorners, cornerDown as yardCornerDown, stopCorners as stopYardCorners, saveLmLogin, forgetLmLogin, fetchTerrainHeights, removeTerrain } from './editor/yard.js';
 
 enhanceSegmented();                  // choices of up to four: a row of buttons (UX20); before the menus, which leave these alone
 enhanceAll(document, { skip: '#preview, #tree' });     // the plan and the tree are rebuilt all the time and hold no select (PF16)
@@ -85,11 +86,14 @@ async function init() {
     Ed.model = r.model; Ed.dirty = true;
   }
   Ed.history = createHistory(Ed.model); locOf.set(Ed.model, Ed.loc);
-  Ed.levelId = chooseLevel(Ed.model, locId, params.get('level'));
+  const startInYard = params.get('level') === 'yard' && !!Ed.model.yard;
+  Ed.levelId = startInYard ? yardLevelId(Ed.model) : chooseLevel(Ed.model, locId, params.get('level'));
   remember(locId, Ed.levelId); linkPages(locId, Ed.levelId);
   fillLevels();
+  if (startInYard) $('yardSect').open = true;
   $('level').onchange = () => {
     if ($('level').value === NEW_LEVEL) { $('level').value = Ed.levelId; newLevel(); return; }
+    if ($('level').value === YARD_CHOICE) { goToYard(); return; }
     goToLevel($('level').value);
   };
   $('uMode').onclick = () => { Ed.underlayMode = { auto: 'always', always: 'off', off: 'auto' }[Ed.underlayMode]; writePrefs({ editorUnderlay: Ed.underlayMode }); showUnderlayMode(); draw(); };
@@ -129,6 +133,7 @@ async function init() {
   $('ydLmSave').onclick = saveLmLogin; $('ydLmForget').onclick = forgetLmLogin; $('ydLmFetch').onclick = fetchTerrainHeights; $('ydLmRemove').onclick = removeTerrain;
   $('ydKind').onchange = () => { $('ydRetain').hidden = $('ydKind').value !== 'retaining'; };
   $('ydElev').onchange = e => setYardElevation(e.target.value);
+  $('ydYardName').onchange = e => { setYardName(e.target.value); fillLevels(); };
   $('preview').addEventListener('dblclick', e => { if (yardDrawing()) { e.preventDefault(); e.stopPropagation(); finishYardDraw(); } }, true);
   addEventListener('keydown', e => {
     if (!yardDrawing() || e.target?.closest?.('input, textarea, select')) return;

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.43
+
+- The yard can be named and has its own entry in the Editor; bushes get a proper shape and can be small
+
 ## 0.8.42
 
 - The ground floor shows the house; the Yard view shows the whole house with its roof; hipped and pyramid roofs
