@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.44
+
+- Fix: the floor switch no longer disappears in the 3D Yard view
+
 ## 0.8.43
 
 - The yard can be named and has its own entry in the Editor; bushes get a proper shape and can be small

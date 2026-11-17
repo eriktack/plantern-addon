@@ -145,7 +145,8 @@ async function main() {
   let viewMode = '2d';
   const updateFloorSwitch = () => {
     floorSwitch.set(floorsUp, yardView ? YARD : level?.id);
-    floorSwitch.show(!!level && showFloorSwitch(floorsUp.length, viewMode === '3d' ? shownLevels().length : 1));
+    // the Yard view draws every floor in 3D, but it is still one choice in the switch: the switch stays
+    floorSwitch.show(!!level && showFloorSwitch(floorsUp.length, viewMode === '3d' && !yardView ? shownLevels().length : 1));
   };
   // the ground floor's own view shows the house only; the Yard view shows the yard's outbuildings, trees and posts too (decision 314)
   const houseMemo = new Map();
