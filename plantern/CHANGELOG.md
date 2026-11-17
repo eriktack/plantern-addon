@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.41
+
+- Fix: saving no longer doubles a facade wall's room links
+
 ## 0.8.40
 
 - 3D view: opening it, switching floor and coming back to the tab no longer freeze the browser while shaders compile

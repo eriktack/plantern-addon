@@ -56,7 +56,8 @@ export function mergeFacades(walls, roomsById, options = {}) {
           const first = chain[0].x, last = chain[chain.length - 1].x, t = along(last.b) - along(first.a);   // length from the first piece's start
           const thick = chain.map(c => measured(c.x)).find(v => v !== null) ?? first.thickness;
           out.push({ ...first, b: [r1(first.a[0] + u[0] * t), r1(first.a[1] + u[1] * t)], thickness: thick,
-            from: [...chain.map(c => c.x.from[0]), ...chain.flatMap(c => c.x.from.slice(1))],
+            // one entry per edge: a facade edge split into pieces (a porch facing part of it) is still one edge
+            from: [...new Set([...chain.map(c => c.x.from[0]), ...chain.flatMap(c => c.x.from.slice(1))])],
             rooms: [...new Set(chain.flatMap(c => c.x.rooms))] });
           merged.push({ id: first.id, pieces: chain.map(c => c.x.id), offset: r1(Math.max(...chain.map(c => Math.abs(across(c.x.a))))) });
         }
