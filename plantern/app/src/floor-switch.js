@@ -27,7 +27,7 @@ const CSS = `
 .fsw .fsbtn .ic{flex:none;width:16px;height:16px;opacity:.8}
 .fsw .fsbtn .chev{flex:none;width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translateY(-2px);opacity:.7;transition:transform .15s}
 .fsw.open .fsbtn .chev{transform:rotate(-135deg) translateY(-1px)}
-.fsw .fslist{position:absolute;right:0;top:calc(100% + 6px);min-width:100%;max-width:min(80vw,280px);max-height:min(60vh,360px);overflow-y:auto;margin:0;padding:4px;list-style:none;border-radius:12px;box-sizing:border-box}
+.fsw .fslist{position:absolute;right:0;top:calc(100% + 6px);width:max-content;min-width:100%;max-width:min(80vw,280px);max-height:min(60vh,360px);overflow-x:hidden;overflow-y:auto;margin:0;padding:4px;list-style:none;border-radius:12px;box-sizing:border-box}
 .fsw .fslist li{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;white-space:nowrap}
 .fsw .fslist li .tick{flex:none;width:14px;text-align:center;color:var(--fs-acc,#ffb454)}
 .fsw .fslist li .nm{overflow:hidden;text-overflow:ellipsis}

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.45
+
+- Fix: the floor dropdown no longer scrolls sideways after choosing the yard
+
 ## 0.8.44
 
 - Fix: the floor switch no longer disappears in the 3D Yard view
