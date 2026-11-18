@@ -151,7 +151,9 @@ class PlanternCard extends HTMLElement {
     this._stopLight?.(); this._startLight = this._stopLight = null;
     this._stopWatch?.(); this._startWatch = this._stopWatch = null;
     this._view3d?.dispose?.();                                       // a reload gives back the old 3D view's renderer
-    this._ro?.disconnect(); this._plans = [];
+    this._ro?.disconnect();
+    for (const p of this._plans || []) p.view.dispose();
+    this._plans = [];
     this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card data-bg="${cfg.background || 'dark'}"><div class="hd"></div><div class="lv" hidden></div><div class="stage"><div class="plans"></div><div class="v3d" hidden></div></div><div class="msg"></div></ha-card>`;
     this._say('Loading…', false, true);
     this._v3dEl = this.shadowRoot.querySelector('.v3d');
@@ -267,6 +269,7 @@ class PlanternCard extends HTMLElement {
       plansAfterAssets.cancel();
       this._ro?.disconnect();
       plansEl.replaceChildren();
+      for (const p of this._plans) p.view.dispose();                // the old views let go of the window's resize listener
       this._plans = [];
       const list = shown();
       plansEl.style.gridTemplateColumns = list.length > 1 ? '' : '1fr';

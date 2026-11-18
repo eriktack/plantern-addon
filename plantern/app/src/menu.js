@@ -72,14 +72,22 @@ export function createMenu(host, { label, icon, entries, onPick = () => {}, alig
     list.hidden = !open;
     if (!open) list.style.cssText = '';
     button.setAttribute('aria-expanded', String(open));
+    watchPage(open);
     if (open) (list.querySelector('.on') ?? items()[0])?.focus();
   }
   button.addEventListener('click', () => set(list.hidden));
-  document.addEventListener('pointerdown', e => { if (!list.hidden && !host.contains(e.target)) set(false); });
+  const outside = e => { if (!list.hidden && !host.contains(e.target)) set(false); };
   // placed on the page, so it would drift away from its button if anything scrolls or the window changes: close it instead
   const closeIfMoved = e => { if (!list.hidden && scrollMovesMenu(e?.target, list)) set(false); };   // the list's own scrolling is fine
-  window.addEventListener('scroll', closeIfMoved, true);
-  window.addEventListener('resize', closeIfMoved);
+  // The page is listened to only while the list is open. A menu is made for every drawn select, and panels build their
+  // selects again and again: listeners kept for a menu's whole life stayed on the document after its select was gone,
+  // and kept it (and its panel) from being freed.
+  function watchPage(on) {
+    const act = on ? 'addEventListener' : 'removeEventListener';
+    document[act]('pointerdown', outside);
+    window[act]('scroll', closeIfMoved, true);
+    window[act]('resize', closeIfMoved);
+  }
   list.addEventListener('click', e => {
     const el = e.target.closest('[role=menuitem]');
     if (!el || el.classList.contains('off')) return;
@@ -119,7 +127,8 @@ export function menuPosition(x, y, w, h, vw, vh, m = 8) {
  * a scroll of the menu's own list (a long menu: the wheel, the scrollbar) does not. `target` is the event's target, `list` the menu's list.
  */
 export function scrollMovesMenu(target, list) {
-  return !(target && (target === list || list.contains(target)));
+  // a resize comes from the window, which is no node: contains() throws on it (the menu then stayed open), and it is not the list
+  try { return !(target && (target === list || list.contains(target))); } catch { return true; }
 }
 
 let floating = null;

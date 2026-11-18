@@ -5,7 +5,7 @@
 //   DELETE /api/terrain/login
 //   POST   /api/terrain/fetch        { site, boundary } → { terrain }   (the yard.terrain for that outline)
 
-import { loadSecrets, saveSecrets, redact } from '../store/settings.js';
+import { loadSecrets, updateSecrets, redact } from '../store/settings.js';
 import { fetchTerrain, swerefBox } from './lm.js';
 
 const KEY = 'lantmateriet';
@@ -17,14 +17,13 @@ export async function terrainApi(req, res, url, { dataDir, json, readJsonBody, w
     if (req.method === 'GET') return json(res, 200, { set: !!(login?.user && login?.password), ...(login?.user ? { user: login.user } : {}) }), true;
     const bad = writeGuard(req);
     if (bad) return json(res, 403, { error: bad }), true;
-    if (req.method === 'DELETE') { delete secrets[KEY]; await saveSecrets(dataDir, secrets); return json(res, 200, { set: false }), true; }
+    if (req.method === 'DELETE') { await updateSecrets(dataDir, s => { delete s[KEY]; }); return json(res, 200, { set: false }), true; }
     if (req.method !== 'PUT') return json(res, 405, { error: 'GET, PUT or DELETE' }), true;
     let body;
     try { body = await readJsonBody(req); } catch (e) { return json(res, e.status ?? 400, { error: e.message }), true; }
     const user = String(body?.user ?? '').trim(), password = String(body?.password ?? '');
     if (!user || !password) return json(res, 400, { error: 'both the user name and the password are needed' }), true;
-    secrets[KEY] = { user, password };
-    await saveSecrets(dataDir, secrets);
+    await updateSecrets(dataDir, s => { s[KEY] = { user, password }; });
     return json(res, 200, { set: true, user }), true;
   }
   if (url.pathname === '/api/terrain/fetch') {

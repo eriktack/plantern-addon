@@ -479,6 +479,8 @@ export function createPlanView(svg, hooks = {}) {
     }, { passive: false });
   }
   addEventListener('resize', setVB);
+  /** Lets go of the window: a page that makes a new view for every drawing (the card) calls this for the old one, or each would stay alive on the resize listener. */
+  const dispose = () => removeEventListener('resize', setVB);
 
-  return { render, setFixture, planPt, pxScale, overlay: () => overlay, fit };
+  return { render, setFixture, planPt, pxScale, overlay: () => overlay, fit, dispose };
 }

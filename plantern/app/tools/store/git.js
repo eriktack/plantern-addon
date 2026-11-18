@@ -30,8 +30,32 @@ export function gitAuth(secrets = {}) {
     // clear the computer's helpers, then one that answers from the environment (git runs it with sh)
     args.push('-c', 'credential.helper=', '-c', 'credential.helper=!f() { test "$1" = get && echo "username=$PLANTERN_GIT_USER" && echo "password=$PLANTERN_GIT_TOKEN"; }; f');
   } else if (!secrets.sshKey) delete env.GCM_INTERACTIVE;          // let the computer's own sign-in (Git Credential Manager) work
-  if (secrets.sshKey) env.GIT_SSH_COMMAND = `ssh -i "${secrets.sshKey.replace(/\\/g, '/')}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new`;
+  if (secrets.sshKey) {
+    // git runs GIT_SSH_COMMAND through a shell, and the key path sits inside double quotes there: a path that could end
+    // the quotes or start a command is refused (the keys Plantern makes are plain paths in its own keys folder)
+    const key = String(secrets.sshKey).replace(/\\/g, '/');
+    if (/["$`\r\n\0]/.test(key)) throw Object.assign(new Error('this SSH key path cannot be used (it has a quote, $ or a line break in it)'), { status: 400 });
+    env.GIT_SSH_COMMAND = `ssh -i "${key}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new`;
+  }
   return { env, args };
+}
+
+/** Is `file` an SSH key in Plantern's own keys folder (where makeSshKey puts them)? Only those are taken from a request. */
+export function ownKey(dataDir, file) {
+  const dir = path.resolve(dataDir, 'keys');
+  return typeof file === 'string' && !!file && path.resolve(file).startsWith(dir + path.sep);
+}
+
+/** A repository address git would read as an option ("--upload-pack=…") is never passed to it. */
+const optionLike = url => /^\s*-/.test(String(url));
+
+/**
+ * The secrets saved for storage `id`, for a check of the repository in `dir`: only when `dir` is that storage's own folder,
+ * so a check of some other folder never sends a saved token or key to that folder's remote.
+ */
+export function storedSecretsFor(registry, id, dir) {
+  const s = id && registry.stores?.find(x => x.id === id), own = s?.cfg?.dir;
+  return own && path.resolve(own) === path.resolve(dir) ? (registry.secrets?.[id] || {}) : {};
 }
 
 /** Run git; resolves { code, out, err } (never rejects for a git error; a missing git rejects with code ENOENT). */
@@ -80,22 +104,25 @@ export function hostLinks(url) {
  * host only allows with write access, and which works for an empty repository too.
  */
 export async function remoteAccess(url, secrets, scratch) {
+  if (optionLike(url)) return { canRead: false, canPush: false, problem: 'notfound', detail: 'that is not the address of a repository' };
+  const clean = text => redact(String(text).trim(), { x: secrets });       // git may repeat a token or key path in what it prints
   await fs.mkdir(scratch, { recursive: true });
-  const ls = await git(scratch, ['ls-remote', '--symref', url, 'HEAD'], { secrets });
-  if (ls.code !== 0) return { canRead: false, canPush: false, problem: failureKind(ls.err), detail: ls.err.trim() };
+  const ls = await git(scratch, ['ls-remote', '--symref', '--', url, 'HEAD'], { secrets });
+  if (ls.code !== 0) return { canRead: false, canPush: false, problem: failureKind(ls.err), detail: clean(ls.err) };
   const branch = /ref: refs\/heads\/(\S+)\s+HEAD/.exec(ls.out)?.[1] || null;
   await fs.mkdir(scratch, { recursive: true });
   if ((await git(scratch, ['rev-parse', '--git-dir'])).code !== 0) await git(scratch, ['init', '-q']);
   const env = ['-c', 'user.name=Plantern', '-c', 'user.email=plantern@localhost'];
   const c = await git(scratch, [...env, 'commit-tree', EMPTY_TREE, '-m', 'Plantern write check']);
-  const push = await git(scratch, ['push', '--dry-run', url, `${c.out.trim()}:refs/heads/plantern-write-check`], { secrets });
-  return { canRead: true, canPush: push.code === 0, branch, empty: !ls.out.trim(), problem: push.code === 0 ? null : failureKind(push.err), detail: push.code === 0 ? '' : push.err.trim() };
+  const push = await git(scratch, ['push', '--dry-run', '--', url, `${c.out.trim()}:refs/heads/plantern-write-check`], { secrets });
+  return { canRead: true, canPush: push.code === 0, branch, empty: !ls.out.trim(), problem: push.code === 0 ? null : failureKind(push.err), detail: push.code === 0 ? '' : clean(push.err) };
 }
 
 /** The wizard's check: { git, mode, url, dir, branch, canRead, canPush, empty, dirty, houses, needs?, links, error? }. */
 export async function checkGit(b, registry) {
   const version = await gitVersion();
   if (!version) return { ok: false, needs: 'git', error: 'Git is not installed on this computer.', download: 'https://git-scm.com/downloads' };
+  if (b.sshKey && !ownKey(registry.dataDir, b.sshKey)) return { ok: false, needs: 'auth', error: 'Use an SSH key that Plantern made (Create a key), or a token.' };
   const secrets = { ...(b.token ? { token: b.token } : {}), ...(b.sshKey ? { sshKey: b.sshKey } : {}) };
   const scratch = path.join(registry.dataDir, 'tmp', 'gitcheck');
   if (b.mode === 'existing') {
@@ -108,11 +135,12 @@ export async function checkGit(b, registry) {
     const dirty = (await git(root, ['status', '--porcelain'])).out.trim().split('\n').filter(Boolean).length;
     const houses = (await findHouses(root)).map(h => ({ id: h.id, name: h.name }));
     if (!url) return { ok: true, version, mode: 'existing', dir: root, branch, url: '', canRead: false, canPush: false, dirty, houses, note: 'This repository has no remote (origin): saves are committed here only.' };
-    const a = await remoteAccess(url, { ...(registry.secrets[b.id] || {}), ...secrets }, scratch);
+    const a = await remoteAccess(url, { ...storedSecretsFor(registry, b.id, root), ...secrets }, scratch);
     return { ok: true, version, mode: 'existing', dir: root, url, branch, dirty, houses, ...a, links: hostLinks(url), needs: a.canRead && a.canPush ? undefined : 'auth' };
   }
   const url = String(b.url || '').trim();
   if (!url) return { ok: false, error: 'Paste the address of the repository.' };
+  if (optionLike(url)) return { ok: false, error: 'That is not the address of a repository.' };
   const useUrl = b.sshKey ? sshUrl(url) : url;
   const a = await remoteAccess(useUrl, secrets, scratch);
   const dir = b.dir ? await cloneTarget(path.resolve(b.dir), url) : null;
@@ -139,7 +167,7 @@ export async function prepareGit(cfg, secrets, registry) {
   if (cfg.mode !== 'existing') {
     if (!dir) dir = await cloneTarget(path.join(registry.dataDir, 'clones'), check.url);
     await fs.mkdir(path.dirname(dir), { recursive: true });
-    const r = await git(path.dirname(dir), ['clone', '--quiet', check.url, dir], { secrets, timeout: 600000 });
+    const r = await git(path.dirname(dir), ['clone', '--quiet', '--', check.url, dir], { secrets, timeout: 600000 });
     if (r.code !== 0) return { error: `Cloning failed: ${redact(r.err.trim(), { x: secrets })}`, needs: failureKind(r.err) === 'auth' ? 'auth' : undefined };
     // an empty repository: start the branch the remote will get
     if (check.empty) await git(dir, ['symbolic-ref', 'HEAD', `refs/heads/${check.branch || 'main'}`]);
@@ -219,7 +247,7 @@ export class GitStore extends FolderStore {
 
   async write(h, file, text, { message } = {}) {
     const w = await super.write(h, file, text);
-    const rel = path.relative(this.root, path.join(h.dir, this.fileName(h, file)));
+    const rel = path.relative(this.root, this.filePath(h, file));
     await this.serial(async () => { if (await this.commit([rel], `Plantern: ${message || `${h.name} ${file}.json`}`)) this.setStatus('pending'); });
     if (this.cfg.url) this.serial(() => this.push()).catch(() => {});
     return { ...w, sync: this.status };

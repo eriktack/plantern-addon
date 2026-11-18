@@ -46,21 +46,27 @@ function mergeValue(b, m, t, path, out) {
   return m;
 }
 
+// a key's own value: a house file may have a key named like something every object inherits ("constructor", "toString"),
+// and reading that from the side that lacks the key would give the inherited function, not "missing"
+const own = (o, k) => (Object.hasOwn(o, k) ? o[k] : undefined);
+// keys that would change an object's prototype instead of becoming a key of it: never merged, never set
+const UNSAFE_KEY = k => k === '__proto__' || k === 'constructor' || k === 'prototype';
+
 function mergeObject(b, m, t, path, out) {
   const res = {};
   for (const k of [...new Set([...Object.keys(t), ...Object.keys(m)])]) {    // theirs' key order, mine's new keys after
-    const v = mergeValue(b[k], m[k], t[k], [...path, k], out);
-    if (v !== undefined) res[k] = v;
+    const v = mergeValue(own(b, k), own(m, k), own(t, k), [...path, k], out);
+    if (v !== undefined) Object.defineProperty(res, k, { value: v, enumerable: true, writable: true, configurable: true });
   }
   return res;
 }
 
 function mergeList(b, m, t, path, out) {
-  const byId = list => new Map(list.map(e => [e.id, e]));
+  const byId = list => new Map((list || []).map(e => [e.id, e]));   // a side that removed the whole list has none
   const B = byId(b), M = byId(m), T = byId(t), res = [];
   const one = id => { const v = mergeValue(B.get(id), M.get(id), T.get(id), [...path, { id }], out); if (v !== undefined) res.push(v); };
-  for (const e of t) one(e.id);                                   // theirs' order …
-  for (const e of m) if (!T.has(e.id)) one(e.id);                // … then what only mine has (added, or kept against a deletion)
+  for (const e of t || []) one(e.id);                             // theirs' order …
+  for (const e of m || []) if (!T.has(e.id)) one(e.id);                // … then what only mine has (added, or kept against a deletion)
   return res;
 }
 
@@ -85,7 +91,8 @@ function setAt(root, path, value) {
     else if (i >= 0) list[i] = next; else list.push(next);
     return list;
   }
-  const obj = isObj(root) ? root : {}, next = setAt(obj[head], rest, value);
+  if (UNSAFE_KEY(head)) return root;                                // never walk into (or set) an object's prototype
+  const obj = isObj(root) ? root : {}, next = setAt(own(obj, head), rest, value);
   if (next === undefined) delete obj[head]; else obj[head] = next;
   return obj;
 }

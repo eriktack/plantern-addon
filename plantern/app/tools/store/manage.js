@@ -112,6 +112,7 @@ export async function storeRoutes(registry, req, res, url, { json, readJsonBody 
   if (p === '/api/stores/sshkey' && req.method === 'POST') { const { makeSshKey } = await import('./git.js'); return json(res, 200, await makeSshKey(registry, await readJsonBody(req))), true; }
   if (p === '/api/stores' && req.method === 'POST') {
     const b = await readJsonBody(req), { secrets, ...cfg } = b;
+    delete cfg.id;                    // the server names a storage: its id is also its key in secrets.json, beside "ha:<name>" and the Geotorget login
     if (cfg.type === 'folder') {
       const c = await checkFolder(cfg.path, secrets?.user ? secrets : null);
       if (!c.ok) return json(res, 400, { error: c.error, needs: c.needs }), true;
@@ -129,7 +130,15 @@ export async function storeRoutes(registry, req, res, url, { json, readJsonBody 
   }
   if (m && m[1] !== 'check' && m[1] !== 'sshkey') {
     const id = decodeURIComponent(m[1]);
-    if (!m[2] && req.method === 'PUT') { const { secrets, ...cfg } = await readJsonBody(req); await registry.updateStore(id, cfg, secrets); return json(res, 200, { store: registry.storeList().find(x => x.id === id) }), true; }
+    if (!m[2] && req.method === 'PUT') {
+      // only what the Settings page changes: a storage's name and its sign-in. Its type, folder, address and branch are set
+      // when it is connected (the branch with its own route, which checks the name), never from here.
+      const body = await readJsonBody(req), secrets = body.secrets;
+      const cfg = typeof body.name === 'string' && body.name.trim() ? { name: body.name.trim().slice(0, 120) } : {};
+      if (secrets?.sshKey) { const { ownKey } = await import('./git.js'); if (!ownKey(registry.dataDir, secrets.sshKey)) return json(res, 400, { error: 'Use an SSH key that Plantern made, or a token.' }), true; }
+      await registry.updateStore(id, cfg, secrets);
+      return json(res, 200, { store: registry.storeList().find(x => x.id === id) }), true;
+    }
     if (!m[2] && req.method === 'DELETE') { await registry.removeStore(id); return json(res, 200, { ok: true }), true; }
     if (m[2] === 'refresh' && req.method === 'POST') { const s = registry.stores.find(x => x.id === id); if (!s) return json(res, 404, { error: 'no such storage' }), true; await s.sync?.(); await registry.poke(s); return json(res, 200, { store: registry.storeList().find(x => x.id === id) }), true; }
     if (m[2] === 'branches' && req.method === 'GET') {

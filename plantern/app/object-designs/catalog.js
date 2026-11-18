@@ -19,6 +19,7 @@ import { openHouseContext, wireHousePanel } from './house-context.js';
 import { enhanceAll } from '../src/select.js';
 enhanceAll();
 import { enhanceNumbers } from '../src/number-input.js';
+import { esc } from '../src/html.js';
 enhanceNumbers();
 
 const $ = id => document.getElementById(id);
@@ -132,7 +133,7 @@ function refresh() {
     // a model whose variant wants its front in view starts straight on at it (meta.frontView)
     const view = current.mod.meta.frontView?.includes(input.variant) ? 'front' : null;
     showParts(parts.map(p => ({ mesh: p.mesh, material: p.material })), placementOf(current.mod.meta, input.variant), view, `${current.mod.meta.id}|${input.variant ?? ''}`);
-    lastInfo = parts.map(p => `${p.label}: ${p.triangles} triangles, ${p.name}`).join('<br>');
+    lastInfo = parts.map(p => `${esc(p.label)}: ${p.triangles} triangles, ${esc(p.name)}`).join('<br>');   // a house's own blueprint names its parts and materials
     $('info').innerHTML = lastInfo;
   } catch (e) {
     form.setBuildError(e.message);

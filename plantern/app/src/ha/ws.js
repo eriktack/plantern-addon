@@ -71,6 +71,7 @@ export class WsHA extends HaClientBase {
     if (ws !== this.ws) return;
     let m;
     try { m = JSON.parse(text); } catch { return; }
+    if (!m || typeof m !== 'object') return;      // "null" or a number is valid JSON but not a message; a throw here would stop the server (no handler above this)
     switch (m.type) {
       case 'auth_required': ws.send(JSON.stringify({ type: 'auth', access_token: this.token })); break;
       case 'auth_ok': this.haVersion = m.ha_version; this._afterAuth().catch(e => this._drop(ws, `Home Assistant accepted the token, then: ${e.message}`)); break;
@@ -84,7 +85,7 @@ export class WsHA extends HaClientBase {
       }
       case 'event': {
         const e = m.event;
-        if (e?.event_type === 'state_changed') e.data.new_state ? this._set(e.data.new_state) : this._remove(e.data.entity_id);
+        if (e?.event_type === 'state_changed' && e.data) e.data.new_state ? this._set(e.data.new_state) : this._remove(e.data.entity_id);
         break;
       }
     }

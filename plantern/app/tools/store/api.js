@@ -83,7 +83,8 @@ export async function houseApi(registry, req, res, url, { ha } = {}) {
         return json(res, 200, { path: b.path, bytes: bytes.length, ...(w.sync ? { sync: w.sync } : {}) }), true;
       }
       if (rest.startsWith('assets/') && req.method === 'GET') {
-        const f = registry.find(id), file = f && inside(f.house.dir, decodeURIComponent(rest));
+        // inside assets/ only: "assets/../.git/config" (the house folder of a git storage) is not an asset
+        const f = registry.find(id), file = f && inside(path.join(f.house.dir, 'assets'), decodeURIComponent(rest).slice('assets/'.length));
         if (!file) return json(res, 404, { error: 'not found' }), true;
         try { const data = await fs.readFile(file); res.writeHead(200, { 'Content-Type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-store' }); res.end(data); }
         catch { json(res, 404, { error: 'not found' }); }

@@ -54,6 +54,19 @@ export const saveSettings = (dir, s) => writeAtomic(path.join(dir, 'stores.json'
 export const loadSecrets = dir => readJson(path.join(dir, 'secrets.json'), {});
 export const saveSecrets = (dir, s) => writeAtomic(path.join(dir, 'secrets.json'), JSON.stringify(s, null, 2) + '\n', 0o600);
 
+/**
+ * Change secrets.json: `change(secrets)` gets what is on disk now and changes it in place; the result is written and returned.
+ * Every writer goes through here, one at a time per folder, so a part of the server that keeps its own copy (the storages)
+ * never writes over what another part saved meanwhile (a Home Assistant token, the Geotorget login).
+ */
+const secretQueues = new Map();
+export function updateSecrets(dir, change) {
+  const run = async () => { const s = await loadSecrets(dir); await change(s); await saveSecrets(dir, s); return s; };
+  const next = (secretQueues.get(dir) || Promise.resolve()).then(run, run);
+  secretQueues.set(dir, next.catch(() => {}));
+  return next;
+}
+
 /** Replace every secret value found in `text` (an error message, git output) with •••. */
 export function redact(text, secrets) {
   let out = String(text ?? '');

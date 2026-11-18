@@ -53,7 +53,7 @@ export function wallSvg(w, lv, geo, fs, orphans = new Set()) {
     out += poly(pc, `fill="${fill}"${overhead ? ` fill-opacity="0.3" stroke-dasharray="${fs / 2} ${fs / 3}"` : low ? ' fill-opacity="0.4"' : ''} ${(overhead || low) && !sel && !bad ? `stroke="${fill === 'url(#hatch)' ? '#6b7482' : fill}" stroke-width="${fs / 10}"` : stroke}`);
     for (const lp of wallLookPieces(w, geo.frames.get(w.id), [pc], lv.rooms)) {
       const strips = sideStrips(lp.poly, w.thickness, 40, w, geo.frames.get(w.id));
-      for (const side of ['left', 'right']) { const look = resolveSide(lp[side], materialTable(Ed.model)); if (look?.color) out += poly(strips[side], `fill="${look.color}" pointer-events="none"`); }
+      for (const side of ['left', 'right']) { const look = resolveSide(lp[side], materialTable(Ed.model)); if (look?.color) out += poly(strips[side], `fill="${esc(look.color)}" pointer-events="none"`); }
     }
   }
   else {
@@ -135,7 +135,7 @@ export function objectSvg(o, lv, geo, fs) {
   const sel = o.id === Ed.objectId, above = (o.z ?? 0) >= resolveSettings(Ed.loc, lv).cutPlane;
   // an asset whose model is missing is red and dashed, so it is seen and fixed (decision 146)
   const missing = o.kind === 'asset' && ['missing', 'broken'].includes(assetCache().status(assetKey(o)));
-  const col = sel ? '#ffb454' : missing ? '#b00020' : o.assumed?.length ? '#e5a93a' : (o.color || (o.kind === 'asset' && assetCache().mainColour(assetKey(o))) || '#888');
+  const col = sel ? '#ffb454' : missing ? '#b00020' : o.assumed?.length ? '#e5a93a' : esc(o.color || (o.kind === 'asset' && assetCache().mainColour(assetKey(o))) || '#888');
   const made = o.blueprint ? `blueprint "${o.blueprint}"` : `model "${o.asset}"`;
   const what = o.kind === 'asset' ? (missing ? ` · ${made} is missing` : ` · ${made}`) : '';
   body += `<g data-kind="object" data-id="${esc(o.id)}" style="cursor:grab"><title>${esc(o.name || o.id)} (${esc(o.id)})${esc(what)}</title>${poly(fp, `fill="${col}" fill-opacity="0.25" stroke="${col}" stroke-width="${fs / (sel ? 5 : 9)}"${above || missing ? ` stroke-dasharray="${fs / 2} ${fs / 3}"` : ''}`)}${holeOutlines(o, fp).map(h => poly(h, `fill="none" stroke="${col}" stroke-width="${fs / 12}" stroke-dasharray="${fs / 4} ${fs / 4}" pointer-events="none"`)).join('')}</g>`;
@@ -290,7 +290,7 @@ function drawPlan() {
     const look = `fill="${esc(s.color || SOLID_COLOR)}" fill-opacity="${above ? 0.35 : 1}" stroke="${sel ? '#ffb454' : '#999'}" stroke-width="${fs / (sel ? 4 : 10)}"${above ? ` stroke-dasharray="${fs / 2} ${fs / 3}"` : ''}`, circ = solidCircle(s);
     const body = circ ? (([cx, cy]) => `<circle cx="${cx}" cy="${cy}" r="${circ.diameter / 2}" ${look}/>`)(toSvg(circ.center)) : poly(s.polygon, look);   // a round pillar: the true circle
     out += `<g data-kind="solid" data-id="${esc(s.id)}" style="cursor:pointer"><title>${esc(s.name || s.kind || s.id)} (${esc(s.id)})</title>${body}`;
-    if (s.sides) for (const st of solidStretches(s, lv.rooms)) { const look = resolveSide(s.sides[st.room], materialTable(Ed.model)); if (look?.color) out += poly(paintStrip(st), `fill="${look.color}" pointer-events="none"`); }
+    if (s.sides) for (const st of solidStretches(s, lv.rooms)) { const look = resolveSide(s.sides[st.room], materialTable(Ed.model)); if (look?.color) out += poly(paintStrip(st), `fill="${esc(look.color)}" pointer-events="none"`); }
     out += '</g>';
   }
   const curCircle = cur && Ed.solved.capture?.mode === 'circle' ? Ed.solved.capture.raw : null;

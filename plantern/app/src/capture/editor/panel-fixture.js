@@ -214,7 +214,7 @@ export function doorBindingDraft(o, type) {
  */
 function bindingDraft(x) {
   const entity = $('xEntity').value.trim(), controls = [...$('xControls').querySelectorAll('input:checked')].map(i => i.value);
-  if (entity && !/^[a-z_]+.[a-z0-9_]+$/.test(entity)) return { error: 'The Home Assistant entity looks like light.kitchen' };
+  if (entity && !/^[a-z_]+\.[a-z0-9_]+$/.test(entity)) return { error: 'The Home Assistant entity looks like light.kitchen' };
   const num = id => ($(id).value.trim() === '' ? undefined : Number($(id).value));
   const look = x.kind !== 'switch' ? { brightness: num('xLookBri'), lumens: num('xLookLm'), kelvin: $('xLookUseColor').checked ? undefined : num('xLookK'), color: $('xLookUseColor').checked ? $('xLookColor').value : undefined } : undefined;
   const bad = look ? checkLook(Object.fromEntries(Object.entries(look).filter(([, v]) => v !== undefined))) : [];

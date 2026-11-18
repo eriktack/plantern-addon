@@ -91,7 +91,9 @@ async function handleStatic(root, req, res) {
   const base = path.resolve(root);
   if (file !== base && !file.startsWith(base + path.sep)) return send(res, 403, 'forbidden');
   const relParts = path.relative(base, file).split(path.sep);
-  if (relParts[0] === '.git' || relParts[0] === 'node_modules') return send(res, 404, 'not found');
+  // Windows opens ".GIT" and ".git." as .git, so the name is compared the way the file system reads it
+  const top = relParts[0].toLowerCase().replace(/[. ]+$/, '');
+  if (top === '.git' || top === 'node_modules') return send(res, 404, 'not found');
   try {
     let target = file;
     // clean URLs: /wizard → wizard.html (old links and bookmarks keep working)
@@ -120,7 +122,7 @@ export function createPlanternServer(root, { env = process.env, dataDir = defaul
       if (url.pathname.startsWith('/api/') && !isLocalAddress(req.socket.remoteAddress)) return send(res, 403, { error: 'only from your own network' });
       if (await haApi(ha, req, res, url, { json: send, readJsonBody, writeGuard, registry })) return;
       if (await glbApi(glb, registry, req, res, url)) return;
-      if (await libraryApi(req, res, url)) return;
+      if (await libraryApi(req, res, url, { addon: !!supervisor })) return;
       if (await terrainApi(req, res, url, { dataDir, json: send, readJsonBody, writeGuard })) return;
       if (await houseApi(registry, req, res, url, { ha })) return;
       if (url.pathname === '/api/save') return req.method === 'POST' ? await handleSave(root, req, res) : send(res, 405, { error: 'POST only' });

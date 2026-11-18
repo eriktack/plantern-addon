@@ -166,7 +166,7 @@ class Check {
     const none = { shapes: 0, groups: false };
     if (depth > MAX_NESTING) { this.fail(where, `blocks are nested more than ${MAX_NESTING} deep`); return none; }
     if (!isObject(node) || typeof node.type !== 'string') { this.fail(where, 'must be a block: an object with a "type"'); return none; }
-    if (!(node.type in BLOCKS)) { this.fail(where, `unknown block "${node.type}" (allowed: ${Object.keys(BLOCKS).join(', ')})`); return none; }
+    if (!Object.hasOwn(BLOCKS, node.type)) { this.fail(where, `unknown block "${node.type}" (allowed: ${Object.keys(BLOCKS).join(', ')})`); return none; }
     this.keys(node, where);
 
     switch (node.type) {
@@ -324,7 +324,10 @@ export function loadBlueprints({ builtIn = [], house = [], libraryNames } = {}) 
     blueprints.push({ id, source: 'built-in', meta: model.meta });
   }
   for (const { file, text } of [...house].sort((a, b) => String(a.file).localeCompare(String(b.file)))) {
-    const parsed = parseHouseBlueprint(text, { file, libraryNames });
+    // a file the checker itself stumbles on is refused like any other bad file: one house file never takes the whole list down
+    let parsed;
+    try { parsed = parseHouseBlueprint(text, { file, libraryNames }); }
+    catch (e) { parsed = { ok: false, problems: [`could not be checked: ${e.message}`] }; }
     if (!parsed.ok) { refused.push({ file, source: 'house', problems: parsed.problems }); continue; }
     const { json } = parsed;
     if (seen.has(json.id)) {

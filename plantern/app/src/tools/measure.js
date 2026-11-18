@@ -2,6 +2,7 @@ import { sub, add, mul, len, dot } from '../geometry/vec.js';
 import { toSvg } from '../render2d/coords.js';
 import { el } from '../render2d/plan.js';
 import { checkRows } from '../model/checks.js';
+import { readoutHtml, brokenCheckHtml, checkRowHtml } from './measure-html.js';
 
 /**
  * Measure tool + checks panel. Points come only from the snap registry (by ref).
@@ -55,7 +56,7 @@ export function createMeasureTool(ctx) {
     let t = `<b>${Math.round(len(d))} mm</b> &nbsp; Δx ${Math.round(d[0])} · Δy ${Math.round(d[1])}`;
     const { geo } = ctx.getState(), wa = A.ref?.split('#')[0], wb = B.ref?.split('#')[0];
     if (wa && wa === wb && geo?.frames.get(wa)) t += ` · along wall ${Math.round(Math.abs(dot(d, geo.frames.get(wa).u)))}`;
-    dom.read.innerHTML = `${t}<br><small>${A.ref || 'free'} → ${B.ref || 'free'}</small>`;
+    dom.read.innerHTML = readoutHtml(t, A, B);
     dom.pin.disabled = !(A.ref && B.ref);
   }
   function drawChecks() {
@@ -65,10 +66,10 @@ export function createMeasureTool(ctx) {
     for (const r of checkRows(model.checks, ref => index.get(ref), tol)) {
       const c = r.check, row = document.createElement('div');
       row.className = 'chk';
-      if (r.broken) row.innerHTML = `<span class="dot bad"></span><span>${c.id}: broken reference<br><small>${r.missing}</small></span><span></span>`;
+      if (r.broken) row.innerHTML = brokenCheckHtml(r);
       else {
-        const a = index.get(c.a), b = index.get(c.b), d = r.delta;
-        row.innerHTML = `<span class="dot ${r.cls}"></span><span>${c.a} ↔ ${c.b}<br><small>${c.note || ''}${a.level !== b.level ? ` · ${a.level}/${b.level}` : ''}${c.solve ? ' · in the room\'s solve' : ''}</small></span><span>${r.model.toFixed(0)} / ${c.measured} <b class="${r.cls}">${d > 0 ? '+' : ''}${d.toFixed(0)}</b></span>`;
+        const a = index.get(c.a), b = index.get(c.b);
+        row.innerHTML = checkRowHtml(r, a, b);
         row.onclick = () => { A = { ref: c.a, pos: a.pos }; B = { ref: c.b, pos: b.pos }; draw(); readout(); };
       }
       const x = document.createElement('button');

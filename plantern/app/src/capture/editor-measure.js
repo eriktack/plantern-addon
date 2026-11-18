@@ -5,6 +5,7 @@
 
 import { toSvg, fromSvg } from '../render2d/coords.js';
 import { sub, add, mul } from '../geometry/vec.js';
+import { esc } from '../html.js';
 import { pointToPoint, pointToLine, lineToLine, otherLeg, nearestPoint, nearestLine } from '../tools/measure-core.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -104,7 +105,7 @@ export function createEditorMeasure(ctx) {
   function readout() {
     dom.read.hidden = !on;
     if (!on) return;
-    const name = it => it.ref ? ctx.name(it.ref) : `free point (${Math.round(it.pos[0])}, ${Math.round(it.pos[1])})`;
+    const name = it => it.ref ? esc(ctx.name(it.ref)) : `free point (${Math.round(it.pos[0])}, ${Math.round(it.pos[1])})`;
     const r = result();
     const ask = { point: 'a point (corner, wall end, opening edge…; Alt = anywhere)', line: 'a plane (a wall face, a room edge or a side of a solid)' }[needs()];
     if (!r) { dom.read.innerHTML = `<b>${MODES[mode]}</b><br>Click ${picks.length ? 'the second' : 'the first'}: ${ask}. Esc stops.`; return; }

@@ -48,6 +48,21 @@ export function importsOf(src) {
   return out;
 }
 
+/**
+ * The checks that need only the text of a model file: what it imports and what it must not use. The server runs these
+ * before it loads a posted file (tools/library/api.js), so a file that fails them is never run. They catch mistakes, not
+ * intent: a file can be written to get past them, which is why that route also answers only the computer itself.
+ */
+export function checkSource(source) {
+  const errors = [];
+  for (const spec of importsOf(source)) {
+    if (spec !== ALLOWED_IMPORT) errors.push(`imports "${spec}"; a model may only import from "${ALLOWED_IMPORT}"`);
+  }
+  const code = stripComments(source);
+  for (const [re, what] of FORBIDDEN) if (re.test(code)) errors.push(`uses ${what}; models must be pure geometry`);
+  return errors;
+}
+
 /** A random valid value for a number or integer parameter (integers without a max get ten steps). */
 function paramValue(d, rnd) {
   const step = d.step ?? 1;
@@ -79,11 +94,7 @@ export function checkModule({ fileName, source, model, library, textures = new M
   // File and identity
   const name = fileName.replace(/.js$/, '').replace(/^_/, '');
   if (!KEBAB.test(name)) err(`file name "${fileName}" must be kebab-case`);
-  for (const spec of importsOf(source)) {
-    if (spec !== ALLOWED_IMPORT) err(`imports "${spec}"; a model may only import from "${ALLOWED_IMPORT}"`);
-  }
-  const code = stripComments(source);
-  for (const [re, what] of FORBIDDEN) if (re.test(code)) err(`uses ${what}; models must be pure geometry`);
+  for (const e of checkSource(source)) err(e);
 
   // Meta
   const problems = checkMeta(model?.meta);

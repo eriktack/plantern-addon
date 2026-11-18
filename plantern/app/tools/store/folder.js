@@ -97,15 +97,26 @@ export class FolderStore {
   /** The file name of `file` ('location' | 'model') in house h. */
   fileName(h, file) { return file === 'location' ? 'location.json' : h.model; }
 
+  /**
+   * The path of `file` ('location' | 'model') of house h. The model's name comes from the house's own location.json, which
+   * someone else may have written (a shared storage): it has to be a .json file inside the house folder, or this throws.
+   */
+  filePath(h, file) {
+    if (file === 'location') return path.join(h.dir, 'location.json');
+    const f = /\.json$/i.test(h.model) ? inside(h.dir, h.model) : null;
+    if (!f) throw Object.assign(new Error(`${h.name || h.id}: its location.json names a model file that is not a .json file inside the house folder ("${String(h.model).slice(0, 80)}")`), { status: 400 });
+    return f;
+  }
+
   /** { text, version } of a house file (text null when missing). */
   async read(h, file) {
-    try { const text = await fs.readFile(path.join(h.dir, this.fileName(h, file)), 'utf8'); return { text, version: versionOf(text) }; }
+    try { const text = await fs.readFile(this.filePath(h, file), 'utf8'); return { text, version: versionOf(text) }; }
     catch (e) { if (e.code === 'ENOENT') return { text: null, version: null }; throw e; }
   }
 
   async write(h, file, text) {
     if (this.readOnly) throw Object.assign(new Error(`${this.cfg.name || this.id} is read-only`), { status: 403 });
-    await writeAtomic(path.join(h.dir, this.fileName(h, file)), text);
+    await writeAtomic(this.filePath(h, file), text);
     return { version: versionOf(text) };
   }
 
@@ -130,7 +141,7 @@ export class FolderStore {
 
   /** Stat of the house files, cheap enough to poll: 'mtime:size' per file. */
   async stamp(h) {
-    const one = async f => { try { const s = await fs.stat(path.join(h.dir, this.fileName(h, f))); return `${s.mtimeMs}:${s.size}`; } catch { return 'missing'; } };
+    const one = async f => { try { const s = await fs.stat(this.filePath(h, f)); return `${s.mtimeMs}:${s.size}`; } catch { return 'missing'; } };
     return { location: await one('location'), model: await one('model') };
   }
 

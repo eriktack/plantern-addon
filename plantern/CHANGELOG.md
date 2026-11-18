@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.46
+
+- Fix: a saved Home Assistant token is no longer lost when a storage is added, changed or removed; security fixes from a code review (inputs to git, files outside a house, text from house files); the card no longer slows down over time on a slideshow
+
 ## 0.8.45
 
 - Fix: the floor dropdown no longer scrolls sideways after choosing the yard

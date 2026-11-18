@@ -61,8 +61,10 @@ export const dirOf = url => url.replace(/[?#].*$/, '').replace(/[^/]*$/, '');
 
 /** { baseUrl, modelUrl } of a house from its location.json URL and the parsed file (its `model` names the model file). */
 export function houseUrls(locationUrl, location) {
-  const baseUrl = dirOf(locationUrl);
-  return { baseUrl, modelUrl: baseUrl + (location?.model || 'model.json') };
+  const baseUrl = dirOf(locationUrl), model = location?.model || 'model.json';
+  // the name comes from the house's own file: a .json file inside the house folder, as the server has it (tools/store/folder.js)
+  if (typeof model !== 'string' || !/\.json$/i.test(model) || /^[\\/]|^[a-z][a-z0-9+.-]*:|(^|[\\/])\.\.([\\/]|$)/i.test(model)) throw new Error('the house\'s location.json names a model file that is not a .json file inside the house folder');
+  return { baseUrl, modelUrl: baseUrl + model };
 }
 
 /** The houses in a mirrored locations/index.json as [{ id, name, url }]: url is what a card's `location` holds. */

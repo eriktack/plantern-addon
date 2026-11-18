@@ -6,7 +6,7 @@
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { FolderStore, versionOf } from './folder.js';
-import { loadSettings, saveSettings, loadSecrets, saveSecrets } from './settings.js';
+import { loadSettings, saveSettings, loadSecrets, updateSecrets } from './settings.js';
 import { merge3 } from '../../src/model/merge.js';
 import { formatJson } from '../../src/model/format.js';
 
@@ -62,6 +62,17 @@ export class Registry extends EventEmitter {
     if (i < 0) return;
     this.settings.stores[i] = { ...this.settings.stores[i], ...patch };
     await saveSettings(this.dataDir, this.settings);
+  }
+
+  /**
+   * Change the secrets file and keep this registry's copy in step. The file is read again first: other parts of the server
+   * (Home Assistant connections, the Geotorget login) keep their secrets in it too, and writing our copy from start-up back
+   * would erase what they saved since. The copy is changed in place, because the storages hold on to it (ctx).
+   */
+  async changeSecrets(change) {
+    const now = await updateSecrets(this.dataDir, change);
+    for (const k of Object.keys(this.secrets)) delete this.secrets[k];
+    Object.assign(this.secrets, now);
   }
 
   close() { for (const s of this.stores) s.close?.(); }
@@ -192,7 +203,7 @@ export class Registry extends EventEmitter {
     const id = cfg.id || this.newStoreId(cfg.name || cfg.type);
     const clean = { ...cfg, id };
     const store = await makeStore(clean, this.ctx());
-    if (Object.keys(secrets).length) { this.secrets[id] = { ...(this.secrets[id] || {}), ...secrets }; await saveSecrets(this.dataDir, this.secrets); }
+    if (Object.keys(secrets).length) await this.changeSecrets(s => { s[id] = { ...(s[id] || {}), ...secrets }; });
     await store.open();
     if (this.watching) store.watch?.(() => this.poke(store));
     this.stores.push(store);
@@ -209,7 +220,7 @@ export class Registry extends EventEmitter {
     const old = this.stores.find(s => s.id === id);
     old?.close?.();
     this.settings.stores[i] = { ...this.settings.stores[i], ...cfg, id };
-    if (secrets && Object.keys(secrets).length) { this.secrets[id] = { ...(this.secrets[id] || {}), ...secrets }; await saveSecrets(this.dataDir, this.secrets); }
+    if (secrets && Object.keys(secrets).length) await this.changeSecrets(s => { s[id] = { ...(s[id] || {}), ...secrets }; });
     const store = await makeStore(this.settings.stores[i], this.ctx());
     await store.open();
     if (this.watching) store.watch?.(() => this.poke(store));
@@ -226,9 +237,8 @@ export class Registry extends EventEmitter {
     this.stores.find(s => s.id === id)?.close?.();
     this.stores = this.stores.filter(s => s.id !== id);
     this.settings.stores = this.settings.stores.filter(s => s.id !== id);
-    delete this.secrets[id];
     await saveSettings(this.dataDir, this.settings);
-    await saveSecrets(this.dataDir, this.secrets);
+    await this.changeSecrets(s => { delete s[id]; });
     this.emit('houses', {});
   }
 

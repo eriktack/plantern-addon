@@ -149,7 +149,7 @@ export async function makeMaterialFromSide(side) {
 /** The named colours, under Materials: click one to rename it. */
 export function renderColors() {
   const named = usedColors(Ed.model).filter(c => c.name);
-  $('colorList').innerHTML = named.length ? 'Colours: ' + named.map(c => `<a href="#" data-c="${c.color}" title="${c.color}: click to rename"><span class="swatch" style="background:${c.color}"></span> ${esc(c.name)}</a>`).join(' · ')
+  $('colorList').innerHTML = named.length ? 'Colours: ' + named.map(c => `<a href="#" data-c="${esc(c.color)}" title="${esc(c.color)}: click to rename"><span class="swatch" style="background:${esc(c.color)}"></span> ${esc(c.name)}</a>`).join(' · ')
     : 'Colours you use show as swatches under a wall side\'s colour; name one with "Name…" to keep it in the list.';
   $('colorList').querySelectorAll('a[data-c]').forEach(a => (a.onclick = e => {
     e.preventDefault();

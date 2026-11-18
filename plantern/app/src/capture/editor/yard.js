@@ -321,7 +321,7 @@ export function yardSvg(fs) {
   if (!y || !onYardLevel()) return '';
   let out = '';
   if (y.boundary) out += `<polygon points="${pts(y.boundary)}" fill="none" stroke="#8b93a1" stroke-width="${fs / 10}" stroke-dasharray="${fs} ${fs / 2}" pointer-events="none"/>`;
-  for (const a of y.areas || []) out += `<polygon points="${pts(a.polygon)}" fill="${a.color || P.yardSurface[a.surface] || P.yardSurface.other}" fill-opacity="${P.yardAlpha}" stroke="none" pointer-events="none"><title>${esc(a.name || a.surface)}</title></polygon>`;
+  for (const a of y.areas || []) out += `<polygon points="${pts(a.polygon)}" fill="${esc(a.color || P.yardSurface[a.surface] || P.yardSurface.other)}" fill-opacity="${P.yardAlpha}" stroke="none" pointer-events="none"><title>${esc(a.name || a.surface)}</title></polygon>`;
   for (const g of y.ground || []) { if (!Array.isArray(g.pos)) continue; const [x, yy] = toSvg(g.pos); out += `<g pointer-events="none"><path d="M${x - fs * 0.4} ${yy}H${x + fs * 0.4}M${x} ${yy - fs * 0.4}V${yy + fs * 0.4}" stroke="#e8e2d0" stroke-width="${fs / 12}"/><text x="${x + fs * 0.5}" y="${yy - fs * 0.3}" font-size="${fs * 0.9}" fill="#e8e2d0">${g.z >= 0 ? '+' : '−'}${(Math.abs(g.z) / 1000).toFixed(2)}</text></g>`; }
   for (const l of y.lines || []) out += `<polyline points="${pts(l.points)}" fill="none" stroke="${P.yardLine[l.kind] || P.yardLine.edging}" stroke-width="${fs / (l.kind === 'hedge' ? 2 : 5)}" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"${l.kind === 'fence' ? ` stroke-dasharray="${fs / 2} ${fs / 3}"` : ''}/>`;
   return out;

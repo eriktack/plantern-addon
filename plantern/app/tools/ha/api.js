@@ -14,7 +14,7 @@
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { promises as fs, readFileSync } from 'node:fs';
-import { loadSecrets, saveSecrets, writeAtomic, redact } from '../store/settings.js';
+import { loadSecrets, updateSecrets, writeAtomic, redact } from '../store/settings.js';
 import { createHaBridge, connectWithin } from './bridge.js';
 
 const NAME = /^[a-z0-9_]{1,40}$/;
@@ -71,7 +71,7 @@ export function createHaHub({ dataDir, WebSocketImpl = globalThis.WebSocket, tes
     const conf = await read();
     conf.connections = { ...(conf.connections || {}), [name]: { url: url.replace(/\/+$/, '') } };
     await write(conf);
-    if (token) { const s = await loadSecrets(dataDir); s[key(name)] = { token: String(token) }; await saveSecrets(dataDir, s); }
+    if (token) await updateSecrets(dataDir, s => { s[key(name)] = { token: String(token) }; });
     stop(name);                                                     // the next use connects with what is stored now
   };
   hub.remove = async name => {
@@ -79,8 +79,7 @@ export function createHaHub({ dataDir, WebSocketImpl = globalThis.WebSocket, tes
     if (!conf.connections?.[name]) guardBuiltin(name);                // the built-in has nothing stored; a stored one it shadows can go
     delete conf.connections?.[name];
     await write(conf);
-    const s = await loadSecrets(dataDir);
-    if (s[key(name)]) { delete s[key(name)]; await saveSecrets(dataDir, s); }
+    if ((await loadSecrets(dataDir))[key(name)]) await updateSecrets(dataDir, s => { delete s[key(name)]; });
     stop(name);
   };
   /**
@@ -95,12 +94,12 @@ export function createHaHub({ dataDir, WebSocketImpl = globalThis.WebSocket, tes
     if (!conf.connections?.[from]) throw Object.assign(new Error(`no connection "${from}"`), { status: 404 });
     if (conf.connections[to]) throw Object.assign(new Error(`there is already a connection "${to}"`), { status: 409 });
     const secrets = await loadSecrets(dataDir);
-    if (secrets[key(from)]) { secrets[key(to)] = secrets[key(from)]; await saveSecrets(dataDir, secrets); }
+    if (secrets[key(from)]) await updateSecrets(dataDir, s => { if (s[key(from)]) s[key(to)] = s[key(from)]; });
     conf.connections = { ...conf.connections, [to]: conf.connections[from] };
     await write(conf);
     delete conf.connections[from];
     await write(conf);
-    if (secrets[key(from)]) { delete secrets[key(from)]; await saveSecrets(dataDir, secrets); }
+    if (secrets[key(from)]) await updateSecrets(dataDir, s => { delete s[key(from)]; });
     stop(from);
   };
   /** The bridge of a stored connection, connecting on first use (null when there is no such connection or token). */
