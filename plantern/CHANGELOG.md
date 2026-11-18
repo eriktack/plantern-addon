@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.47
+
+- A grey 30 x 30 cm concrete tile material
+
 ## 0.8.46
 
 - Fix: a saved Home Assistant token is no longer lost when a storage is added, changed or removed; security fixes from a code review (inputs to git, files outside a house, text from house files); the card no longer slows down over time on a slideshow

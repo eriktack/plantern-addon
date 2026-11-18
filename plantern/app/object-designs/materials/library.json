@@ -20,5 +20,6 @@
   "wall-block-grey": { "color": "#808285", "texture": "textures/wall-block-grey.jpg", "uvScale": 1000, "roughness": 0.95 },
   "cobble-grey": { "color": "#7d7b7a", "texture": "textures/cobble-grey.jpg", "uvScale": 900, "roughness": 0.9 },
   "paving-granite-grey": { "color": "#5e5d5a", "texture": "textures/paving-granite-grey.jpg", "uvScale": 840, "roughness": 0.85 },
-  "gravel-grey": { "color": "#8f887c", "texture": "textures/gravel-grey.jpg", "uvScale": 600, "roughness": 1 }
+  "gravel-grey": { "color": "#8f887c", "texture": "textures/gravel-grey.jpg", "uvScale": 600, "roughness": 1 },
+  "slab-grey-300": { "color": "#959490", "texture": "textures/slab-grey-300.jpg", "uvScale": 900, "roughness": 0.9 }
 }
