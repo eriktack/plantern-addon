@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.49
+
+- Cameras in outdoor rooms (under a balcony, a porch) can be placed high
+
 ## 0.8.48
 
 - The pyramid roof no longer draws four arrows across the upper floor

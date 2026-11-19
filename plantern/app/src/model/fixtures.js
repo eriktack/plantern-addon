@@ -98,7 +98,7 @@ export function checkFixture(fx, level) {
   if (device) { const d = checkDevice(fx); errors.push(...d.errors); warnings.push(...d.warnings); }
   if (fx.pos) {
     const r = roomAt(level, fx.pos, pointInPolygon);
-    if (r) top = roomCeiling(level, r);                              // a lowered ceiling in that room
+    if (r) top = r.exterior && device ? OUTDOOR_TOP : roomCeiling(level, r);   // a lowered ceiling in that room; outdoors (a porch, a space under a balcony) a device may sit as high as in the yard (decision 317)
     else if (device) top = OUTDOOR_TOP;                               // outdoors: a device in the yard has no ceiling over it (decision 292)
   }
   if (fx.attach && own) {
