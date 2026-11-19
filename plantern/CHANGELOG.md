@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.48
+
+- The pyramid roof no longer draws four arrows across the upper floor
+
 ## 0.8.47
 
 - A grey 30 x 30 cm concrete tile material

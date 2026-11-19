@@ -131,7 +131,8 @@ function drawRoofs(level, g, palette) {
     for (const p of ps) el('polygon', { points: svgPoints(p.poly), fill: 'none', ...sw, 'stroke-dasharray': r.roof.cover === 'glass' ? '3 4' : '8 5' }, g);
     const ridge = ps.find(p => p.ridge)?.ridge;
     if (ridge) el('polyline', { points: svgPoints(ridge), fill: 'none', ...sw, 'stroke-width': 2.5 }, g);
-    for (const p of ps.filter(q => q.fallTo)) {
+    // the way down as an arrow, for a roof of one plane; a hipped or pyramid roof's planes show by their hip lines (decision 316)
+    for (const p of ps.length === 1 ? ps.filter(q => q.fallTo) : []) {
       const c = p.poly.reduce((a, q) => [a[0] + q[0] / p.poly.length, a[1] + q[1] / p.poly.length], [0, 0]), [x0, y0] = toSvg(c), [x1, y1] = toSvg(p.fallTo);
       const a = Math.atan2(y1 - y0, x1 - x0), h = Math.min(400, Math.hypot(x1 - x0, y1 - y0) / 3), w = 0.45;
       el('polyline', { points: `${x0},${y0} ${x1},${y1}`, fill: 'none', ...sw, 'stroke-width': 2.5 }, g);

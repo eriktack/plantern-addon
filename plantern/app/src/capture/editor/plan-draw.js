@@ -395,10 +395,12 @@ function drawPlan() {
   // roofs over rooms (yard plan Y9): dashed outlines, a gable's ridge, a single slope's fall (the room being edited: as it is now)
   for (const r of lv.rooms || []) {
     const rr = r.id === Ed.roomId && cur ? { ...r, polygon: cur } : r, c = DARK_PALETTE.roof;
-    for (const p of roofPieces(rr)) {
+    const pieces = roofPieces(rr);
+    for (const p of pieces) {
       out += `<polygon points="${p.poly.map(q => toSvg(q).join(',')).join(' ')}" fill="none" stroke="${c}" stroke-width="${fs / 8}" stroke-dasharray="${fs / 2} ${fs / 3}" pointer-events="none"/>`;
       if (p.ridge) out += `<polyline points="${p.ridge.map(q => toSvg(q).join(',')).join(' ')}" fill="none" stroke="${c}" stroke-width="${fs / 5}" pointer-events="none"/>`;
-      if (p.fallTo) { const m = p.poly.reduce((a, q) => [a[0] + q[0] / 4, a[1] + q[1] / 4], [0, 0]); out += `<polyline points="${toSvg(m).join(',')} ${toSvg(p.fallTo).join(',')}" fill="none" stroke="${c}" stroke-width="${fs / 5}" pointer-events="none"/><circle cx="${toSvg(p.fallTo)[0]}" cy="${toSvg(p.fallTo)[1]}" r="${fs * 0.3}" fill="${c}" pointer-events="none"/>`; }
+      // the way down, for a roof of one plane only (a hipped or pyramid roof shows its planes by the hip lines; decision 316)
+      if (p.fallTo && pieces.length === 1) { const m = p.poly.reduce((a, q) => [a[0] + q[0] / p.poly.length, a[1] + q[1] / p.poly.length], [0, 0]); out += `<polyline points="${toSvg(m).join(',')} ${toSvg(p.fallTo).join(',')}" fill="none" stroke="${c}" stroke-width="${fs / 5}" pointer-events="none"/><circle cx="${toSvg(p.fallTo)[0]}" cy="${toSvg(p.fallTo)[1]}" r="${fs * 0.3}" fill="${c}" pointer-events="none"/>`; }
     }
   }
   out += onTop;
