@@ -53,7 +53,7 @@ export function showOpening() {
   if (Ed.openingFormFor !== o) {
     const f = openingToForm(o, info.top, fromOf(o.id, info.wall));
     $('oName').value = f.name; $('oType').value = f.type; $('oOffset').value = f.offset; $('oWidth').value = f.width; $('oSill').value = f.sill; $('oHead').value = f.head;
-    $('oHeight').value = f.height; $('oBelow').value = f.below; $('oHinge').value = f.hinge; $('oSwing').value = f.swing;
+    $('oHeight').value = f.height; $('oBelow').value = f.below; $('oHinge').value = f.hinge; $('oSwing').value = f.swing; $('oDefault').value = f.defaultState;
     if (f.type === 'door') $('oDoorOpens').value = f.opens; else { $('oDoorOpens').value = 'swing'; $('oOpens').value = f.opens; }
     for (const [id, k] of [['oOffset', 'offset'], ['oWidth', 'width'], ['oSill', 'sill'], ['oHead', 'head'], ['oHeight', 'height'], ['oBelow', 'below']]) $(id).placeholder = f.placeholders[k];
     $('oThick').value = f.thickness;
@@ -81,6 +81,7 @@ export function showOpeningRows() {
   $('oHinge').options[2].textContent = slides ? 'both ways (two leaves)' : 'both sides (double)';
   $('oSwingLbl').textContent = slides ? 'Runs on the side of' : 'Opens into';
   $('oSwingRow').hidden = slides && $('oDoorOpens').value === 'pocket';
+  $('oDefaultRow').hidden = t !== 'door' || slides;                // how a hinged door is drawn when no sensor says (decision 319)
   $('oThickRow').hidden = t === 'passage';
   $('oThickWhat').textContent = t;
   $('oLookBox').hidden = t === 'passage'; $('oSillRow').hidden = t !== 'window'; $('oShiftRow').hidden = t === 'passage'; $('oPlaceWhat').textContent = t;
@@ -159,7 +160,7 @@ export function linkOpeningHeights(key) {
   for (const [k, v] of Object.entries(out)) box[k].value = v;
   for (const k of ['head', 'height', 'below']) box[k].classList.toggle('kept', k === Ed.openingHeightFrom);
 }
-const openingForm = () => ({ heightFrom: Ed.openingHeightFrom ?? undefined, name: $('oName').value, type: $('oType').value, offset: $('oOffset').value, width: $('oWidth').value, sill: $('oSill').value, head: $('oHead').value, height: $('oHeight').value, below: $('oBelow').value, hinge: $('oHinge').value, swing: $('oSwing').value, opens: $('oType').value === 'door' ? $('oDoorOpens').value : $('oOpens').value, thickness: $('oThick').value, measured: $('oMeasured').checked, colorUse: $('oColorUse').checked, color: $('oColor').value, placement: $('oPlace').value, shift: $('oShift').value, sillDepth: $('oSillDepth').value, sillColorUse: $('oSillColorUse').checked, sillColor: $('oSillColor').value });
+const openingForm = () => ({ heightFrom: Ed.openingHeightFrom ?? undefined, name: $('oName').value, type: $('oType').value, offset: $('oOffset').value, width: $('oWidth').value, sill: $('oSill').value, head: $('oHead').value, height: $('oHeight').value, below: $('oBelow').value, defaultState: $('oDefault').value, hinge: $('oHinge').value, swing: $('oSwing').value, opens: $('oType').value === 'door' ? $('oDoorOpens').value : $('oOpens').value, thickness: $('oThick').value, measured: $('oMeasured').checked, colorUse: $('oColorUse').checked, color: $('oColor').value, placement: $('oPlace').value, shift: $('oShift').value, sillDepth: $('oSillDepth').value, sillColorUse: $('oSillColorUse').checked, sillColor: $('oSillColor').value });
 
 export function applyOpening() {
   const info = openingInfo(level(), Ed.openingId);

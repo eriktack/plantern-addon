@@ -1060,6 +1060,7 @@ export function setOpening(model, levelId, id, props, options = {}) {
   const sliding = next.type === 'door' && DOOR_OPENS.includes(next.opens);
   if (next.type !== 'window' && !sliding) delete next.opens;
   if (next.type !== 'door' || !sliding) delete next.slide;
+  if (next.type !== 'door' || sliding) delete next.defaultState;                                     // only a door on hinges swings open or shut (decision 319)
   if (sliding) { next.slide ??= 'near'; next.swing ??= 'right'; delete next.hinge; }               // a sliding door has no hinges
   else if (next.type === 'door') { next.hinge ??= 'near'; next.swing ??= 'right'; }
   if (next.type === 'window' && !WINDOW_OPENS.includes(next.opens)) next.opens = 'fixed';

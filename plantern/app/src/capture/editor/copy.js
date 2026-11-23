@@ -75,7 +75,7 @@ export async function copyInto(kind, srcId) {
     const props = objectCopyProps(src, findIn(Ed.model, 'objects', id)?.item);
     r = props ? setObject(Ed.model, Ed.levelId, id, props, opts()) : { report: { errors: [`${nameOf(srcId)} cannot be copied onto ${nameOf(id)}: they are not the same kind of object`] } };
   }
-  else if (kind === 'opening') { const spec = openingSpecFrom(src); for (const k of ['hinge', 'swing', 'opens', 'leaves', 'thickness']) spec[k] ??= null; r = setOpening(Ed.model, Ed.levelId, id, spec, opts()); }
+  else if (kind === 'opening') { const spec = openingSpecFrom(src); for (const k of ['hinge', 'swing', 'opens', 'leaves', 'thickness', 'defaultState']) spec[k] ??= null; r = setOpening(Ed.model, Ed.levelId, id, spec, opts()); }
   else if (kind === 'fixture') { const { kind: _k, ...spec } = fixtureSpecFrom(src); r = setFixture(Ed.model, Ed.levelId, id, spec, opts()); }
   else r = applyStairs(Ed.model, Ed.levelId, stairsWithShapeOf(stairs(), src), opts());
   $(sel).value = '';

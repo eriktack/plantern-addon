@@ -40,6 +40,7 @@ export function checkOpening(o, wall, level, others = []) {
   if (hit) err.push(`overlaps ${hit.id} on the same wall`);
   if (o.hinge !== undefined && !['near', 'far'].includes(o.hinge)) err.push('hinge must be "near" or "far"');
   if (o.swing !== undefined && !['left', 'right'].includes(o.swing)) err.push('swing must be "left" or "right"');
+  if (o.defaultState !== undefined && !(o.type === 'door' && ['open', 'closed'].includes(o.defaultState))) err.push('defaultState ("open" or "closed": how the door is drawn without a sensor) is for doors');
   if (o.opens !== undefined && !(o.type === 'window' ? WINDOW_OPENS : o.type === 'door' ? DOOR_OPENS : []).includes(o.opens)) err.push(o.type === 'door' ? `a door opens on hinges (no opens), or ${DOOR_OPENS.join(' or ')}` : `opens is for windows (${WINDOW_OPENS.join(', ')}) and doors (${DOOR_OPENS.join(', ')})`);
   if (o.slide !== undefined && (!isSliding(o) || !['near', 'far'].includes(o.slide))) err.push('slide ("near" or "far") is for sliding and pocket doors');
   if (o.type === 'door' && o.opens === 'pocket' && Number.isFinite(o.offset) && o.width > 0) {

@@ -271,6 +271,7 @@ export function openingToForm(o, top, where = {}) {
     name: o.name ?? '', type: o.type, offset: val('offset', pos), width: val('width', o.width), sill: val('sill', o.sill), head: val('head', o.head),
     height: guess('sill') || guess('head') ? '' : String(o.head - o.sill), below: guess('head') ? '' : String(top - o.head),
     hinge: o.leaves === 2 ? 'both' : (isSliding(o) ? o.slide : o.hinge) ?? 'near', swing: o.swing ?? 'right', opens: o.opens ?? (o.type === 'door' ? 'swing' : 'fixed'), measured: !still.length,
+    defaultState: o.defaultState ?? 'open',
     thickness: o.thickness === undefined ? '' : String(o.thickness),
     // how the unit looks (decision 124)
     colorUse: !!o.color, color: o.color ?? '', placement: o.placement ?? '', shift: o.shift === undefined ? '' : String(o.shift), sillDepth: o.sillDepth === undefined ? '' : String(o.sillDepth), sillColorUse: !!o.sillColor, sillColor: o.sillColor ?? '',
@@ -331,7 +332,9 @@ export function openingPropsFromForm(o, form, top, where = {}) {
     if (o.opens !== want) props.opens = want ?? null;
     if (slides && o.hinge !== undefined && !isSliding(o)) props.hinge = null;          // what it had on hinges does not apply
     if (!slides && o.slide !== undefined) props.slide = null;
-  }
+    // how a hinged door is drawn without a sensor (decision 319): open is the default, so it is stored only when closed
+    if (form.defaultState !== undefined) { const want = !slides && form.defaultState === 'closed' ? 'closed' : undefined; if (o.defaultState !== want) props.defaultState = want ?? null; }
+  } else if (o.defaultState !== undefined) props.defaultState = null;
   if ((type === 'door' || (type === 'window' && ['side-hung', 'tilt-turn'].includes(form.opens))) && (form.hinge !== before.hinge || form.swing !== before.swing || props.opens !== undefined)) {
     // "both" = hinged on both sides (a double door or window), or two leaves sliding apart
     const edge = slides ? 'slide' : 'hinge';

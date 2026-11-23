@@ -136,7 +136,7 @@ export function objectCopyProps(src, dst) {
 /** An opening's kind and sizes (not the wall or the position along it). */
 export function openingSpecFrom(o) {
   const out = { type: o.type, width: o.width, sill: o.sill, head: o.head, assumed: [...(o.assumed || [])] };
-  for (const k of ['hinge', 'swing', 'opens', 'slide', 'leaves', 'thickness']) if (o[k] !== undefined) out[k] = o[k];
+  for (const k of ['hinge', 'swing', 'opens', 'slide', 'leaves', 'thickness', 'defaultState']) if (o[k] !== undefined) out[k] = o[k];
   return out;
 }
 
