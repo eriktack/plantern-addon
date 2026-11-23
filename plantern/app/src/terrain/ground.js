@@ -161,10 +161,21 @@ export function groundSurface(yard, { reach = 6000 } = {}) {
     }
     return idw(p, pts);
   };
-  return { at, points: pts, walls };
+  // an area marked flat (a terrace's paving) lies level at the mean of the measured points inside it; a later area over an
+  // earlier one, as they are drawn; one without a measured point follows the ground (decision 318)
+  const flats = (yard.areas || []).filter(a => a.flat === true && a.polygon?.length >= 3).map(a => {
+    const zs = pts.filter(g => inside(g.pos, a.polygon)).map(g => g.z);
+    return zs.length ? { poly: a.polygon, z: zs.reduce((s, z) => s + z, 0) / zs.length } : null;
+  }).filter(Boolean).reverse();
+  const level = p => { for (const f of flats) if (inside(p, f.poly)) return f.z; return at(p); };
+  return { at: flats.length ? level : at, points: pts, walls };
 }
 
 // ---- the mesh for 3D -----------------------------------------------------------------------------------------------
+/** Where no ground is drawn on the yard's level: under every floor, a building's and an outdoor room's (a deck, a porch:
+ *  the ground's slope came up through them; decision 318). A room open to below (`floor: "none"`) keeps its ground. */
+export const groundHoles = level => (level?.rooms || []).filter(r => r.floor !== 'none' && r.polygon?.length >= 3).map(r => r.polygon);
+
 function inside(p, poly) {
   let c = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {

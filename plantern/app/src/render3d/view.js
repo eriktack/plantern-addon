@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { levelPrisms, DEFAULT_COLORS } from '../geometry/prisms.js';
 import { MM, toThree, dirToThree, prismGeometry, cylinderGeometry, barGeometry, ballGeometry } from './coords.js';
-import { groundMesh } from '../terrain/ground.js';
+import { groundHoles, groundMesh } from '../terrain/ground.js';
 import { pointInPolygon as inRoom } from '../geometry/polygon.js';
 import { yardPlantSpots } from '../terrain/planting.js';
 import { pointAlong, polylineLength } from '../geometry/strip.js';
@@ -321,7 +321,7 @@ export function createView3d(container, hooks = {}) {
   /** The ground mesh under the yard's level, its areas coloured on it, and the walls, fences and hedges standing on it. */
   function addGround(g, level, yard, materials = {}, baseUrl = '') {
     const matOf = id => (id ? resolveSide({ material: id }, materials) : null);
-    const holes = (level.rooms || []).filter(r => !r.exterior && r.polygon?.length >= 3).map(r => r.polygon);
+    const holes = groundHoles(level);
     const mesh = groundMesh(yard, { cell: 400, holes, colorOf: (surface, a) => a.color || matOf(a.material)?.color || GROUND[surface] || GROUND.other, fallback: GROUND.grass });
     if (!mesh) return null;
     const pos = new Float32Array(mesh.positions.length * 3), col = new Float32Array(mesh.colors.length * 3), idx = [];
@@ -489,7 +489,7 @@ export function createView3d(container, hooks = {}) {
    * a level up, shift [dx, dy] sideways in the plan, for the exploded view). Lamps and switches of every shown level are live; the number of lamps casting
    * shadows is shared between them.
    */
-  function build({ level, geo, levels, settings: s, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', ceilings = false, assets = null, doorStates = null, keepView = false, dim = null, yard = null, cause = null, shadows = null }) {
+  function build({ level, geo, levels, settings: s, fixtureLabel = fx => fx.id, materials = {}, baseUrl = '', ceilings = false, assets = null, doorStates = null, keepView = false, dim = null, yard = null, cause = null, shadows = null, roofs = true }) {
     const gen = ++buildGen;     // asset models that finish loading after a newer build are dropped
     const perfStart = perf ? performance.now() : 0, perfPrograms = perf ? renderer.info.programs.length : 0;
     framesSinceBuild = 0;
@@ -611,7 +611,7 @@ export function createView3d(container, hooks = {}) {
     }
 
     const objectMeshes = new Map();
-    for (const p of levelPrisms(level, geo, materials, { ceilings, doorStates })) {
+    for (const p of levelPrisms(level, geo, materials, { ceilings, doorStates, roofs })) {
       let geom = p.bar ? barGeometry(THREE, p.bar.a, p.bar.b, p.bar.diameter) : p.ball ? ballGeometry(THREE, p.ball.center, p.ball.diameter) : p.circle ? cylinderGeometry(THREE, p.circle.center, p.circle.diameter / 2, p.z0, p.z1) : prismGeometry(THREE, p.poly, p.z0, p.z1, p.slope, p.holes), mat;
       if (p.sides) paintSides(geom, p.sides);
       mat = material(p);

@@ -1,7 +1,8 @@
 // The yard (docs/plans/yard.md, decision 294): the ground around the buildings. Pure.
-//   yard: { boundary?: [[x, y], …], elevation?: mm, areas: [{ id: "ya_…", name?, surface, polygon, color?, material?, planting? }],
+//   yard: { boundary?: [[x, y], …], elevation?: mm, areas: [{ id: "ya_…", name?, surface, polygon, color?, material?, planting?, flat? }],
 //           lines: [{ id: "yl_…", name?, kind, points, height?, thickness?, material?, high?: "left" | "right", drop? }] }
 // `material` names a material of the house's table or the design library (paving stones, wall blocks; decision 305).
+// `flat: true`: the area lies level, at the mean height of the measured ground points inside it (a terrace's paving; decision 318).
 // In the main building's plan coordinates. Areas are drawn in order, a later one over an earlier one (a path on the lawn needs
 // no hole). A retaining wall's `high` is the side of the line's direction where the ground is higher, `drop` the difference.
 
@@ -26,6 +27,7 @@ export function areaErrors(a) {
   if (!isPts(a.polygon, 3)) e.push('polygon must be three or more points [x, y] in mm');
   if (a.color !== undefined && !/^#[0-9a-f]{6}$/i.test(String(a.color))) e.push('color must be #rrggbb');
   if (a.material !== undefined && (typeof a.material !== 'string' || !a.material)) e.push('material is the name of a material');
+  if (a.flat !== undefined && a.flat !== true) e.push('flat is true (the area lies level at its measured ground points) or left out');
   if (a.planting !== undefined) {
     if (a.surface !== 'bed') e.push('planting is only for a flower bed (surface bed)');
     else if (!PLANTINGS.includes(a.planting)) e.push(`planting must be one of ${PLANTINGS.join(', ')}`);

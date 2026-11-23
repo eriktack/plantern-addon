@@ -41,7 +41,9 @@ const PAINT = 3;       // mm: the paint skin on a solid's face where a room has 
  *   direction; tex = { left?, right? } { texture, uvScale } when that side's material has an image.
  * `materials` = the model's materials table (sides may name one instead of a colour).
  * `options.ceilings`: draw a ceiling plate over every indoor room (default: only over rooms with their own lower ceiling, translucent,
- * so the lamps under them still show from above; decision 127).
+ * so the lamps under them still show from above; decision 127). A room with its own roof (a sauna, a greenhouse) has no plate
+ * from this: its roof closes it (decision 318).
+ * `options.roofs`: false leaves out the rooms' roofs (a floor's own view; the Yard view shows them, decision 318).
  */
 /** A surface material ({ material: id }) as a prism's look: its colour, and its texture laid out along `along` (plan direction). */
 function surface(id, materials, along, fallback) {
@@ -97,6 +99,7 @@ export function levelPrisms(level, geo, materials = {}, options = {}) {
     if (r.exterior || !(r.polygon?.length >= 3)) continue;
     const lowered = Number.isFinite(r.ceilingHeight) && r.ceilingHeight < (level.ceilingHeight ?? 2400) - 1;
     if (!lowered && !options.ceilings) continue;
+    if (!lowered && r.roof) continue;                               // its roof is its top: the house's ceiling height means nothing there
     const top = roomCeiling(level, r);
     P({ id: r.id, kind: 'ceiling', poly: r.polygon, z0: top, z1: top + CEILING, color: r.ceilingColor || DEFAULT_COLORS.ceiling, ...(options.ceilings ? {} : { opacity: 0.45 }) });
   }
@@ -106,7 +109,7 @@ export function levelPrisms(level, geo, materials = {}, options = {}) {
   // where two rooms' roofs meet (a cross gable: a porch roof running into the main roof), each keeps only where it is the upper
   // surface: their pieces are planes, so that is a straight line (the valley) and each convex piece is cut along it
   const roofs = [];
-  for (const r of level.rooms || []) for (const [k, p] of roofPieces(r).entries()) roofs.push({ r, k, p, polys: [p.poly] });
+  if (options.roofs !== false) for (const r of level.rooms || []) for (const [k, p] of roofPieces(r).entries()) roofs.push({ r, k, p, polys: [p.poly] });
   for (const A of roofs) for (const B of roofs) {
     if (A.r === B.r || !convex(A.p.poly) || !convex(B.p.poly) || !overlaps(A.p.poly, B.p.poly)) continue;
     const ha = planeAt(A.p), hb = planeAt(B.p);

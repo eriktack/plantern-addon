@@ -5,10 +5,15 @@
 
 const TOUCH = 60;          // mm: rooms this close are joined (a shared wall's two faces are a wall's thickness apart, recorded on the wall)
 const REACH = 900;         // mm beyond the house's rooms in which fixtures, solids and objects count as the house's (outer walls, eaves)
+const OWN = 300;           // mm: a thing this near another room (not the house's) is that room's: a pergola's corner post (decision 318)
 
 const area = P => Math.abs(P.reduce((s, p, i) => { const q = P[(i + 1) % P.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2;
 const box = P => [Math.min(...P.map(p => p[0])), Math.min(...P.map(p => p[1])), Math.max(...P.map(p => p[0])), Math.max(...P.map(p => p[1]))];
 const near = (a, b, d) => a[0] - d <= b[2] && b[0] - d <= a[2] && a[1] - d <= b[3] && b[1] - d <= a[3];
+const inside = (p, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if ((yi > p[1]) !== (yj > p[1]) && p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi) c = !c; } return c; };
+const segDist = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy, t = L ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L)) : 0; return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy); };
+/** Distance from a point to a polygon's area: 0 inside. */
+const polyDist = (p, P) => (inside(p, P) ? 0 : Math.min(...P.map((a, i) => segDist(p, a, P[(i + 1) % P.length]))));
 
 /**
  * The house's rooms on a level: { rooms: Set of ids, box: [x0, y0, x1, y1] (mm, grown by REACH) } or null when the level has no
@@ -45,7 +50,10 @@ export function houseRooms(level) {
 export function houseOnly(level, geo) {
   const h = houseRooms(level);
   if (!h) return level;
-  const inBox = p => Array.isArray(p) && p[0] >= h.box[0] && p[0] <= h.box[2] && p[1] >= h.box[1] && p[1] <= h.box[3];
+  // in the house's reach, and not in or right by a room of the yard's (a pergola's post can stand within the reach)
+  const others = (level.rooms || []).filter(r => !h.rooms.has(r.id) && r.polygon?.length >= 3).map(r => r.polygon);
+  const inBox = p => Array.isArray(p) && p[0] >= h.box[0] && p[0] <= h.box[2] && p[1] >= h.box[1] && p[1] <= h.box[3]
+    && !others.some(P => polyDist(p, P) <= OWN);
   const mid = P => (P?.length ? P.reduce((s, p) => [s[0] + p[0] / P.length, s[1] + p[1] / P.length], [0, 0]) : null);
   const walls = (level.walls || []).filter(w => (w.rooms?.length ? w.rooms.some(id => h.rooms.has(id)) : inBox(mid([w.a, w.b]))));
   const wallIds = new Set(walls.map(w => w.id));

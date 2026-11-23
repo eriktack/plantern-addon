@@ -199,7 +199,7 @@ async function main() {
   const yard3d = () => (yardView && model.yard?.boundary?.length >= 3 ? { ...model.yard, site: model.site, levelId: yardLevelId(model) } : null);
   // how many lamps cast shadows goes in with the build: it is part of every shader, so it is not changed after the first frame
   const shadowCount = () => { const dev = globalThis.matchMedia?.('(pointer: coarse)').matches ? 'mobile' : 'desktop'; return SHADOW_COUNT[shadowLevel(state().settings?.render3d, dev, readPrefs().shadows?.[dev])]; };
-  const build3d = (cause = 'view') => view3d.build({ cause, shadows: shadowCount(), level: shownLevel(), geo: state().geo, levels: shownLevels(), settings: state().settings, fixtureLabel, ceilings: ceilings || yardView, ...looks, doorStates: doors(), yard: yard3d() });   // the Yard view sees the house from outside: closed, its roof solid
+  const build3d = (cause = 'view') => view3d.build({ cause, shadows: shadowCount(), level: shownLevel(), geo: state().geo, levels: shownLevels(), settings: state().settings, fixtureLabel, ceilings: ceilings || yardView, ...looks, doorStates: doors(), yard: yard3d(), roofs: yardView });   // the Yard view sees the house from outside: closed, its roof solid; a floor's own view has no roofs (decision 318)
 
   async function toggleFixture(fx) {
     const why = canPreview(bindings, id => ha.getState(id), fx);

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.50
+
+- Roofs only in the Yard view; no plate over a greenhouse or sauna; the pergola's post no longer in the ground floor's view; no ground through decks and porches; yard areas can be flat (decision 318)
+
 ## 0.8.49
 
 - Cameras in outdoor rooms (under a balcony, a porch) can be placed high

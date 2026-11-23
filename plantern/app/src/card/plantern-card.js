@@ -253,7 +253,7 @@ class PlanternCard extends HTMLElement {
       const list = shown();
       // several floors at once are pulled apart, so the lower ones are not hidden under the upper ones; the header's stack switch (CD4) chooses otherwise
       const levels = cardStack(model, list, stackChoice(), pool);
-      view3d.build({ level: list[0], geo: list[0] && geos.get(list[0].id), levels: levels.map(st => ({ ...st, geo: geos.get(st.level.id) })), settings: resolveSettings(loc, list[0]), fixtureLabel, ...looks, doorStates: doorStates(model, bindings, getState),
+      view3d.build({ level: list[0], geo: list[0] && geos.get(list[0].id), levels: levels.map(st => ({ ...st, geo: geos.get(st.level.id) })), settings: resolveSettings(loc, list[0]), fixtureLabel, ...looks, doorStates: doorStates(model, bindings, getState), roofs: false,   // the card shows floors, not the yard: no roofs (decision 318)
         shadows: SHADOW_COUNT[shadowLevel(resolveSettings(loc, list[0]).render3d, deviceKind(), cfg.shadows)] });   // with the build: the number of shadows is part of every shader
     };
 
