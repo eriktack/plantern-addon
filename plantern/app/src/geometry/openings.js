@@ -12,8 +12,7 @@
 // in the wall (without it, across the whole wall).
 
 import { facePoint, centrePoint } from './walls.js';
-import { unitSpan } from './fittings.js';
-import { isHingedDoor } from '../model/doors.js';
+import { unitSpan, DOOR_CASING } from './fittings.js';
 
 /**
  * { lines: [[p, q]], dashed: [[p, q]], arcs: [{ c, r, from, to, dashed }] } for opening o on wall w (frame f).
@@ -47,9 +46,24 @@ export function openingSymbol(w, f, o, { open = true } = {}) {
     if (o.leaves === 2) { const m = (s0 + s1) / 2; slider([[s0, m, 'near'], [m, s1, 'far']]); }
     else slider([[s0, s1, o.slide === 'far' ? 'far' : 'near']]);
   } else if (o.type === 'door') {
-    // a closed hinged door is a line across the opening (its leaf shut); open, the leaf and its arc
-    if (open || !isHingedDoor(o)) leaf(false);
-    else out.lines.push([centrePoint(w, f, s0), centrePoint(w, f, s1)]);
+    // a hinged door as the 3D view has it (openingFittings): its jambs at the door's own depth, where it sits across the wall
+    // (placement, shift), and its leaf with its thickness: shut in the frame, or open at 90° from the frame's face on the side
+    // it swings into, with the arc (decision 320; it was a line from the wall's face)
+    const u = unitSpan(w, f, o), P = (s, t) => [w.a[0] + f.u[0] * s + f.n[0] * t, w.a[1] + f.u[1] * s + f.n[1] * t];
+    const rect = (sa, sb, ta, tb) => { const q = [P(sa, ta), P(sb, ta), P(sb, tb), P(sa, tb)]; q.forEach((p, i) => out.lines.push([p, q[(i + 1) % 4]])); };
+    rect(s0, s0 + DOOR_CASING, u.t0, u.t1); rect(s1 - DOOR_CASING, s1, u.t0, u.t1);
+    const a = s0 + DOOR_CASING, b = s1 - DOOR_CASING, toLeft = side === 'left', face = toLeft ? u.t1 : u.t0, dir = toLeft ? 1 : -1;
+    const swung = (hinge, near, r) => {
+      const sa = near ? hinge : hinge - u.depth, sb = near ? hinge + u.depth : hinge;
+      rect(sa, sb, Math.min(face, face + dir * r), Math.max(face, face + dir * r));
+      out.arcs.push({ c: P(hinge, face), r, from: P(hinge, face + dir * r), to: P(near ? hinge + r : hinge - r, face), dashed: false });
+    };
+    if (open) {
+      if (o.leaves === 2) { const half = (b - a) / 2; swung(a, true, half); swung(b, false, half); }
+      else if (o.hinge === 'far') swung(b, false, b - a);
+      else swung(a, true, b - a);
+    } else if (o.leaves === 2) { const m = (a + b) / 2; rect(a, m, u.t0, u.t1); rect(m, b, u.t0, u.t1); }
+    else rect(a, b, u.t0, u.t1);
   }
   else if (o.type === 'window') {
     const c0 = centrePoint(w, f, s0), c1 = centrePoint(w, f, s1);

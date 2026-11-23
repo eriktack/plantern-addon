@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.52
+
+- Doors in the plan and Editor: jambs and a leaf with thickness, where the door sits across the wall (decision 320)
+
 ## 0.8.51
 
 - Doors without a sensor can be set to be shown closed (Editor: Without a sensor) (decision 319)

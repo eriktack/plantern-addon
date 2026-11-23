@@ -13,11 +13,12 @@
 import { add, mul } from './vec.js';
 import { isHingedDoor } from '../model/doors.js';
 
+export const DOOR_CASING = 40;   // mm: a door's frame (jambs and head); the plan symbol draws the same jambs
 export const FITTING_DEFAULTS = Object.freeze({ window: { color: '#f2f0ea', depth: 70 }, door: { color: '#a9855f', depth: 40 }, sill: { color: '#d8d4cc' } });
 export const PLACEMENTS = ['left', 'middle', 'right'];
 const FRAME = 55;       // mm: width of a window frame's bars
 const MULLION = 45;     // mm: the bar between two sashes
-const CASING = 40;      // mm: a door's frame (jambs and head)
+const CASING = DOOR_CASING;
 const SILL_BOARD = 30;  // mm: thickness of the sill board
 const SILL_OVER = 20;   // mm: how far it reaches past each side of the opening
 // a door's leaf is drawn see-through for now (not a closed wall in 3D, so the room behind it stays visible): its frame shows that it is a door
@@ -74,8 +75,9 @@ export function openingFittings(w, f, o, { open = false } = {}) {
   bar('frame', s0 + CASING, s1 - CASING, u.t0, u.t1, head - CASING, head, color);
   const a = s0 + CASING, b = s1 - CASING, top = head - CASING;
   if (open && isHingedDoor(o)) {
-    // an open hinged door: each leaf swung out at 90° from its hinge, into the side it swings to (doorOpen() in model/doors.js)
-    const toLeft = o.swing === 'left', face = toLeft ? f.offL : -f.offR, dir = toLeft ? 1 : -1;
+    // an open hinged door: each leaf swung out at 90° from its hinge, into the side it swings to (doorOpen() in model/doors.js),
+    // hinged at its frame's face on that side, where the door sits across the wall (decision 320; it was the wall's face)
+    const toLeft = o.swing === 'left', face = toLeft ? u.t1 : u.t0, dir = toLeft ? 1 : -1;
     const swung = (hinge, near, width) => {
       const s = near ? [hinge, hinge + u.depth] : [hinge - u.depth, hinge], t = [face, face + dir * width].sort((p, q) => p - q);
       bar('leaf', s[0], s[1], t[0], t[1], sill, top, color, LEAF_OPEN);
