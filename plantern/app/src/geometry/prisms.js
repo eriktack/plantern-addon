@@ -77,6 +77,90 @@ const overlaps = (A, B) => {
   return C.length >= 3 && Math.abs(C.reduce((s, p, i) => { const q = C[(i + 1) % C.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2 > 1000;
 };
 
+// ---- a roof over the level caps it (decision 321) ----------------------------------------------------------------
+const polyArea = P => Math.abs(P.reduce((s, p, i) => { const q = P[(i + 1) % P.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2;
+/** A convex polygon cut to a convex region (every edge of R as a half-plane). */
+function clipToConvex(A, R) {
+  const ccw = R.reduce((s, p, i) => { const q = R[(i + 1) % R.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0) > 0;
+  let C = A;
+  R.forEach((p, i) => { if (C.length < 3) return; const q = R[(i + 1) % R.length], d = [q[0] - p[0], q[1] - p[1]];
+    C = clipConvex(C, x => (ccw ? 1 : -1) * (d[0] * (x[1] - p[1]) - d[1] * (x[0] - p[0]))); });
+  return C.length >= 3 && polyArea(C) > 1 ? C : [];
+}
+/** A roof piece's underside as a plane: height = c + g·x (mm above the level's floor). */
+function undersideOf(p) {
+  const t = p.slope?.bottom;
+  if (!t) return { c: p.z0, g: [0, 0] };
+  const k = (t.b - t.a) / t.L, g = [t.u[0] * k, t.u[1] * k];
+  return { c: t.a - (g[0] * t.origin[0] + g[1] * t.origin[1]), g };
+}
+/**
+ * The level under its roofs (decision 321): a wall that reaches the ceiling, where a roof is over it, reaches the roof's underside
+ * instead, plane by plane: up to it (an outer wall: the gap between the top floor's ceiling and the roof is wall, as in a real house)
+ * and down to it (a wall under a low roof: a room under the eaves, a sauna, a greenhouse). Across a wall's thickness the lower
+ * side counts, so nothing shows through the roof. A ceiling plate is kept only where the roof is above it. Only when the roofs are
+ * drawn; a floor's own view has none, and its walls stay at the ceiling.
+ */
+function capToRoofs(out, roofs, level) {
+  if (!roofs.length) return out.slice();
+  const ceiling = level.ceilingHeight ?? 2400;
+  const pieces = roofs.flatMap(({ p, polys }) => polys.map(poly => ({ poly, h: undersideOf(p) })));
+  const wallOf = new Map((level.walls || []).map(w => [w.id, w]));
+  for (const o of level.openings || []) if (wallOf.has(o.wall)) wallOf.set(o.id, wallOf.get(o.wall));
+  const indoorPolys = (level.rooms || []).filter(r => !r.exterior && r.polygon?.length >= 3).map(r => r.polygon);
+  // an outer wall (a house's): beside it, on one side, is no indoor room; walls between rooms stay at the ceiling under a high roof
+  const outer = (poly, n, w) => {
+    const c = poly.reduce((s, p) => [s[0] + p[0] / poly.length, s[1] + p[1] / poly.length], [0, 0]), d = (w?.thickness || 0) / 2 + 100;
+    return [1, -1].some(k => !indoorPolys.some(R => pointInPolygon([c[0] + n[0] * d * k, c[1] + n[1] * d * k], R)));
+  };
+  // reaches the ceiling: a flat top there, or a "sloped" one that is level at the ceiling at both ends
+  const atCeiling = pr => (pr.slope?.top ? Math.abs(pr.slope.top.a - ceiling) < 1 && Math.abs(pr.slope.top.b - ceiling) < 1 : Math.abs(pr.z1 - ceiling) < 1);
+  const res = [];
+  for (const pr of out) {
+    if (pr.kind === 'ceiling') {
+      const parts = pieces.map(q => ({ q, A: clipToConvex(pr.poly, q.poly) })).filter(x => x.A.length);
+      if (!parts.length) { res.push(pr); continue; }
+      if (parts.reduce((s, x) => s + polyArea(x.A), 0) < polyArea(pr.poly) - 1) { res.push(pr); continue; }   // only partly under the roof: left as it is
+      for (const { q, A } of parts) {
+        const keep = clipConvex(A, x => q.h.c + q.h.g[0] * x[0] + q.h.g[1] * x[1] - pr.z1);
+        if (keep.length >= 3 && polyArea(keep) > 1) res.push({ ...pr, poly: keep });
+      }
+      continue;
+    }
+    if (pr.kind !== 'wall' || !atCeiling(pr) || !convex(pr.poly)) { res.push(pr); continue; }
+    const w = wallOf.get(pr.id);
+    const u = pr.sides?.u ?? (w ? (d => { const L = Math.hypot(...d) || 1; return [d[0] / L, d[1] / L]; })([w.b[0] - w.a[0], w.b[1] - w.a[1]]) : [1, 0]);
+    const n = [-u[1], u[0]], dot = (a, b) => a[0] * b[0] + a[1] * b[1], raise = outer(pr.poly, n, w);
+    let rest = [pr.poly];
+    for (const q of pieces) {
+      const next = [];
+      for (const A of rest) {
+        const C = clipToConvex(A, q.poly);
+        if (!C.length) { next.push(A); continue; }
+        next.push(...minusConvex(A, q.poly));
+        // the underside along the wall, on its lower side across the thickness
+        const k = dot(q.h.g, u), m = dot(q.h.g, n), ss = C.map(v => dot(v, u)), ts = C.map(v => dot(v, n));
+        const t = m >= 0 ? Math.min(...ts) : Math.max(...ts), s0 = Math.min(...ss), s1 = Math.max(...ss);
+        const hAt = s => q.h.c + k * s + m * t;
+        // split where the underside crosses the ceiling (an inner wall keeps the ceiling where the roof is higher) and its foot
+        const cuts = [ceiling, pr.z0].map(z => (Math.abs(k) > 1e-9 ? (z - q.h.c - m * t) / k : null)).filter(s => s !== null && s > s0 + 0.5 && s < s1 - 0.5).sort((x, y) => x - y);
+        const bounds = [s0, ...cuts, s1];
+        for (let i = 0; i + 1 < bounds.length; i++) {
+          const a = bounds[i], b = bounds[i + 1], part = clipConvex(clipConvex(C, x => dot(x, u) - a + 1e-6), x => b + 1e-6 - dot(x, u));
+          if (part.length < 3 || polyArea(part) <= 1) continue;
+          const ha = hAt(a), hb = hAt(b), mid = (ha + hb) / 2;
+          if (mid <= pr.z0 + 1) continue;                                       // all of it above the roof: none
+          if (!raise && mid >= ceiling) { res.push({ ...pr, poly: part }); continue; }
+          res.push({ ...pr, poly: part, z1: Math.max(ha, hb), slope: { ...(pr.slope || {}), top: { origin: [u[0] * a, u[1] * a], u, L: Math.max(b - a, 1e-6), a: ha, b: hb } } });
+        }
+      }
+      rest = next;
+    }
+    for (const A of rest) res.push({ ...pr, poly: A });
+  }
+  return res;
+}
+
 export function levelPrisms(level, geo, materials = {}, options = {}) {
   const out = [], P = p => out.push(p);
   const ft = level.floorThickness ?? 0;
@@ -211,9 +295,12 @@ export function levelPrisms(level, geo, materials = {}, options = {}) {
     }
   }
 
+  // a floor's own view (no roofs) ends at its ceiling: what rises above it (a chimney through the roof) is the Yard view's (decision 321)
+  const ownView = options.roofs === false, ceilingTop = level.ceilingHeight ?? 2400;
   for (const s of level.solids || []) {
     const base = s.base ?? 0;
-    const z1 = solidTop(s, level);                                   // a beam without a height reaches the ceiling
+    if (ownView && base >= ceilingTop - 1) continue;
+    const z1 = ownView ? Math.min(solidTop(s, level), ceilingTop) : solidTop(s, level);   // a beam without a height reaches the ceiling
     const circle = solidCircle(s);                                   // a round pillar: a smooth cylinder in 3D
     P({ id: s.id, kind: 'solid', poly: s.polygon, z0: base, z1, ...surface(s.material, materials, [1, 0], s.color || DEFAULT_COLORS.solid), ...(circle ? { circle } : {}) });
     // painted per room: a skin a few mm thick in front of each stretch of face along that room
@@ -231,6 +318,8 @@ export function levelPrisms(level, geo, materials = {}, options = {}) {
     const z = geo.objectZ(o);
     if (fp) P({ id: o.id, kind: 'object', poly: fp, z0: z, z1: z + o.size[2], ...surface(o.material, materials, longest(fp), o.color || DEFAULT_COLORS.object) });
   }
+  const capped = capToRoofs(out, roofs, level);
+  out.length = 0; out.push(...capped);
   // a glass wall (a greenhouse): its body, and the parts of it above and below openings, are glass
   const glass = new Set((level.walls || []).filter(w => w.glass).map(w => w.id));
   for (const o of level.openings || []) if (glass.has(o.wall)) glass.add(o.id);

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.53
+
+- The house's walls meet its roof and stay under it; no chimney on a floor's own view (decision 321)
+
 ## 0.8.52
 
 - Doors in the plan and Editor: jambs and a leaf with thickness, where the door sits across the wall (decision 320)
